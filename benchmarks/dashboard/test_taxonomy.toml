@@ -864,6 +864,12 @@ kind = "oracle"
 provenance = "MESA 26.4.1 net/private/net_approx21.f90:1113 & star/test_suite/20M_z2m2_high_rotation IEEE-754 hex captures (#516)"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/approx21_direct_export_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/atm_irradiated_w1_test.rs"
 language = "rust"
 module = "star"

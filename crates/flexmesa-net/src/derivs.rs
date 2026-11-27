@@ -6,7 +6,7 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::QCONV;
 use flexmesa_rates::ScreeningMode;
 
-use crate::approx21_eval::eval_net_approx21_procs;
+use crate::approx21_eval::{eval_net_approx21_into, eval_net_approx21_procs};
 use crate::derivs_paired::{
     get_basic_2_to_1_derivs, get_basic_2_to_2_derivs,
     get_general_1_to_1_derivs, get_general_2_to_1_derivs,
@@ -236,9 +236,15 @@ pub fn with_thread_local_work<R>(
 }
 
 /// Evaluates a nuclear reaction network in place using a reusable
-/// [`NetWorkState`] and `dydt` slice with zero heap allocations.
+/// [`NetWorkState`] with zero heap allocations.
 ///
-/// Populates `w` and `dydt`, and returns
+/// For non-`approx21` networks, populates molar/MeV fields on `w`
+/// (`eps_nuc_categories`, `d_eps_nuc_dy`, `d_dydt_dy`, `eps_neu_total`) and
+/// `dydt`. When `g.doing_approx21` is true, `dydt` and those legacy molar/MeV
+/// fields remain zeroed and outputs go directly into `w`'s CGS/mass-fraction
+/// buffers (`direct_eps_nuc_categories`, `direct_d_eps_nuc_dx`,
+/// `direct_dxdt`, `direct_d_dxdt_dt`, `direct_d_dxdt_drho`,
+/// `direct_d_dxdt_dx`), matching `net/private/net_eval.f90:215-238`. Returns
 /// `(eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total)` in
 /// $\mathrm{erg\,g^{-1}\,s^{-1}}$.
 #[rustfmt::skip]
@@ -261,42 +267,26 @@ pub fn eval_net_with_work(
         use_suzuki, do_ecapture,
     )?;
     if g.doing_approx21 {
-        let res = eval_net_approx21_procs(
-            g, w, false, just_dxdt, temp, log_t, rho, log_rho, abar, zbar,
-            z2bar, ye, eta, weak_rate_factor, screening_mode, use_3a_fl87,
-        )?;
-        let nuclides = NuclideCatalog::builtin_ref();
-        let mut stack_aion = [1.0_f64; 128];
-        let mut heap_aion = Vec::new();
-        let aion: &mut [f64] = if ni <= 128 {
-            &mut stack_aion[..ni]
-        } else {
-            heap_aion.resize(ni, 1.0);
-            &mut heap_aion[..]
-        };
-        for (i, a_slot) in aion.iter_mut().enumerate() {
-            *a_slot = nuclide_aion(nuclides, g.chem_id[i])?;
-        }
-        for k in 0..NUM_CATEGORIES {
-            w.eps_nuc_categories[k] = res.eps_nuc_categories[k] / QCONV;
-        }
-        for i in 0..ni {
-            let a_i = aion[i];
-            dydt[i][0] = Quad::from_f64(res.dxdt[i] / a_i);
-            if !just_dxdt {
-                dydt[i][1] = Quad::from_f64(res.d_dxdt_dt[i] / a_i);
-                dydt[i][2] = Quad::from_f64(res.d_dxdt_drho[i] / a_i);
-                w.d_eps_nuc_dy[i] = res.d_eps_nuc_dx[i] * a_i / QCONV;
-                for (j, &a_j) in aion[..ni].iter().enumerate() {
-                    w.d_dydt_dy[i * ni + j] =
-                        res.d_dxdt_dx[i * ni + j] * a_j / a_i;
-                }
-            }
-        }
-        return Ok((
-            res.eps_nuc, res.d_eps_nuc_dt, res.d_eps_nuc_drho,
-            res.eps_neu_total,
-        ));
+        // Export directly in CGS / mass-fraction units (`net_eval.f90:232-237,
+        // 308-338, 428-438`) without `aion` / `QCONV` round-trips.
+        return eval_net_approx21_into(
+            g,
+            w,
+            false,
+            just_dxdt,
+            temp,
+            log_t,
+            rho,
+            log_rho,
+            abar,
+            zbar,
+            z2bar,
+            ye,
+            eta,
+            weak_rate_factor,
+            screening_mode,
+            use_3a_fl87,
+        );
     }
     screen_net(
         g, &w.y, temp, rho, log_t, log_rho,

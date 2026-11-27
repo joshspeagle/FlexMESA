@@ -312,8 +312,12 @@ pub fn burn_1_zone(
             if let Some(f) = f_out {
                 if g.doing_approx21 {
                     for j in 0..species {
-                        let src = input.dxdt_source_term.map_or(0.0, |s| s[j]);
-                        f[j] = buf.dydt_buf[j][0].to_f64() + src / aion[j];
+                        let base_f = w.direct_dxdt[j] / aion[j];
+                        f[j] = if let Some(s) = input.dxdt_source_term {
+                            base_f + s[j] / aion[j]
+                        } else {
+                            base_f
+                        };
                     }
                 } else {
                     // Match `net/private/net_eval.f90:566` (`dxdt = aion * dydt`)
@@ -333,8 +337,14 @@ pub fn burn_1_zone(
             }
             if let Some(dfdy) = dfdy_out {
                 if g.doing_approx21 {
-                    dfdy[..species * species]
-                        .copy_from_slice(&w.d_dydt_dy[..species * species]);
+                    for i in 0..species {
+                        let a_i = aion[i];
+                        let row = i * species;
+                        for j in 0..species {
+                            dfdy[row + j] =
+                                w.direct_d_dxdt_dx[row + j] * aion[j] / a_i;
+                        }
+                    }
                 } else {
                     // Match `net/private/net_eval.f90:570-571` and
                     // `net/private/net_burn.f90:461` `aion` round-trip.
@@ -349,10 +359,15 @@ pub fn burn_1_zone(
                     }
                 }
             }
-            let mut cats = [0.0_f64; NUM_CATEGORIES];
-            for c in 0..NUM_CATEGORIES {
-                cats[c] = QCONV * w.eps_nuc_categories[c];
-            }
+            let cats = if g.doing_approx21 {
+                w.direct_eps_nuc_categories
+            } else {
+                let mut cats = [0.0_f64; NUM_CATEGORIES];
+                for c in 0..NUM_CATEGORIES {
+                    cats[c] = QCONV * w.eps_nuc_categories[c];
+                }
+                cats
+            };
             Ok::<_, NetError>((cats, eps_neu))
         })?;
 

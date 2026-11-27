@@ -60,14 +60,15 @@ pub fn build_rate_factors(
 }
 
 pub(crate) fn scale_eps_nuc_categories(
-    raw_cats_mev: &[f64; NUM_CATEGORIES],
+    raw_cats: &[f64; NUM_CATEGORIES],
     eps_val: f64,
     eps_fac: f64,
+    cats_already_cgs: bool,
 ) -> [f64; NUM_CATEGORIES] {
     let mut cats = [0.0_f64; NUM_CATEGORIES];
     let mut eps_cat_sum = 0.0_f64;
-    for (dst, &src) in cats.iter_mut().zip(raw_cats_mev.iter()) {
-        let c_val = QCONV * src;
+    for (dst, &src) in cats.iter_mut().zip(raw_cats.iter()) {
+        let c_val = if cats_already_cgs { src } else { QCONV * src };
         *dst = c_val;
         eps_cat_sum += c_val;
     }
@@ -177,10 +178,16 @@ pub(crate) fn eval_zone_eps_nuc_categories(
         } else {
             raw_eps
         };
+        let raw_cats = if net_info.doing_approx21 {
+            &w.direct_eps_nuc_categories
+        } else {
+            &w.eps_nuc_categories
+        };
         Ok(scale_eps_nuc_categories(
-            &w.eps_nuc_categories,
+            raw_cats,
             eps_val,
             eps_fac,
+            net_info.doing_approx21,
         ))
     })
 }
@@ -461,10 +468,17 @@ fn do_net_inner(
                         deps_dt = 0.0;
                     }
 
+                    let direct = net_info.doing_approx21;
+                    let raw_cats = if direct {
+                        &w.direct_eps_nuc_categories
+                    } else {
+                        &w.eps_nuc_categories
+                    };
                     *cats_k = scale_eps_nuc_categories(
-                        &w.eps_nuc_categories,
+                        raw_cats,
                         eps_val,
                         eps_fac,
+                        direct,
                     );
 
                     *eps_k = eps_val * eps_fac;
@@ -475,13 +489,11 @@ fn do_net_inner(
                     *neu_k = raw_neu;
 
                     for i in 0..species {
-                        let a_i = aion[i];
-                        // `net/private/net_eval.f90:274,566`: multiply
-                        // `Z_plus_N * dydt` in `Quad` (`real(qp)`) before
-                        // rounding to `f64`, then scale by `dxdt_nuc_factor`
-                        // when `!= 1.0` (`star/private/net.f90:374-379`).
-                        let mut dxdt_i =
-                            (Quad::from_f64(a_i) * dydt[i][0]).to_f64();
+                        let mut dxdt_i = if direct {
+                            w.direct_dxdt[i]
+                        } else {
+                            (Quad::from_f64(aion[i]) * dydt[i][0]).to_f64()
+                        };
                         if dxdt_fac != 1.0 {
                             dxdt_i *= dxdt_fac;
                         }
@@ -498,14 +510,21 @@ fn do_net_inner(
                             deps_x_k[i] = if clamped_eps {
                                 0.0
                             } else {
-                                let mut val = QCONV * w.d_eps_nuc_dy[i] / a_i;
+                                let mut val = if direct {
+                                    w.direct_d_eps_nuc_dx[i]
+                                } else {
+                                    QCONV * w.d_eps_nuc_dy[i] / a_i
+                                };
                                 if eps_fac != 1.0 {
                                     val *= eps_fac;
                                 }
                                 val
                             };
-                            let mut d_rho =
-                                (Quad::from_f64(a_i) * dydt[i][2]).to_f64();
+                            let mut d_rho = if direct {
+                                w.direct_d_dxdt_drho[i]
+                            } else {
+                                (Quad::from_f64(a_i) * dydt[i][2]).to_f64()
+                            };
                             if dxdt_fac != 1.0 {
                                 d_rho *= dxdt_fac;
                             }
@@ -513,8 +532,11 @@ fn do_net_inner(
                             ddxdt_t_k[i] = if clipped_t {
                                 0.0
                             } else {
-                                let mut d_t =
-                                    (Quad::from_f64(a_i) * dydt[i][1]).to_f64();
+                                let mut d_t = if direct {
+                                    w.direct_d_dxdt_dt[i]
+                                } else {
+                                    (Quad::from_f64(a_i) * dydt[i][1]).to_f64()
+                                };
                                 if dxdt_fac != 1.0 {
                                     d_t *= dxdt_fac;
                                 }
@@ -522,8 +544,11 @@ fn do_net_inner(
                             };
                             let row_off = i * species;
                             for j in 0..species {
-                                let mut jac =
-                                    w.d_dydt_dy[row_off + j] * a_i / aion[j];
+                                let mut jac = if direct {
+                                    w.direct_d_dxdt_dx[row_off + j]
+                                } else {
+                                    w.d_dydt_dy[row_off + j] * a_i / aion[j]
+                                };
                                 if dxdt_fac != 1.0 {
                                     jac *= dxdt_fac;
                                 }
@@ -535,4 +560,91 @@ fn do_net_inner(
                 })
             },
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::micro::{do_eos, resolve_model_net, set_basic_vars};
+    use flexmesa_eos::EosConfig;
+
+    #[test]
+    fn test_eval_zone_eps_nuc_categories_matches_do_net_approx21() {
+        let g =
+            NetGeneralInfo::from_name("approx21.net").expect("approx21.net");
+        let cat = NuclideCatalog::builtin_ref();
+        let job = StarJobControls {
+            net_name: String::from("approx21.net"),
+            ..Default::default()
+        };
+        let ctrls = StarControls {
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..Default::default()
+        };
+        let mut model = StarModel::new(1, g.chem_id.clone(), job, ctrls);
+        model.eos_config = EosConfig::default();
+        model.lnd[0] = 7.6 * LN10;
+        model.ln_t[0] = 8.95 * LN10;
+        model.ln_r[0] = 20.0;
+        model.dq[0] = 1.0;
+        model.mstar = 1.988_409_870_698_051e33;
+        model.xmstar = model.mstar;
+        model.dm[0] = model.mstar;
+        model.xa.fill(1.0e-20);
+        for (iso, val) in
+            [("he4", 0.08), ("c12", 0.42), ("o16", 0.45), ("ni56", 0.05)]
+        {
+            let p = g
+                .chem_id
+                .iter()
+                .position(|&c| cat.get_by_id(c).is_some_and(|n| n.name == iso))
+                .expect("iso in approx21");
+            model.xa[p] = val;
+        }
+        let s: f64 = model.xa.iter().sum();
+        for v in &mut model.xa {
+            *v /= s;
+        }
+        set_basic_vars(&mut model).expect("set_basic_vars");
+        do_eos(&mut model).expect("do_eos");
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        do_net(&mut model, &net_info, false).expect("do_net");
+        let rf = build_rate_factors(&model.job, &net_info).expect("rf");
+        let zone_cats = eval_zone_eps_nuc_categories(
+            &net_info,
+            0,
+            &model.xa,
+            model.t[0],
+            model.ln_t[0] / LN10,
+            model.rho[0],
+            model.lnd[0] / LN10,
+            model.abar[0],
+            model.zbar[0],
+            model.z2bar[0],
+            model.ye[0],
+            model.eta[0],
+            model.eos_d_dlnt[0][I_ETA],
+            model.eos_d_dlnd[0][I_ETA],
+            &rf,
+            model.controls.weak_rate_factor,
+            model.controls.screening_mode,
+            model.job.use_3a_fl87,
+            model.job.use_suzuki_weak_rates,
+            model.controls.max_logt_for_net,
+            model.controls.max_abar_for_burning,
+            model.controls.eps_nuc_factor,
+            model.controls.dxdt_nuc_factor,
+            model.controls.max_abs_eps_nuc,
+        )
+        .expect("eval_zone_eps_nuc_categories");
+        for c in 0..NUM_CATEGORIES {
+            assert_eq!(
+                zone_cats[c].to_bits(),
+                model.aux.eps_nuc_categories[0][c].to_bits(),
+                "cat {c} mismatch between do_net and eval_zone"
+            );
+        }
+    }
 }

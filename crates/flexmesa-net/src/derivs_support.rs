@@ -81,6 +81,25 @@ pub struct NetWorkState {
     pub d_eps_nuc_dy: Vec<f64>,
     /// Molar Jacobian $\partial (dY_i/dt) / \partial Y_j$ (`num_isos * num_isos`, row-major).
     pub d_dydt_dy: Vec<f64>,
+    /// Direct CGS category energy rates ($\mathrm{erg\,g^{-1}\,s^{-1}}$)
+    /// populated when `g.doing_approx21` (`net_eval.f90:232-237,308-338`).
+    pub direct_eps_nuc_categories: [f64; NUM_CATEGORIES],
+    /// Direct CGS $\partial\epsilon_{\mathrm{nuc}}/\partial X_i$ (`num_isos`)
+    /// populated when `g.doing_approx21` (`net_eval.f90:431`).
+    pub direct_d_eps_nuc_dx: Vec<f64>,
+    /// Direct mass-fraction rates $dX_i/dt$ ($\mathrm{s^{-1}}$, `num_isos`)
+    /// populated when `g.doing_approx21` (`net_eval.f90:381`).
+    pub direct_dxdt: Vec<f64>,
+    /// Direct $\partial(dX_i/dt)/\partial T$ (`num_isos`) populated when
+    /// `g.doing_approx21` (`net_eval.f90:433`).
+    pub direct_d_dxdt_dt: Vec<f64>,
+    /// Direct $\partial(dX_i/dt)/\partial\rho$ (`num_isos`) populated when
+    /// `g.doing_approx21` (`net_eval.f90:432`).
+    pub direct_d_dxdt_drho: Vec<f64>,
+    /// Direct mass-fraction Jacobian $\partial(dX_i/dt)/\partial X_j$
+    /// (`num_isos * num_isos`, row-major) populated when `g.doing_approx21`
+    /// (`net_eval.f90:435-436`).
+    pub direct_d_dxdt_dx: Vec<f64>,
     /// Weaklib combined rate $\lambda$ (`num_wk_reactions`).
     pub wk_lambda: Vec<f64>,
     /// $\partial \lambda / \partial \ln T$ (`num_wk_reactions`).
@@ -102,6 +121,7 @@ impl NetWorkState {
     #[must_use]
     pub fn new(g: &NetGeneralInfo) -> Self {
         let ni = g.num_isos;
+        let nd = if g.doing_approx21 { ni } else { 0 };
         let nr = g.num_reactions.max(120);
         let nw = g.num_wk_reactions;
         Self {
@@ -120,6 +140,12 @@ impl NetWorkState {
             eps_neu_total: 0.0,
             d_eps_nuc_dy: vec![0.0; ni],
             d_dydt_dy: vec![0.0; ni * ni],
+            direct_eps_nuc_categories: [0.0; NUM_CATEGORIES],
+            direct_d_eps_nuc_dx: vec![0.0; nd],
+            direct_dxdt: vec![0.0; nd],
+            direct_d_dxdt_dt: vec![0.0; nd],
+            direct_d_dxdt_drho: vec![0.0; nd],
+            direct_d_dxdt_dx: vec![0.0; nd * nd],
             wk_lambda: vec![0.0; nw],
             wk_dlambda_dln_t: vec![0.0; nw],
             wk_dlambda_dln_rho: vec![0.0; nw],
@@ -138,10 +164,29 @@ impl NetWorkState {
         self.eps_neu_total = 0.0;
         self.d_eps_nuc_dy[..ni].fill(0.0);
         self.d_dydt_dy[..ni * ni].fill(0.0);
+        self.direct_eps_nuc_categories = [0.0; NUM_CATEGORIES];
+        if g.doing_approx21 && self.direct_dxdt.len() >= ni {
+            self.direct_d_eps_nuc_dx[..ni].fill(0.0);
+            self.direct_dxdt[..ni].fill(0.0);
+            self.direct_d_dxdt_dt[..ni].fill(0.0);
+            self.direct_d_dxdt_drho[..ni].fill(0.0);
+            self.direct_d_dxdt_dx[..ni * ni].fill(0.0);
+        }
         self.raw_rate[..nr].fill(0.0);
         self.screened_rate[..nr].fill(0.0);
         self.eps_nuc_rate[..nr].fill(0.0);
         self.eps_neu_rate[..nr].fill(0.0);
+    }
+
+    /// Ensures `direct_*` export buffers match `species` isotopes.
+    pub(crate) fn ensure_direct_export_len(&mut self, species: usize) {
+        if self.direct_dxdt.len() != species {
+            self.direct_d_eps_nuc_dx.resize(species, 0.0);
+            self.direct_dxdt.resize(species, 0.0);
+            self.direct_d_dxdt_dt.resize(species, 0.0);
+            self.direct_d_dxdt_drho.resize(species, 0.0);
+            self.direct_d_dxdt_dx.resize(species * species, 0.0);
+        }
     }
 }
 

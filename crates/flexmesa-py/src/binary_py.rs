@@ -18,6 +18,7 @@ use flexmesa_binary::{
     BinaryCompanion, BinarySystem, BinaryTimestepControls,
 };
 use numpy::{PyArray1, PyReadonlyArray1};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -316,15 +317,23 @@ pub fn binary_eval_kolb_mdot_thick(
     mu_profile: PyReadonlyArray1<'_, f64>,
     gamma1_profile: PyReadonlyArray1<'_, f64>,
 ) -> PyResult<f64> {
+    let r_s = r_profile.as_slice()?;
+    let p_s = p_profile.as_slice()?;
+    let t_s = t_profile.as_slice()?;
+    let mu_s = mu_profile.as_slice()?;
+    let g1_s = gamma1_profile.as_slice()?;
+    let nz = r_s.len();
+    if p_s.len() != nz
+        || t_s.len() != nz
+        || mu_s.len() != nz
+        || g1_s.len() != nz
+    {
+        return Err(PyValueError::new_err(
+            "r_profile, p_profile, t_profile, mu_profile, and gamma1_profile must have equal length",
+        ));
+    }
     Ok(eval_kolb_mdot_thick(
-        m_donor,
-        m_accretor,
-        rl_donor,
-        r_profile.as_slice()?,
-        p_profile.as_slice()?,
-        t_profile.as_slice()?,
-        mu_profile.as_slice()?,
-        gamma1_profile.as_slice()?,
+        m_donor, m_accretor, rl_donor, r_s, p_s, t_s, mu_s, g1_s,
     ))
 }
 

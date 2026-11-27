@@ -513,7 +513,7 @@ impl StarModel {
             ..KapConfig::default()
         };
 
-        Self {
+        let mut model = Self {
             nz,
             species,
             chem_id,
@@ -697,7 +697,12 @@ impl StarModel {
             ln_peos_surf_ad: StarAdOrder1::ZERO,
             ln_t_surf_ad: StarAdOrder1::ZERO,
             aux: HydroAuxState::new(nz, species),
-        }
+        };
+        // The case's `other_*` hooks are set on the star in `extras_controls`,
+        // before any model is built or loaded
+        // (`star/job/run_star_support.f90:429-459`).
+        crate::star_job_init::apply_active_extras_hooks(&mut model);
+        model
     }
 
     /// Returns the species mass-fraction slice `xa[k, 0..species]` for cell `k`.

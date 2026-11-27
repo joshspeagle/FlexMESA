@@ -44,11 +44,6 @@ issue = "#161"
 reason = "Strict multi-stage pre-MS-to-AGB run reaches log_L_upper_limit (768 steps vs MESA 721, 23 retries vs MESA 14) with num_zones (21.02%) and track deviations from step 125 (#161, #153, #155)."
 [[gaps]]
 suite = "star"
-case = "accreted_material_j"
-issue = "#158"
-reason = "Strict run lacks unported use_other_adjust_mdot hook behavior, diverges at step 1, evolves into post-He burning, and hits the 5.5 GB memory guard (#158, #152)."
-[[gaps]]
-suite = "star"
 case = "c13_pocket"
 issue = "#161"
 reason = "AGB third-dredge-up C13-pocket evolution hits memory/wall-time guard with unsupported controls::atm_off_table_option (#161)."
@@ -120,18 +115,13 @@ reason = "Case history_columns.list requests unported gravity-darkening grav_dar
 [[gaps]]
 suite = "star"
 case = "high_z"
-issue = "#161"
-reason = "Strict run reaches xa_central_lower_limit (445 steps and 0 retries matching MESA 26.4.1, all final tolerances pass) with num_zones (2.74%) and track deviations from step 3 (#161, #153)."
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [446] vs MESA [445]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "hot_cool_wind"
 issue = "#161"
 reason = "Strict run diverges from step 2 under fixed T(tau) opacity and enters AGB solver retries (789 steps, 135 retries vs MESA 570 steps, 28 retries), exceeding the 900 s wall-time cap (#161, #152, #159)."
-[[gaps]]
-suite = "star"
-case = "magnetic_braking"
-issue = "#539"
-reason = "Reaches upstream xa_central_lower_limit (791 steps) but leaves the MESA 26.4.1 tolerances (log_center_Rho 8.3e-3, num_zones up to 3.85%) since the line search sums one dot product per variable as upstream (star_solver.f90:1915-1918); main plus only that change flips the case from pass to fail, so the Train 9 pass depended on rounding-level details (#539, #538)."
 [[gaps]]
 suite = "star"
 case = "make_co_wd"
@@ -144,14 +134,19 @@ issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
 [[gaps]]
 suite = "star"
+case = "make_planets"
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [76, 22, 113] vs MESA [76, 22, 112]), which DECISIONS #70 does not count as a pass (#587)."
+[[gaps]]
+suite = "star"
 case = "ns_c"
 issue = "#157"
 reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column."
 [[gaps]]
 suite = "star"
 case = "ns_h"
-issue = "#161"
-reason = "Strict neutron-star H envelope burning reaches max_age (496 steps vs MESA 377, 5 retries vs MESA 2, all final tolerances pass) with num_zones (41.75%) and surface luminosity deviations from step 111 (#161, #152)."
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [119, 370] vs MESA [119, 377]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "ns_he"
@@ -204,11 +199,6 @@ issue = "#161"
 reason = "Large-network silicon burning exceeds wall-time guard with unported rate, burning-limit, and solver controls (#161, #152)."
 [[gaps]]
 suite = "star"
-case = "starspots"
-issue = "#158"
-reason = "Case history_columns.list requests unported starspot cz_bot_radius column."
-[[gaps]]
-suite = "star"
 case = "twin_studies"
 issue = "#154"
 reason = "Multi-star evolution exceeds wall-time guard under unported rotational mixing and burning-limit controls (#154, #158, #161)."
@@ -232,6 +222,11 @@ suite = "star"
 case = "wd_cool_0.6M"
 issue = "#156"
 reason = "Strict run reaches log_center_temp_lower_limit (218 steps vs MESA 219, 3 retries matching MESA 26.4.1) with rel_star_age (-0.66%), num_zones (3.21%), and cooling-track deviations from step 37 (#156, #152)."
+[[gaps]]
+suite = "star"
+case = "wd_he_shell_ignition"
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1111] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "star"
 case = "wd_nova_burst"
@@ -265,8 +260,8 @@ reason = "Explicit RLOF star+point-mass age and component masses differ from MES
 [[gaps]]
 suite = "binary"
 case = "wind_fed_bhhmxb"
-issue = "#160"
-reason = "Strict binary run passes BH Eddington and wind-budget checks, while implicit RLOF exceeds the 300 s wall-time cap with component mass and age drift (#160, #144)."
+issue = "#587"
+reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [392] vs MESA [393]), which DECISIONS #70 does not count as a pass (#587)."
 [[gaps]]
 suite = "astero"
 case = "astero_adipls"
@@ -394,8 +389,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "Uncapped astero campaign (#162, #171). It now stops with an explicit error, by design: example_astero's set_constraint_value('Rcz') leaves val unset when no convective boundary is found (upstream reads it undefined; deferred bug #438, DECISIONS #43). MESA 26.4.1 (mesa-histories-v1) finishes in 737 steps, with best chi2 2.8005 at model 734, ending on chi2_search_limit2."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero campaign (#162, #171); kept under --ignored for the scheduled campaign CI. It runs to completion since the 2026-11-26 scheduled campaign on main; the strict history comparison of example_astero is tracked by its harness row."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -654,12 +649,3 @@ role = "physics_gap"
 expect_fail_when_run = true
 reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530)."
 
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-binary"
-file = "crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs"
-test_name = "wind_fed_bhhmxb_model5_and_model10_match_mesa_26_4_1"
-issue = "#160"
-role = "physics_gap"
-expect_fail_when_run = true
-reason = "With the energy equation's work term and composition partials in upstream's operation order (#536, hydro_energy.f90:469-527, 810-816), jdot_ml leaves the MESA 26.4.1 values by 1.77e-8 (model 5) and 1.95e-8 (model 10) against a 1e-8 tolerance; before, it was already off by 2.7e-9 and 3.9e-12, and the other pinned quantities stay within 6e-13. Splitting the change moves model 5 and model 10 independently, which points to Newton-convergence-level sensitivity; the TDC inputs at step boundaries (#538) are the next known divergence for this donor."

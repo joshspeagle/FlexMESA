@@ -692,7 +692,7 @@ fn test_eval_surf_bc_irradiated_grey_fixed_mode_and_tau_factor() {
     model.aux.opacity_start_surf = k0;
     model.opacity[0] = k0 * 2.5;
     model.aux.doing_struct_burn_mix = true;
-    model.aux.solver_mlt_eval_count = 1;
+    model.aux.solver_iter = 1;
     eval_surf_bc(&mut model).expect("eval_surf_bc fixed inside solver iter");
     assert!(
         (model.ln_t_surf_ad.val - lnt_fixed.val).abs() <= 1.0e-14,
@@ -717,7 +717,7 @@ fn test_eval_surf_bc_irradiated_grey_iterated_mode_and_loud_errors() {
     let k0 = model.opacity[0];
     model.aux.opacity_start_surf = k0 * 2.5;
     model.aux.doing_struct_burn_mix = true;
-    model.aux.solver_mlt_eval_count = 1;
+    model.aux.solver_iter = 1;
     eval_surf_bc(&mut model).expect("eval_surf_bc iterated");
     let lnt_iter = model.ln_t_surf_ad;
     assert_eq!(model.ln_peos_surf_ad.d1, [0.0; NUM_STAR_AD_VARS]);
@@ -725,7 +725,7 @@ fn test_eval_surf_bc_irradiated_grey_iterated_mode_and_loud_errors() {
     assert_eq!(lnt_iter.d1[I_LNT_00], 0.0);
 
     model.aux.doing_struct_burn_mix = false;
-    model.aux.solver_mlt_eval_count = 0;
+    model.aux.solver_iter = 0;
     model.opacity[0] = k0;
     eval_surf_bc(&mut model).expect("eval_surf_bc iterated unperturbed");
     assert!((model.ln_t_surf_ad.val - lnt_iter.val).abs() <= 1.0e-10);

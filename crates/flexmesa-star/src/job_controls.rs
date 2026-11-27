@@ -1136,6 +1136,17 @@ pub struct StarJobControls {
     pub remove_initial_center_by_temperature: f64,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
+    /// MESA installation directory (`mesa_dir`, `star/defaults/star_job.defaults:10-18`).
+    ///
+    /// Installation-location key (`DECISIONS #68`). Upstream it overrides
+    /// `$MESA_DIR` when non-blank to locate the data tree
+    /// (`const/public/const_def.f90:186-198`) and, for output only, the default
+    /// column lists (`star/private/history_specs.f90:116-119`,
+    /// `star/private/profile.f90:85-88`) and the `stop_warnings_for_rel_E_err`
+    /// sentinel (`star/job/run_star_support.f90:1124`). `FlexMESA` supplies
+    /// those resources from its verified MESA `26.4.1` copies, so the value is
+    /// stored and not used to resolve paths.
+    pub mesa_dir: String,
     /// Custom `history_columns.list` path (`history_columns_file` in `star/defaults/star_job.defaults:214`).
     pub history_columns_file: String,
     /// Custom `profile_columns.list` path (`profile_columns_file` in `star/defaults/star_job.defaults:224`).
@@ -1387,6 +1398,7 @@ impl Default for StarJobControls {
             steps_to_take_before_terminate: -1,
             remove_initial_center_by_temperature: 0.0,
             pgstar_flag: false,
+            mesa_dir: String::new(),
             history_columns_file: String::new(),
             profile_columns_file: String::new(),
             write_profile_when_terminate: false,

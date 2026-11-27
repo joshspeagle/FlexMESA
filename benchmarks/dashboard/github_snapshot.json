@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 18,
+      "open": 19,
       "closed": 17,
       "issues": [
         {
@@ -278,6 +278,11 @@
           "number": 541,
           "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
           "state": "open"
+        },
+        {
+          "number": 587,
+          "title": "[Parity] Step counts differ from MESA 26.4.1 in five cases that are within tolerance (high_z, ns_h, make_planets, wd_he_shell_ignition, wind_fed_bhhmxb)",
+          "state": "open"
         }
       ]
     },
@@ -343,6 +348,11 @@
       "number": 553,
       "title": "fix(star): case hooks inside set_hydro_vars, full post-burn set_vars, hook flags without handlers are unsupported (#541)",
       "draft": false
+    },
+    {
+      "number": 576,
+      "title": "Train 12: TDC scale, hooks in set_hydro_vars, near misses, composition residuals, harness step counts, lane B batch",
+      "draft": true
     }
   ],
   "deferred_169": [
@@ -920,6 +930,30 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 564,
+      "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 565,
+      "title": "[Deferred bug] do_binary_job_controls_after compares b% m(i) in grams with new_m{1,2} in Msun",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 566,
+      "title": "[Deferred bug] get_xa_for_accretion reads accretion_species arrays out of bounds when num_accretion_species > 250",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

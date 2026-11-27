@@ -129,6 +129,14 @@ pub fn star_eval_riemann_profile<'py>(
 ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<f64>>)> {
     let u_s = u_cell.as_slice()?;
     let u_old_s = u_old_cell.as_slice()?;
+    if u_s.len() != model.inner.nz || u_old_s.len() != model.inner.nz {
+        return Err(PyValueError::new_err(format!(
+            "u_cell ({}) and u_old_cell ({}) lengths must equal nz ({})",
+            u_s.len(),
+            u_old_s.len(),
+            model.inner.nz
+        )));
+    }
     let (faces, residuals) = py.detach(|| {
         eval_riemann_profile(&model.inner, u_s, u_old_s, p_surf_bc, parallel)
     });
@@ -349,6 +357,9 @@ pub fn star_build_pulse_points<'py>(
             ]
         })
         .collect();
+    if rows.is_empty() {
+        return Ok(PyArray2::zeros(py, [0, 26], false));
+    }
     Ok(PyArray2::from_vec2(py, &rows)?)
 }
 

@@ -633,7 +633,7 @@ pub fn do_struct_burn_mix(
 
     // `s% solver_iter = 0  ! to indicate that no longer doing solver
     // iterations` (`star/private/struct_burn_mix.f90:207`).
-    model.aux.solver_mlt_eval_count = 0;
+    model.aux.solver_iter = 0;
     model.aux.doing_struct_burn_mix = false;
     let report = match step_res {
         Ok(rep) => rep,

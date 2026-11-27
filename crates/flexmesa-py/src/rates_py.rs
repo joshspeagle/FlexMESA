@@ -342,14 +342,18 @@ pub fn rates_weak_info_by_names(
     rhs_name: &str,
 ) -> PyResult<(f64, f64)> {
     let ncat = NuclideCatalog::builtin_ref();
-    let wl = ncat
+    let wl_idx = ncat
         .get_nuclide_index(lhs_name)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown {lhs_name}")))?
-        as u16;
-    let wr = ncat
+        .ok_or_else(|| PyValueError::new_err(format!("unknown {lhs_name}")))?;
+    let wl = u16::try_from(wl_idx).map_err(|_| {
+        PyValueError::new_err(format!("nuclide index overflow for {lhs_name}"))
+    })?;
+    let wr_idx = ncat
         .get_nuclide_index(rhs_name)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown {rhs_name}")))?
-        as u16;
+        .ok_or_else(|| PyValueError::new_err(format!("unknown {rhs_name}")))?;
+    let wr = u16::try_from(wr_idx).map_err(|_| {
+        PyValueError::new_err(format!("nuclide index overflow for {rhs_name}"))
+    })?;
     RatesCatalog::builtin()
         .weak_info_by_ids(wl, wr)
         .ok_or_else(|| {
@@ -429,8 +433,31 @@ pub fn rates_compute_rev_ratio_coeff1(
     spin_in: Vec<f64>,
     w_out: Vec<f64>,
     spin_out: Vec<f64>,
-) -> f64 {
-    compute_rev_ratio_coeff1(&w_in, &spin_in, &w_out, &spin_out)
+) -> PyResult<f64> {
+    if w_in.is_empty() || w_out.is_empty() {
+        return Err(PyValueError::new_err(
+            "w_in and w_out must both be non-empty",
+        ));
+    }
+    if w_in.len() != spin_in.len() || w_out.len() != spin_out.len() {
+        return Err(PyValueError::new_err(
+            "masses and spins must have equal length for entrance and exit channels",
+        ));
+    }
+    if w_in.iter().any(|&w| !w.is_finite() || w <= 0.0)
+        || w_out.iter().any(|&w| !w.is_finite() || w <= 0.0)
+        || spin_in
+            .iter()
+            .any(|&s| !s.is_finite() || 2.0 * s + 1.0 <= 0.0)
+        || spin_out
+            .iter()
+            .any(|&s| !s.is_finite() || 2.0 * s + 1.0 <= 0.0)
+    {
+        return Err(PyValueError::new_err(
+            "nuclear masses must be positive finite and spins must satisfy 2*J + 1 > 0",
+        ));
+    }
+    Ok(compute_rev_ratio_coeff1(&w_in, &spin_in, &w_out, &spin_out))
 }
 
 /// Register `rates` functions on `flexmesa._rust`.

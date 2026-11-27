@@ -211,37 +211,46 @@ pub fn synthesize_reaction_info(
     }
     let reaclib_entry = cat.reaclib_terms(handle).ok();
     let (p_in, p_out, op) = parse_reaction_handle(handle)?;
-    let (is_rev, weak, weaklib_only) =
-        if let Some((rev, terms)) = reaclib_entry {
-            (rev, terms.first().is_some_and(|t| t.rflag == b'w'), false)
+    let (is_rev, weak, weaklib_only) = if let Some((rev, terms)) = reaclib_entry
+    {
+        // Weaklib-only `-99` placeholders in `reaclib_rates` mark
+        // `also_in_reaclib = .false.` (`rates/private/reaclib_input.f90:279-294`).
+        let is_placeholder = !terms.is_empty()
+            && terms
+                .iter()
+                .all(crate::derivs_support::is_weaklib_placeholder);
+        (
+            rev,
+            terms.first().is_some_and(|t| t.rflag == b'w'),
+            is_placeholder,
+        )
+    } else {
+        // Upstream MESA `rates/private/reaclib_input.f90:267-300`
+        // registers `weakreactions.tables` transitions in REACLIB even
+        // when absent from `jina_reaclib` (`also_in_reaclib = .false.`).
+        if p_in.len() != 1
+            || p_out.len() != 1
+            || (op != "wk" && op != "wk-minus")
+        {
+            return Err(NetError::InvalidReactionOrIso(handle.to_string()));
+        }
+        let e_in = nuclides.get_by_id(p_in[0]).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(handle.to_string())
+        })?;
+        let e_out = nuclides.get_by_id(p_out[0]).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(handle.to_string())
+        })?;
+        let valid_delta_zn = if op == "wk" {
+            e_in.z == e_out.z + 1 && e_in.n + 1 == e_out.n
         } else {
-            // Upstream MESA `rates/private/reaclib_input.f90:267-300`
-            // registers `weakreactions.tables` transitions in REACLIB even
-            // when absent from `jina_reaclib` (`also_in_reaclib = .false.`).
-            if p_in.len() != 1
-                || p_out.len() != 1
-                || (op != "wk" && op != "wk-minus")
-            {
-                return Err(NetError::InvalidReactionOrIso(handle.to_string()));
-            }
-            let e_in = nuclides.get_by_id(p_in[0]).ok_or_else(|| {
-                NetError::InvalidReactionOrIso(handle.to_string())
-            })?;
-            let e_out = nuclides.get_by_id(p_out[0]).ok_or_else(|| {
-                NetError::InvalidReactionOrIso(handle.to_string())
-            })?;
-            let valid_delta_zn = if op == "wk" {
-                e_in.z == e_out.z + 1 && e_in.n + 1 == e_out.n
-            } else {
-                e_in.z + 1 == e_out.z && e_in.n == e_out.n + 1
-            };
-            if !valid_delta_zn
-                || cat.weak_by_pair(&e_in.name, &e_out.name).is_err()
-            {
-                return Err(NetError::InvalidReactionOrIso(handle.to_string()));
-            }
-            (false, true, true)
+            e_in.z + 1 == e_out.z && e_in.n == e_out.n + 1
         };
+        if !valid_delta_zn || cat.weak_by_pair(&e_in.name, &e_out.name).is_err()
+        {
+            return Err(NetError::InvalidReactionOrIso(handle.to_string()));
+        }
+        (false, true, true)
+    };
     let particles_in = p_in.len();
     let particles_out = p_out.len();
     let (num_in, in_num, in_iso) = pack_species(&p_in);

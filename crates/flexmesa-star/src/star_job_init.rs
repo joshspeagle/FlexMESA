@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{M_SUN, SECYER};
 
 use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
 use crate::job_controls::{AtmOption, AtmTTauOpacity, AtmTTauRelation};
@@ -143,9 +143,9 @@ fn finish_load_model(
 
     // `read_model.f90:157-159`: `okay_to_set_mlt_vc` is set by the reader
     // from `have_mlt_vc` (`model_io::read_mod_str_with_dir`).
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     // `set_vars` with `doing_finish_load_model = .true.`
     // (`read_model.f90:161-168`): under `D_omega_flag` / `am_nu_rot_flag`
     // it zeroes `D_omega` and `am_nu_rot`
@@ -203,9 +203,9 @@ pub(crate) fn prepare_new_model_for_relax(
     model.init_model_number = model.model_number as isize;
     model.doing_first_model_of_run = true;
     model.sync_mesh_and_pack()?;
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     // `finish_load_model` runs `set_vars` with `doing_finish_load_model`
     // (`star/private/init.f90:1045`, `star/private/read_model.f90:161-168`).
     model.aux.doing_finish_load_model = true;
@@ -397,8 +397,87 @@ pub fn init_or_update_model_from_bundle(
     }
 }
 
+std::thread_local! {
+    static ACTIVE_EXTRAS_HOOKS: std::cell::RefCell<
+        Vec<crate::hydro_state::HydroAuxState>,
+    > = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Scopes the case's `other_*` hooks to every model created on this thread
+/// while it is alive, as upstream's procedure pointers are set on the star in
+/// `extras_controls` before the model is built or loaded
+/// (`star/job/run_star_support.f90:429-459`).
+struct ExtrasHooksGuard {
+    _private: (),
+}
+
+impl ExtrasHooksGuard {
+    fn new(hooks: &crate::hydro_state::HydroAuxState) -> Self {
+        ACTIVE_EXTRAS_HOOKS.with(|stack| stack.borrow_mut().push(hooks.clone()));
+        Self { _private: () }
+    }
+}
+
+impl Drop for ExtrasHooksGuard {
+    fn drop(&mut self) {
+        ACTIVE_EXTRAS_HOOKS.with(|stack| {
+            let _ = stack.borrow_mut().pop();
+        });
+    }
+}
+
+/// Installs the hooks of the innermost active [`ExtrasHooksGuard`], if any,
+/// on a newly created model.
+pub(crate) fn apply_active_extras_hooks(model: &mut StarModel) {
+    ACTIVE_EXTRAS_HOOKS.with(|stack| {
+        if let Some(hooks) = stack.borrow().last() {
+            carry_extras_hooks(hooks, model);
+        }
+    });
+}
+
 /// Copies the hooks `extras_controls` installed on the pre-load star onto the
 /// loaded model (upstream installs them on the one `s`, so they persist).
+/// A `use_other_*` flag whose case handler is not ported (no hook installed
+/// after `extras_controls`) is an unsupported control (`#147`): a strict run
+/// is rejected with the standard message, and under
+/// `--allow-unsupported-controls` the flag is cleared so the run continues as
+/// a diagnostic run that ignored it (`DECISIONS #26`). Upstream always has the
+/// case's procedure set (`star/job/run_star_support.f90:429-459`), so there
+/// is no defined behaviour without one.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] in a strict run when a flag is set
+/// without its hook.
+fn reject_hook_flags_without_handler(
+    shell: &mut StarModel,
+    allow_unsupported_controls: bool,
+) -> Result<(), StarError> {
+    let mut missing: Vec<(String, String)> = Vec::new();
+    if shell.controls.use_other_cgrav && shell.aux.other_cgrav.is_none() {
+        missing.push((String::from("controls"), String::from("use_other_cgrav")));
+        if allow_unsupported_controls {
+            shell.controls.use_other_cgrav = false;
+        }
+    }
+    if shell.controls.use_other_alpha_mlt && shell.aux.other_alpha_mlt.is_none() {
+        missing.push((String::from("controls"), String::from("use_other_alpha_mlt")));
+        if allow_unsupported_controls {
+            shell.controls.use_other_alpha_mlt = false;
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let report = flexmesa_schema::ControlValidationReport {
+        unsupported_controls: missing,
+        ..Default::default()
+    };
+    report
+        .into_result(allow_unsupported_controls)
+        .map_err(|e| StarError::InvalidInput(e.to_string()))
+}
+
 fn carry_extras_hooks(
     src: &crate::hydro_state::HydroAuxState,
     model: &mut StarModel,
@@ -412,6 +491,12 @@ fn carry_extras_hooks(
         aux.other_adjust_mlt_gradt_fraction
             .clone_from(&src.other_adjust_mlt_gradt_fraction);
     }
+    if src.other_cgrav.is_some() {
+        aux.other_cgrav.clone_from(&src.other_cgrav);
+    }
+    if src.other_alpha_mlt.is_some() {
+        aux.other_alpha_mlt.clone_from(&src.other_alpha_mlt);
+    }
     if src.other_mesh_functions.is_some() {
         aux.other_mesh_functions
             .clone_from(&src.other_mesh_functions);
@@ -422,10 +507,41 @@ fn carry_extras_hooks(
     }
 }
 
+/// As [`init_or_update_model_from_bundle`], for a model the caller has just
+/// read from a ZAMS catalog (a binary component seed). Upstream loads such a
+/// model through `model_builder`'s `do_load_zams_model` route, which ends in
+/// `finish_load_model` before the `&star_job` controls apply
+/// (`star/private/init.f90:1007-1016, 1046`), unlike a model carried over
+/// from an earlier stage.
+///
+/// # Errors
+/// As [`init_or_update_model_from_bundle`].
+pub fn init_model_from_zams_seed(
+    bundle: &InlistBundle,
+    seed: StarModel,
+    extras: &mut dyn StarExtras,
+) -> Result<StarModel, StarError> {
+    match init_or_update_model_impl(bundle, Some(seed), extras, true)? {
+        InitModelOutcome::Model(m) => Ok(*m),
+        InitModelOutcome::Terminate(reason) => Err(StarError::InvalidInput(
+            format!("stage terminated during initialization: {reason}"),
+        )),
+    }
+}
+
 pub(crate) fn init_or_update_model_from_bundle_outcome(
+    bundle: &InlistBundle,
+    existing_model: Option<StarModel>,
+    extras: &mut dyn StarExtras,
+) -> Result<InitModelOutcome, StarError> {
+    init_or_update_model_impl(bundle, existing_model, extras, false)
+}
+
+fn init_or_update_model_impl(
     bundle: &InlistBundle,
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
+    existing_is_zams_seed: bool,
 ) -> Result<InitModelOutcome, StarError> {
     let _net_dir_guard = NetSearchDirGuard::new(&bundle.case_dir);
     // `extras_controls` runs after `star_setup` reads the inlists and before
@@ -444,12 +560,18 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         shell.eos_config = bundle.eos_config;
         shell.kap_config = bundle.kap_config.clone();
         extras.extras_controls(&mut shell)?;
+        crate::inlist_runner::install_star_aux_hooks(&*extras, &mut shell);
+        reject_hook_flags_without_handler(
+            &mut shell,
+            bundle.allow_unsupported_controls,
+        )?;
         let mut b = bundle.clone();
         b.controls = shell.controls;
         b.job = shell.job;
         (b, shell.aux)
     };
     let bundle = &bundle;
+    let _hooks_guard = ExtrasHooksGuard::new(&hooks);
     match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
@@ -478,6 +600,8 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let mut did_create_pre_ms = false;
     let mut did_create_initial_model = false;
     let mut did_load_saved_model = false;
+    let mut did_load_zams_model =
+        existing_is_zams_seed && existing_model.is_some();
     // Upstream's `restart` is a photo restart only
     // (`star/job/run_star_support.f90:433-442`). A model carried over from an
     // earlier `./rn` stage stands for the `.mod` file that stage saved and
@@ -541,6 +665,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
                 controls.initial_y
             )));
         }
+        did_load_zams_model = true;
         load_zams_model(controls.clone(), job.clone())?
     };
 
@@ -616,7 +741,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     // (`star/job/run_star_support.f90:1912-1916`); its `set_vars` sets the
     // `mlt_D` that `set_new_abundances` reads in `get_test_lgT`
     // (`star/private/adjust_xyz.f90:617-626`).
-    if did_load_saved_model {
+    // `model_builder` ends the `do_load_zams_model` route in the same
+    // `finish_load_model` (`star/private/init.f90:1007-1016, 1046`), so
+    // `do_star_job_controls_after` (e.g. `star_surface_omega_crit`) sees the
+    // `set_vars` state of the loaded ZAMS model.
+    if did_load_saved_model || did_load_zams_model {
         finish_load_model(&mut model, extras)?;
     }
 
@@ -808,23 +937,25 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         let new_omega = job.new_surface_rotation_v * 1.0e5 / model.r[0];
         apply_uniform_rotation(&mut model, new_omega);
     }
-    if model.controls.rotation_flag
-        && (job.set_omega_div_omega_crit
-            || (job.set_initial_omega_div_omega_crit && !restart))
-    {
-        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        let g_surf = model
-            .cgrav
-            .first()
-            .copied()
-            .filter(|&g| g > 0.0)
-            .unwrap_or(STANDARD_CGRAV);
-        let omega_crit =
-            (g_surf * model.mstar / flexmesa_math::pow3(r_surf)).sqrt();
-        apply_uniform_rotation(
-            &mut model,
-            job.new_omega_div_omega_crit * omega_crit,
-        );
+    // `new_omega = new_omega_div_omega_crit*star_surface_omega_crit(id,
+    // ierr)`, in two separate blocks (`set_omega_div_omega_crit` and
+    // `set_initial_omega_div_omega_crit .and. .not. restart`,
+    // `star/job/run_star_support.f90:2166-2184`). When both are set the second
+    // block recomputes the surface-averaged critical rate on the rotating
+    // model, so they are not merged.
+    let set_div_crit = [
+        job.set_omega_div_omega_crit,
+        job.set_initial_omega_div_omega_crit && !restart,
+    ];
+    for apply in set_div_crit {
+        if model.controls.rotation_flag && apply {
+            let omega_crit =
+                crate::report_utils::star_surface_omega_crit(&mut model);
+            apply_uniform_rotation(
+                &mut model,
+                job.new_omega_div_omega_crit * omega_crit,
+            );
+        }
     }
 
     // 4. Composition and mass, in upstream's order
@@ -1059,9 +1190,9 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         }
     }
     model.sync_mesh_and_pack()?;
-    if model.controls.use_other_cgrav {
-        extras.other_cgrav(&mut model)?;
-    }
+    // `other_cgrav` runs inside the `set_vars` below (`set_cgrav`,
+    // `star/private/hydro_vars.f90:525,763-776`) from the installed handle.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, &mut model);
 
     set_hydro_vars(&mut model, false, false)?;
     if model.controls.rsp2_flag {

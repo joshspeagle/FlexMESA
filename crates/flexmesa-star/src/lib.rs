@@ -511,7 +511,9 @@ pub use star_ad::{
     I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1,
     I_W_P1, NUM_STAR_AD_VARS, StarAdExt, StarAdOrder1,
 };
-pub use star_job_init::init_or_update_model_from_bundle;
+pub use star_job_init::{
+    init_model_from_zams_seed, init_or_update_model_from_bundle,
+};
 pub use stella::{
     FeII5169EtaTable, StellaAbnZone, StellaExportOptions, StellaHydModel,
     StellaHydZone, StellaVelFeIIRow, eval_sobolev_feii_5169_snapshot,

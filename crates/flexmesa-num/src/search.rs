@@ -334,34 +334,64 @@ pub fn find_max_quadratic(
     Ok((xmax, ymax))
 }
 
-/// Solves for the two-piece linear expansion coefficients $(a, b, c)$ at $x$
-/// in a monotonic 3-point grid $(x_0, x_1, x_2)$ such that
-/// $f(x) = a f(x_0) + b f(x_1) + c f(x_2)$.
+/// Solves for the two-piece linear expansion coefficients $(a_0, a_1, a_2)$
+/// at $x$ on a monotonic 3-point grid $(x_0, x_1, x_2)$ such that
+/// $f(x) = a_0 f(x_0) + a_1 f(x_1) + a_2 f(x_2)$ (`two_piece_linear_coeffs`
+/// in `num/public/num_lib.f90:580-613`).
+///
+/// Ported in upstream's order of operations: on the segment containing `x`
+/// the weight of the *far* node is computed first, as
+/// `min(1, max(0, (x - x0)/(x1 - x0)))` or `min(1, max(0, (x - x1)/(x2 - x1)))`,
+/// and the near node takes `1 - weight`. A query outside `[x0, x2]` takes the
+/// nearest endpoint's coefficients, as upstream does.
 ///
 /// # Errors
 ///
-/// Returns [`NumError::InvalidParameter`] if $x$ lies outside $[x_0, x_2]$.
+/// Returns [`NumError::InvalidParameter`] if `(x0, x1, x2)` is not strictly
+/// monotonic (upstream `ierr = -1`), or if `x` is NaN, where upstream falls
+/// through every branch and leaves the coefficients unset (`DECISIONS #43`).
 pub fn two_piece_linear_coeffs(
     x: f64,
     x0: f64,
     x1: f64,
     x2: f64,
 ) -> Result<(f64, f64, f64), NumError> {
-    if !((x0 < x1 && x1 < x2 && x >= x0 && x <= x2)
-        || (x0 > x1 && x1 > x2 && x <= x0 && x >= x2))
-    {
-        return Err(NumError::InvalidParameter(
-            "x outside monotonic (x0, x1, x2) range",
-        ));
-    }
-    if x == x1 {
-        return Ok((0.0, 1.0, 0.0));
-    }
-    if (x0 < x1 && x < x1) || (x0 > x1 && x > x1) {
-        let a = (x1 - x) / (x1 - x0);
-        Ok((a, 1.0 - a, 0.0))
+    let unset = || {
+        NumError::InvalidParameter(
+            "two_piece_linear_coeffs: x is NaN, coefficients unset upstream",
+        )
+    };
+    if x0 < x1 && x1 < x2 {
+        if x <= x0 {
+            Ok((1.0, 0.0, 0.0))
+        } else if x >= x2 {
+            Ok((0.0, 0.0, 1.0))
+        } else if x <= x1 {
+            let a1 = 1.0_f64.min(0.0_f64.max((x - x0) / (x1 - x0)));
+            Ok((1.0 - a1, a1, 0.0))
+        } else if x < x2 {
+            let a2 = 1.0_f64.min(0.0_f64.max((x - x1) / (x2 - x1)));
+            Ok((0.0, 1.0 - a2, a2))
+        } else {
+            Err(unset())
+        }
+    } else if x0 > x1 && x1 > x2 {
+        if x >= x0 {
+            Ok((1.0, 0.0, 0.0))
+        } else if x <= x2 {
+            Ok((0.0, 0.0, 1.0))
+        } else if x >= x1 {
+            let a1 = 1.0_f64.min(0.0_f64.max((x - x0) / (x1 - x0)));
+            Ok((1.0 - a1, a1, 0.0))
+        } else if x > x2 {
+            let a2 = 1.0_f64.min(0.0_f64.max((x - x1) / (x2 - x1)));
+            Ok((0.0, 1.0 - a2, a2))
+        } else {
+            Err(unset())
+        }
     } else {
-        let c = (x - x1) / (x2 - x1);
-        Ok((0.0, 1.0 - c, c))
+        Err(NumError::InvalidParameter(
+            "two_piece_linear_coeffs: (x0, x1, x2) not strictly monotonic",
+        ))
     }
 }

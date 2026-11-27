@@ -96,6 +96,11 @@ pub fn eos_eval_dt_get<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !rho.is_finite() || rho <= 0.0 || !temp.is_finite() || temp <= 0.0 {
+        return Err(PyValueError::new_err(
+            "eos_eval_dt_get requires positive finite rho and temp",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -149,6 +154,17 @@ pub fn eos_eval_pt_get<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !pgas.is_finite()
+        || pgas <= 0.0
+        || !temp.is_finite()
+        || temp <= 0.0
+        || log_pgas.is_some_and(|v| !v.is_finite())
+        || log_t.is_some_and(|v| !v.is_finite())
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_pt_get requires positive finite pgas, temp, and finite log overrides",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -304,6 +320,15 @@ pub fn eos_eval_dt_get_t<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !rho.is_finite()
+        || rho <= 0.0
+        || !other_value.is_finite()
+        || !log_t_guess.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_dt_get_t requires positive finite rho and finite targets",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -371,6 +396,15 @@ pub fn eos_eval_dt_get_rho<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !temp.is_finite()
+        || temp <= 0.0
+        || !other_value.is_finite()
+        || !log_rho_guess.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_dt_get_rho requires positive finite temp and finite targets",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -434,6 +468,15 @@ pub fn eos_eval_pt_get_t<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !pgas.is_finite()
+        || pgas <= 0.0
+        || !other_value.is_finite()
+        || !log_t_guess.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_pt_get_t requires positive finite pgas and finite targets",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -497,6 +540,15 @@ pub fn eos_eval_pt_get_pgas<'py>(
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    if !temp.is_finite()
+        || temp <= 0.0
+        || !other_value.is_finite()
+        || !log_pgas_guess.is_finite()
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_pt_get_pgas requires positive finite temp and finite targets",
+        ));
+    }
     let cfg = build_eos_config(
         use_skye,
         use_pc,
@@ -537,15 +589,29 @@ pub fn eos_eval_gamma_de_get<'py>(
     rho: f64,
     energy: f64,
     gamma: f64,
-) -> PyInvTuple<'py> {
+) -> PyResult<PyInvTuple<'py>> {
+    if !abar.is_finite()
+        || abar <= 0.0
+        || !zbar.is_finite()
+        || !rho.is_finite()
+        || rho <= 0.0
+        || !energy.is_finite()
+        || energy <= 0.0
+        || !gamma.is_finite()
+        || gamma <= 1.0
+    {
+        return Err(PyValueError::new_err(
+            "eos_eval_gamma_de_get requires finite inputs with abar, rho, energy > 0 and gamma > 1",
+        ));
+    }
     let inv = eos_gamma_de_get(abar, zbar, rho, energy, gamma);
-    (
+    Ok((
         inv.t,
         inv.log10_t,
         PyArray1::from_slice(py, &inv.res),
         PyArray1::from_slice(py, &inv.d_dlnd),
         PyArray1::from_slice(py, &inv.d_dln_t),
-    )
+    ))
 }
 
 /// Evaluates `OPAL/SCVH` 4D tabulated EOS across `nz` zones at `(chem_id, xa)`,

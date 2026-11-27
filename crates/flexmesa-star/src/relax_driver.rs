@@ -417,18 +417,10 @@ pub(crate) fn do_internal_evolve(
     let op_split_burn = model.controls.op_split_burn;
     let mut termination: Option<String> = None;
     let mut step_error: Option<StarError> = None;
+    // `other_cgrav` and `other_alpha_mlt` run inside `set_hydro_vars`
+    // (`star/private/hydro_vars.f90:525,572-579,763-776`), not once per step.
+    crate::inlist_runner::install_star_aux_hooks(&*extras, model);
     loop {
-        // Hooks the run loop calls before each step
-        // (`inlist_runner::run_bundle_steps`).
-        if model.controls.use_other_cgrav {
-            if let Err(e) = extras.other_cgrav(model) {
-                step_error = Some(e);
-                break;
-            }
-        }
-        if model.controls.use_other_alpha_mlt {
-            extras.other_alpha_mlt(model);
-        }
         match star_evolve_step_outcome_checked(
             model,
             do_remesh,

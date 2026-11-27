@@ -328,8 +328,13 @@ pub fn do_element_diffusion_step(
         )));
     }
 
+    if dctrl.diffusion_use_full_net {
+        // Upstream `element_diffusion.f90:244-246` sets this flag on `s`
+        // unconditionally when `diffusion_use_full_net` is enabled.
+        model.controls.diffusion.diffusion_calculates_ionization = true;
+    }
     let calculate_ionization =
-        dctrl.diffusion_calculates_ionization || dctrl.diffusion_use_full_net;
+        model.controls.diffusion.diffusion_calculates_ionization;
     let mut typical_charge = vec![0.0_f64; nz * nc];
     if !calculate_ionization {
         for k in 0..nz {

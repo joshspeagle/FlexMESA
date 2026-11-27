@@ -469,7 +469,9 @@ def test_harness_merge_of_baseline_shards_reproduces_the_baseline(
     """Merging shards of the committed baseline rewrites it byte for byte."""
     base_path = case_report.default_baseline_json_path()
     reports = []
-    for i, shard in enumerate(_shard_payloads(_baseline_payload(), 4)):
+    for i, shard in enumerate(
+        _shard_payloads(_baseline_payload(), 4, enforce_step_counts=True)
+    ):
         p = tmp_path / f"shard_{i}.json"
         p.write_text(json.dumps(shard), encoding="utf-8")
         reports.append(str(p))

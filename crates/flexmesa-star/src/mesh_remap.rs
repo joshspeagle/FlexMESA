@@ -1167,29 +1167,25 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     let alpha_rti_old = model.aux.alpha_rti.clone();
     let dpdr_drhodr_old = model.aux.dpdr_drhodr_info.clone();
     let j_rot_old = model.j_rot.clone();
-    let omega_old = model.omega.clone();
-    let w_div_wc_old = model.aux.w_div_wc.clone();
-    let i_rot_old = model.aux.i_rot.clone();
-    let fp_rot_old = model.aux.fp_rot.clone();
-    let ft_rot_old = model.aux.ft_rot.clone();
     let mlt_vc_old = model.mlt_vc.clone();
     let d_mix_old = model.d_mix.clone();
     let old_r = model.r.clone();
     let old_rho = model.rho.clone();
-    let cgrav_old = model.cgrav.clone();
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
     let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
     let prev_have_new_generation = model.aux.mixing.have_new_generation;
 
     model.resize_zones(nz);
-    let default_cgrav = cgrav_old.first().copied().unwrap_or(STANDARD_CGRAV);
-    for k in 0..nz {
-        model.cgrav[k] = cgrav_old
-            .get(comes_from[k])
-            .copied()
-            .unwrap_or(default_cgrav);
-    }
+    // `resize_star_info_arrays` (`star/private/adjust_mesh.f90:319`) runs
+    // `star_info_arrays` with `do_copy_pointers_and_resize`, which sets
+    // `s% cgrav(1:nz) = standard_cgrav` (`star/private/alloc.f90:965-969`).
+    // The remap below (`cell_specific_PE` in `do1_lnT`,
+    // `star/private/mesh_adjust.f90:1465`; `adjust1_omega`, `:2100`)
+    // therefore sees `standard_cgrav` in every zone, also when
+    // `use_other_cgrav` is set; the hook's values return at the next
+    // `set_hydro_vars`.
+    model.cgrav.fill(STANDARD_CGRAV);
     model.dq.copy_from_slice(&plan.dq_new);
     fix_tail_dq(&mut model.dq)?;
     model.set_qs();
@@ -1602,68 +1598,49 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     }
     model.set_m_grav_and_grav();
 
-    // Upstream interpolates `D_omega` after `adjust_omega` under
+    // Upstream runs `adjust1_omega` unconditionally for every face `k = 1..nz`
+    // without a `cell_type` shortcut (`star/private/mesh_adjust.f90:232-236,
+    // 1943-2112`), so `xout_new`/`dqbar` rounding enters `j_rot` even on
+    // `CellType::Unchanged` faces.
+    // Upstream also interpolates `D_omega` after `adjust_omega` under
     // `D_omega_flag` (`star/private/mesh_adjust.f90:237-243`). Not ported:
     // `D_omega` is reset and rebuilt before any use by the next
     // `set_rotation_mixing_info` (`star/private/rotation_mix_info.f90:94,
     // 255-328`), so the interpolated values are never read.
-    let mut untouched_rot = vec![false; nz];
     if model.controls.rotation_flag {
         let max_w = model.controls.mix_wind.w_div_wcrit_max;
         let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
         for k in 0..nz {
-            let ko = comes_from[k];
-            let face_unchanged = unchanged_face_for_vel(k, &cell_type)
-                && model.ln_r[k] == lnr_old[ko];
-            untouched_rot[k] = face_unchanged;
-            if face_unchanged {
-                model.j_rot[k] = j_rot_old[ko];
-                model.omega[k] = omega_old[ko];
-                if let Some(&w) = w_div_wc_old.get(ko) {
-                    model.aux.w_div_wc[k] = w;
-                }
-                if let Some(&ir) = i_rot_old.get(ko) {
-                    model.aux.i_rot[k] = ir;
-                }
-                if let Some(&fp) = fp_rot_old.get(ko) {
-                    model.aux.fp_rot[k] = fp;
-                }
-                if let Some(&ft) = ft_rot_old.get(ko) {
-                    model.aux.ft_rot[k] = ft;
-                }
-            } else {
-                let (j_tot, dq_s) = adjust1_control_volume(
-                    k + 1,
-                    nz,
-                    nz_old,
-                    &comes_from,
-                    &xout_old,
-                    &xout_new,
-                    &dqbar_old,
-                    dqbar[k],
-                    &j_rot_old,
-                    true,
-                    false,
-                )?;
-                let jr = if dq_s > 0.0 { j_tot / dq_s } else { 0.0 };
-                // Verbatim `adjust1_omega` (`star/private/mesh_adjust.f90:2097-2103`):
-                // compute `w_div_w_crit_roche` from `j_rot`, update `i_rot` from
-                // `xh` (`ln_r`), and set `omega = j_rot / i_rot`.
-                model.j_rot[k] = jr;
-                let r00 = flexmesa_math::exp(model.ln_r[k]);
-                model.aux.w_div_wc[k] =
-                    crate::hydro_rotation::w_div_w_roche_jrot(
-                        r00,
-                        model.m[k],
-                        model.j_rot[k],
-                        model.cgrav[k],
-                        max_w,
-                        max_w2,
-                        false,
-                    );
-                crate::hydro_rotation::update1_i_rot_from_xh(model, k);
-                model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
-            }
+            let (j_tot, dq_s) = adjust1_control_volume(
+                k + 1,
+                nz,
+                nz_old,
+                &comes_from,
+                &xout_old,
+                &xout_new,
+                &dqbar_old,
+                dqbar[k],
+                &j_rot_old,
+                true,
+                false,
+            )?;
+            let jr = if dq_s > 0.0 { j_tot / dq_s } else { 0.0 };
+            // Verbatim `adjust1_omega` (`star/private/mesh_adjust.f90:2097-2103`):
+            // compute `w_div_w_crit_roche` from `j_rot`, update `i_rot` from
+            // `xh` (`ln_r`), and set `omega = j_rot / i_rot`.
+            model.j_rot[k] = jr;
+            let r00 = flexmesa_math::exp(model.ln_r[k]);
+            model.aux.w_div_wc[k] = crate::hydro_rotation::w_div_w_roche_jrot(
+                r00,
+                model.m[k],
+                model.j_rot[k],
+                model.cgrav[k],
+                max_w,
+                max_w2,
+                false,
+            );
+            crate::hydro_rotation::update1_i_rot_from_xh(model, k);
+            model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
         }
     }
 
@@ -1836,22 +1813,6 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
         // `remesh` sets `need_to_setvars` (`adjust_mesh_split_merge.f90:505`,
         // `evolve.f90:1973`) and leaves the variables to `prepare_for_new_step`.
         model.aux.need_to_setvars = true;
-    }
-
-    if model.controls.rotation_flag {
-        for k in 0..nz {
-            let ko = comes_from[k];
-            if untouched_rot[k] {
-                model.omega[k] = omega_old[ko];
-                model.j_rot[k] = j_rot_old[ko];
-                if let Some(&w) = w_div_wc_old.get(ko) {
-                    model.aux.w_div_wc[k] = w;
-                }
-                if let Some(&ir) = i_rot_old.get(ko) {
-                    model.aux.i_rot[k] = ir;
-                }
-            }
-        }
     }
 
     if finish {

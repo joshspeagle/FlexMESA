@@ -177,7 +177,7 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
 }
 
 #[test]
-fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero()
+fn test_primary_state_buffer_preserves_omega_when_solver_iter_nonzero()
  {
     let ctrl = StarControls {
         initial_mass: 1.5,
@@ -218,7 +218,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     let want_p_surf = model.ln_peos_surf_ad.val.to_bits();
 
     // Simulate a rejected Newton trial that perturbs thermodynamics, omega,
-    // grav, and leaves solver_mlt_eval_count > 0.
+    // grav, and leaves solver_iter > 0.
     model.lnd[0] += 0.05;
     model.ln_t[0] -= 0.03;
     for om in &mut model.omega {
@@ -227,7 +227,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     for g in &mut model.grav {
         *g *= 1.07;
     }
-    model.aux.solver_mlt_eval_count = 4;
+    model.aux.solver_iter = 4;
     snap.restore_into(&mut model).expect("restore_into");
 
     assert_bits_eq("omega", &model.omega, &want_omega);
@@ -237,7 +237,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     assert_bits_eq("ft_rot", &model.aux.ft_rot, &expected_rot_t);
     assert_bits_eq("gradt", &model.gradt, &want_gradt);
     assert_eq!(model.ln_peos_surf_ad.val.to_bits(), want_p_surf);
-    assert_eq!(model.aux.solver_mlt_eval_count, 0);
+    assert_eq!(model.aux.solver_iter, 0);
 }
 
 #[test]

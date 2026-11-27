@@ -6,9 +6,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 ## Summary
 
 - **Total manifest cases scanned**: `106`
-- **Cases passing strict `#147` validation**: `95`
-- **Cases rejected by strict `#147` validation**: `11`
-- **Distinct unsupported physics/solver controls encountered**: `46`
+- **Cases passing strict `#147` validation**: `96`
+- **Cases rejected by strict `#147` validation**: `10`
+- **Distinct unsupported physics/solver controls encountered**: `45`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 219 | 4 | 3 | 8 | 221 |
+| `&star_job` | 455 | 220 | 4 | 3 | 8 | 220 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
 | `&controls` | 1448 | 1235 | 15 | 0 | 19 | 179 |
@@ -64,7 +64,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job::change_initial_w_div_wc_flag` | `unimplemented` | 1 | `star/high_rot_darkening` |
 | `&star_job::change_w_div_wc_flag` | `unimplemented` | 1 | `star/ppisn` |
 | `&star_job::fallback_check_total_energy` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&star_job::mesa_dir` | `unimplemented` | 1 | `star/starspots` |
 | `&star_job::rate_cache_suffix` | `unimplemented` | 1 | `star/custom_rates` |
 | `&star_job::rate_tables_dir` | `unimplemented` | 1 | `star/custom_rates` |
 | `&star_job::remove_center_set_zero_v_center` | `unimplemented` | 1 | `star/ccsn_IIp` |
@@ -248,7 +247,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `semiconvection` | `pass` | 0 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `pass` | 0 | 0 | 0 |
 | `star` | `split_burn_big_net` | `pass` | 0 | 0 | 258 |
-| `star` | `starspots` | `fail_unsupported` | 1 | 0 | 17 |
+| `star` | `starspots` | `pass` | 0 | 0 | 17 |
 | `star` | `timing` | `pass` | 0 | 0 | 0 |
 | `star` | `twin_studies` | `pass` | 0 | 0 | 255 |
 | `star` | `tzo` | `pass` | 0 | 0 | 334 |

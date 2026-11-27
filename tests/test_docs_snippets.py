@@ -168,15 +168,19 @@ def test_public_docs_prose_and_path_hygiene() -> None:
         claude_gov,
         agents_gov,
     )
-    assert claude_md.read_text(encoding="utf-8") == agents_claude_md.read_text(
-        encoding="utf-8"
-    )
-    assert claude_upkeep.read_text(encoding="utf-8") == agents_upkeep.read_text(
-        encoding="utf-8"
-    )
-    assert claude_gov.read_text(encoding="utf-8") == agents_gov.read_text(
-        encoding="utf-8"
-    )
+    for canonical, link in (
+        (claude_md, agents_claude_md),
+        (claude_upkeep, agents_upkeep),
+        (claude_gov, agents_gov),
+    ):
+        assert link.is_symlink() and link.resolve() == canonical.resolve(), (
+            f"{link.relative_to(REPO_ROOT)} must be a symlink to "
+            f"{canonical.relative_to(REPO_ROOT)}; recreate the link with "
+            "ln -s instead of copying the file"
+        )
+        assert canonical.read_text(encoding="utf-8") == link.read_text(
+            encoding="utf-8"
+        )
 
     root_prose_files: tuple[pathlib.Path, ...] = (
         REPO_ROOT / "README.md",

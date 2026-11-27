@@ -82,14 +82,23 @@ pub fn build_overshoot_configs(
     f: f64,
     f0: f64,
     scheme: &str,
-) -> Vec<OvershootConfig> {
+) -> PyResult<Vec<OvershootConfig>> {
+    if !f.is_finite() || !f0.is_finite() {
+        return Err(PyValueError::new_err(
+            "overshoot_f and overshoot_f0 must be finite",
+        ));
+    }
     if f <= 0.0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let s = if scheme.eq_ignore_ascii_case("step") {
         OvershootScheme::Step
-    } else {
+    } else if scheme.eq_ignore_ascii_case("exponential") {
         OvershootScheme::Exponential
+    } else {
+        return Err(PyValueError::new_err(format!(
+            "unknown overshoot scheme {scheme:?}; expected 'exponential' or 'step'"
+        )));
     };
     let d = OvershootConfig {
         scheme: s,
@@ -97,7 +106,7 @@ pub fn build_overshoot_configs(
         f0,
         ..OvershootConfig::default()
     };
-    vec![
+    Ok(vec![
         OvershootConfig {
             top_conv_bdy: true,
             ..d
@@ -106,7 +115,7 @@ pub fn build_overshoot_configs(
             top_conv_bdy: false,
             ..d
         },
-    ]
+    ])
 }
 
 /// Parses a wind prescription string into [`WindScheme`].
@@ -180,6 +189,11 @@ impl PyStarModel {
             xa.as_slice()?,
         );
         let (nz, sp) = (lnd_s.len(), self.inner.species);
+        if nz < 2 {
+            return Err(PyValueError::new_err(format!(
+                "set_primary_state requires nz >= 2, got {nz}"
+            )));
+        }
         if lnt_s.len() != nz
             || lnr_s.len() != nz
             || lum_s.len() != nz
@@ -190,7 +204,7 @@ impl PyStarModel {
                 "mismatched array lengths in set_primary_state",
             ));
         }
-        if nz != self.inner.nz && nz >= 2 {
+        if nz != self.inner.nz {
             self.inner.resize_zones(nz);
         }
         self.inner.lnd.copy_from_slice(lnd_s);
@@ -231,9 +245,9 @@ impl PyStarModel {
         scheme: &str,
     ) -> PyResult<usize> {
         clean_mixing_glitches(&mut self.inner, 1.0, 0.1);
-        let n_bdy = locate_convection_boundaries(&mut self.inner)
-            .map_err(to_py_err)?;
-        let cfgs = build_overshoot_configs(overshoot_f, overshoot_f0, scheme);
+        let n_bdy =
+            locate_convection_boundaries(&mut self.inner).map_err(to_py_err)?;
+        let cfgs = build_overshoot_configs(overshoot_f, overshoot_f0, scheme)?;
         if !cfgs.is_empty() {
             apply_overshoot_configs(&mut self.inner, &cfgs)
                 .map_err(to_py_err)?;
@@ -273,7 +287,7 @@ impl PyStarModel {
         overshoot_f0: f64,
     ) -> PyResult<SolverReportTuple> {
         let cfgs =
-            build_overshoot_configs(overshoot_f, overshoot_f0, "exponential");
+            build_overshoot_configs(overshoot_f, overshoot_f0, "exponential")?;
         let inner = &mut self.inner;
         let rep = py
             .detach(|| {

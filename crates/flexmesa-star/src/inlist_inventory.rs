@@ -155,6 +155,9 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "max_steps_to_relax_entropy",
     "max_tries_for_create_initial_model",
     "max_z_for_add",
+    // Installation-location key (`DECISIONS #68`): stored on
+    // `StarJobControls::mesa_dir`; data come from the verified bundles.
+    "mesa_dir",
     "min_x_for_add",
     "min_x_for_keep",
     "min_x_for_n",

@@ -172,8 +172,14 @@ impl PyStarLibModel {
     }
 
     /// `s% xa(:, k)`.
-    fn xa(&self, k: usize) -> Vec<f64> {
-        self.model.cell_xa(k).to_vec()
+    fn xa(&self, k: usize) -> PyResult<Vec<f64>> {
+        if k >= self.model.nz {
+            return Err(PyValueError::new_err(format!(
+                "xa: cell {k} out of range (nz = {})",
+                self.model.nz
+            )));
+        }
+        Ok(self.model.cell_xa(k).to_vec())
     }
 
     /// `(s% atm_option, s% atm_T_tau_relation, s% atm_T_tau_opacity)`.
@@ -300,6 +306,12 @@ impl PyStarLibModel {
         log_rho_tol: f64,
         log_pgas_tol: f64,
     ) -> PyResult<f64> {
+        if k >= self.model.nz {
+            return Err(PyValueError::new_err(format!(
+                "solve_eos_given_pgas_t: cell {k} out of range (nz = {})",
+                self.model.nz
+            )));
+        }
         let xa = self.model.cell_xa(k).to_vec();
         star_lib::star_solve_eos_given_pgas_t(
             &self.model,
@@ -324,6 +336,12 @@ impl PyStarLibModel {
         log_rho_tol: f64,
         log_pgas_tol: f64,
     ) -> PyResult<f64> {
+        if k >= self.model.nz {
+            return Err(PyValueError::new_err(format!(
+                "solve_eos_given_pgas_t_auto: cell {k} out of range (nz = {})",
+                self.model.nz
+            )));
+        }
         let xa = self.model.cell_xa(k).to_vec();
         star_lib::star_solve_eos_given_pgas_t_auto(
             &self.model,

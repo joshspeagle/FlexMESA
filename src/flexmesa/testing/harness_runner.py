@@ -24,7 +24,7 @@ from typing import Any
 
 from flexmesa import _dispatch, _rust
 from flexmesa.data import fetch
-from flexmesa.testing import history_compare
+from flexmesa.testing import early_stop, history_compare
 from flexmesa.testing._case_verdict import (
     CaseHarnessRecord,
     TraceRunOutcome,
@@ -185,9 +185,38 @@ def proc_rss_gb(pid: int) -> float:
     return _proc_rss_kb(pid) / 1.0e6
 
 
+#: Seconds between polls of a running case by its monitor (``DECISIONS #69``).
+MONITOR_INTERVAL_SEC = 10.0
 #: File names of the per-track ``astero`` search histories (``#430``).
 RUN_TRACK_GLOB = "sample_[0-9][0-9][0-9][0-9]_history.data"
 RUN_TRACK_RE = re.compile(r"^sample_(\d{4})_history\.data$")
+
+
+def stage_model_numbers(rep: dict[str, Any]) -> tuple[int, ...]:
+    """Return the model number at the end of each stage of a trace report.
+
+    Args:
+        rep: Report of a ``star`` trace (``stages[*].model_number``).
+
+    Returns:
+        The per-stage model numbers; empty for reports without stages.
+    """
+    return tuple(
+        int(st["model_number"])
+        for st in rep.get("stages", ())
+        if "model_number" in st
+    )
+
+
+def _sole_history(out_target: pathlib.Path) -> bool:
+    """Return whether exactly one ``history.data`` exists under the output.
+
+    A partial history decides nothing when several stages wrote their own
+    file, because the final comparison reads the last one.
+    """
+    if not out_target.is_dir():
+        return False
+    return sum(1 for _ in out_target.rglob("history.data")) == 1
 
 
 def _clear_stale_history_outputs(
@@ -535,6 +564,11 @@ _RUST_WORKER_BOOTSTRAP = "\n".join(
         "payload = {",
         "    'termination_code': rep.get('termination_code', ''),",
         "    'total_steps': int(rep.get('total_steps', 0)),",
+        "    'stage_steps': [",
+        "        int(st['model_number'])",
+        "        for st in rep.get('stages', ())",
+        "        if 'model_number' in st",
+        "    ],",
         "    'total_retries': int(",
         "        rep.get('total_retries', rep.get('binary_retries', 0))",
         "    ),",
@@ -617,6 +651,8 @@ def _run_traced_worker(
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
+    monitor: early_stop.RunMonitor | None = None,
+    monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
 ) -> TraceRunOutcome:
     case_name = case_dir.name
     with tempfile.TemporaryDirectory(prefix="flexmesa_worker_") as meta_dir:
@@ -673,6 +709,8 @@ def _run_traced_worker(
         cap_kb = int(max_rss_gb * 1.0e6) if max_rss_gb is not None else None
         peak_kb = 0
         kill_status = ""
+        stop_message = ""
+        next_poll = t0 + monitor_interval_sec
         worker_env = _build_worker_env(
             worker_tmp, numerics_mode, rust_only=use_rust_only
         )
@@ -694,6 +732,21 @@ def _run_traced_worker(
                         kill_status = "timeout"
                     elif cap_kb is not None and peak_kb > cap_kb:
                         kill_status = "oom_killed"
+                    elif monitor is not None and (
+                        time.monotonic() >= next_poll
+                    ):
+                        next_poll = time.monotonic() + monitor_interval_sec
+                        live = locate_written_history(
+                            suite, out_target, is_logs_dir
+                        )
+                        request = (
+                            monitor(live)
+                            if live is not None and _sole_history(out_target)
+                            else None
+                        )
+                        if request is not None:
+                            kill_status = request.status
+                            stop_message = request.message
                     if kill_status:
                         _kill_worker_group(proc)
                         break
@@ -726,7 +779,10 @@ def _run_traced_worker(
                 wall_time_sec=wall,
                 peak_rss_gb=peak_kb / 1.0e6,
                 history_path=hist,
-                error_message=err_text[-400:] if err_text else kill_status,
+                error_message=(
+                    stop_message
+                    or (err_text[-400:] if err_text else kill_status)
+                ),
                 iters=hist_iters,
                 mean_iters=hist_mean_iters,
             )
@@ -746,6 +802,9 @@ def _run_traced_worker(
                 status="ok",
                 termination_code=str(payload.get("termination_code", "")),
                 steps=int(payload.get("total_steps", 0)),
+                stage_steps=tuple(
+                    int(n) for n in payload.get("stage_steps", ())
+                ),
                 retries=rep_retries,
                 wall_time_sec=wall,
                 peak_rss_gb=max(
@@ -796,6 +855,8 @@ def run_traced_case(
     extras_factory: str | None = None,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
+    monitor: early_stop.RunMonitor | None = None,
+    monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
 ) -> TraceRunOutcome:
     """Execute one upstream case with optional wall-time and RSS guards.
 
@@ -816,6 +877,13 @@ def run_traced_case(
             test-side extras handlers from ``(suite, case_dir)``.
         timeout_sec: Optional wall-clock timeout in seconds (``s``).
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
+        monitor: Optional polling hook (``early_stop.EarlyStopMonitor``)
+            called with the partial history every ``monitor_interval_sec``
+            while the case runs. A ``StopRequest`` stops the case with its
+            ``status`` (``"timeout"`` for a step bound, ``"diverged"`` for
+            an early divergence stop). Used only with a time or memory
+            guard.
+        monitor_interval_sec: Seconds between polls.
 
     Returns:
         ``TraceRunOutcome`` summarizing execution status, termination, resource
@@ -843,6 +911,8 @@ def run_traced_case(
         extras_factory=extras_factory,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
+        monitor=monitor,
+        monitor_interval_sec=monitor_interval_sec,
     )
     if suite != "astero":
         return outcome
@@ -869,6 +939,8 @@ def _run_traced_case_once(
     extras_factory: str | None,
     timeout_sec: float | None,
     max_rss_gb: float | None,
+    monitor: early_stop.RunMonitor | None = None,
+    monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
 ) -> TraceRunOutcome:
     """Run one case once, without the stale-output clearing of the caller."""
     eff_mode = resolve_effective_numerics_mode(numerics_mode)
@@ -891,6 +963,8 @@ def _run_traced_case_once(
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
+            monitor=monitor,
+            monitor_interval_sec=monitor_interval_sec,
         )
 
     try:
@@ -923,6 +997,7 @@ def _run_traced_case_once(
             status="ok",
             termination_code=str(rep.get("termination_code", "")),
             steps=int(rep.get("total_steps", 0)),
+            stage_steps=stage_model_numbers(rep),
             retries=rep_retries,
             wall_time_sec=wall,
             peak_rss_gb=proc_rss_gb(os.getpid()),
@@ -994,6 +1069,8 @@ def run_case_with_diagnostic(
     extras_factory: str | None = None,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
+    monitor: early_stop.RunMonitor | None = None,
+    monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
 ) -> TraceRunOutcome:
     """Run one case strictly, then diagnostically if strict rejects it.
 
@@ -1017,6 +1094,9 @@ def run_case_with_diagnostic(
         timeout_sec: Optional wall-clock timeout in seconds (``s``), applied
             to each of the two runs separately.
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
+        monitor: Optional polling hook applied to each of the two runs (see
+            ``run_traced_case``).
+        monitor_interval_sec: Seconds between polls.
 
     Returns:
         The strict ``TraceRunOutcome`` when strict validation accepted the
@@ -1036,6 +1116,8 @@ def run_case_with_diagnostic(
             extras_factory=extras_factory,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
+            monitor=monitor,
+            monitor_interval_sec=monitor_interval_sec,
         )
         rejected = strict.status == "error" and (
             strict.n_controls_ignored > 0
@@ -1057,6 +1139,8 @@ def run_case_with_diagnostic(
         extras_factory=extras_factory,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
+        monitor=monitor,
+        monitor_interval_sec=monitor_interval_sec,
     )
     return dataclasses.replace(
         diag,

@@ -8,7 +8,7 @@
 2. [`notes/SCOPE.md`](notes/SCOPE.md): written scope and the `v0.1.0` definition (`90 star`, `8 binary`, and `8 astero` cases in MESA `26.4.1` running unmodified inlists to upstream's termination and meeting strict-mode history-harness tolerances; exact module goldens; cross-machine bit-identical strict mode; zero undeclared gaps; zero departures from upstream).
 3. [`notes/audit/README.md`](notes/audit/README.md), [`notes/audit/TRACKER.md`](notes/audit/TRACKER.md), [`notes/audit/measurements.md`](notes/audit/measurements.md), and [`notes/audit/coverage-map.md`](notes/audit/coverage-map.md): whole-repository audit findings (`T1-*`, `T2-*`, `C1-*`, `F1-*` to `F4-*`, `N1-*`, `G1-*`) and baseline measurements against real Fortran MESA.
 4. [`notes/DECISIONS.md`](notes/DECISIONS.md): the decisions in force, with an index of every numbered decision; superseded entries are in `notes/archive/DECISIONS-archive.md`.
-5. Standing path-scoped rules in [`.claude/rules/verification-and-governance.md`](.claude/rules/verification-and-governance.md) and [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (mirrored byte-for-byte in `.agents/rules/`).
+5. Standing path-scoped rules in [`.claude/rules/verification-and-governance.md`](.claude/rules/verification-and-governance.md) and [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (the `.agents/rules/` entries are symlinks to these canonical files).
 6. **Local coordination (agents on the shared development machine)**: before claiming work, starting heavy compute, or running a harness campaign, read `.coordination/README.md` in the primary checkout. The directory is git-ignored and is not part of the public repository; it holds the agreed plan, lane ownership, compute slots that every heavy command goes through, and an append-only board for claims and requests between agents. GitHub issues and pull requests remain the durable public record.
 
 *(Note: The pre-audit roadmap, milestone log and question list are archived unmaintained in `notes/archive/` (`PLAN.md`, `LOG.md`, `QUESTIONS.md`), together with superseded decisions (`DECISIONS-archive.md`). They and `docs/benchmarks/` contain unsupported completion and parity claims (`#142`, `#146`). Do not edit archived files and do not create new hand-written status files; progress is reported only by the generated case table (`notes/audit/case_table.md`) and dashboard (`#174`).)*
@@ -19,10 +19,10 @@
 | :--- | :--- |
 | `crates/` | Canonical Safe Rust Cargo workspace crates (`#![forbid(unsafe_code)]` across all crates except `flexmesa-crlibm-sys`, the sole `crlibm` FFI wrapper crate; `#165`) and `flexmesa-py` (`PyO3` extension bridge) |
 | `src/flexmesa/` | Python front end and derived `float64` JAX layer (`star`, `binary`, and `astero` JAX engine twins are frozen under `#166`) |
-| `tests/` | Python `pytest` and `hypothesis` suite (`test_docs_snippets.py` checks documentation links, API directives, snippets, and rule mirrors) |
+| `tests/` | Python `pytest` and `hypothesis` suite (`test_docs_snippets.py` checks documentation links, API directives, snippets, and that the `.agents/rules/` entries are symlinks to the canonical rule files) |
 | `benchmarks/` | Benchmark harnesses, including Fortran MESA comparators in `benchmarks/fortran_mesa/` (`#146`) |
 | `docs/` | MkDocs Material documentation website (`mkdocs.yml`) |
-| `.claude/rules/` | Standing repository rules (`verification-and-governance.md`, `docs-upkeep.md`), mirrored in `.agents/rules/` |
+| `.claude/rules/` | Standing repository rules (`verification-and-governance.md`, `docs-upkeep.md`), linked from `.agents/rules/` by symlinks |
 | `notes/` | Written scope (`SCOPE.md`), decisions in force (`DECISIONS.md`), audit registers and generated case table (`audit/`), and unmaintained pre-audit documents (`archive/`); see `notes/README.md` |
 
 ## Architecture, Reference & Numerics Contract (`notes/SCOPE.md`, `#141`, `#165`, `#166`)
@@ -91,13 +91,13 @@
   flexmesa trace binary <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa trace astero <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa harness table --check
-  flexmesa harness run --preset pr-ci --timeout-sec 480 --max-rss-gb 6.0 --markdown-out case_table.md --json-out case_table.json --gate [--numerics-mode strict]
-  flexmesa harness run --preset all --numerics-mode strict --jobs 2 --timeout-sec 600 --max-rss-gb 5.5 --markdown-out case_table.md --json-out case_table.json --gate
+  flexmesa harness run --preset pr-ci --timeout-sec 480 --max-rss-gb 6.0 --markdown-out case_table.md --json-out case_table.json --enforce-step-counts --gate [--numerics-mode strict]
+  flexmesa harness run --preset all --numerics-mode strict --jobs 2 --timeout-sec 600 --max-rss-gb 5.5 --markdown-out case_table.md --json-out case_table.json --enforce-step-counts --gate
   flexmesa dashboard verify-manifest
   flexmesa dashboard render
   flexmesa dashboard check
   ```
-  Run at most one full FlexMESA or MESA campaign at a time with `--jobs 2 --max-rss-gb 5.5 --timeout-sec 600` (scheduled campaign budget, `DECISIONS #57`); running FlexMESA and MESA campaigns concurrently exhausts 15 GiB hosts. Reuse the committed `benchmarks/history_harness/baseline_run_26_4_1.json` as the `before` snapshot whenever `main` has zero un-baselined engine commits since the last recorded baseline; when a fresh `before` run is required, build a non-editable wheel from a detached `main` worktree so active development environments are not modified while heavy campaigns stay serialized. Keep CI `timeout-minutes` headroom at `>= 45` minutes for Rust workspace and E2E jobs and `>= 75` minutes for `cargo llvm-cov` so post-step `Swatinem/rust-cache` uploads complete on cold runners.
+  The strict campaign that gates a train runs on GitHub Actions (`campaign.yml` dispatched on the train branch with `harness_only`, 16 shards, 1,500 s per case; `DECISIONS #73`), and the baseline is regenerated from that run. Locally, run at most one full FlexMESA or MESA campaign at a time with `--jobs 2 --max-rss-gb 5.5 --timeout-sec 600` (scheduled campaign budget, `DECISIONS #57`); running FlexMESA and MESA campaigns concurrently exhausts 15 GiB hosts. Reuse the committed `benchmarks/history_harness/baseline_run_26_4_1.json` as the `before` snapshot whenever `main` has zero un-baselined engine commits since the last recorded baseline; when a fresh `before` run is required, build a non-editable wheel from a detached `main` worktree so active development environments are not modified while heavy campaigns stay serialized. Keep CI `timeout-minutes` headroom at `>= 45` minutes for Rust workspace and E2E jobs and `>= 75` minutes for `cargo llvm-cov` so post-step `Swatinem/rust-cache` uploads complete on cold runners.
 
 ## How to Pick Up an Audit Package (`#140`)
 
@@ -122,6 +122,7 @@
     1. Upstream's inlists run unmodified, with only the logic present in upstream's own `run_star_extras.f90` or `run_binary_extras.f90`.
     2. Evolution reaches upstream's own physical or extras termination condition uncapped.
     3. Named history quantities match a stored real-MESA `26.4.1` history within the tolerances declared in the case manifest.
+    4. Every stage takes exactly as many steps as MESA `26.4.1`'s own run of that stage (`DECISIONS #70`; `--enforce-step-counts`).
     4. Every stage takes exactly as many steps as MESA `26.4.1`'s own run of that stage (`DECISIONS #70`); a different step count means something departs from upstream. The harness enforces this once per-stage MESA step counts are recorded (`#554`).
   - Any run with a step cap or without a real-MESA `26.4.1` history comparison must be reported strictly as `"smoke: N steps"`. A case whose `26.4.1` reference history is not yet available is reported as `"no reference yet"`, never as passing or failing.
   - A run that continued past unsupported controls (`--allow-unsupported-controls`, `#147`) did not do what the inlist asks. The harness reports it as `"diagnostic (N controls ignored)"` and it never counts as passing (`DECISIONS #26`).

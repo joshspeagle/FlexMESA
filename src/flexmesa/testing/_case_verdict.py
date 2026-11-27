@@ -9,6 +9,7 @@ scaffolding tags (``#170``, ``#171``), and library-extras tracking (``#148``).
 from __future__ import annotations
 
 import dataclasses
+import functools
 import json
 import pathlib
 import re
@@ -17,6 +18,7 @@ import numpy as np
 
 from flexmesa.data import fetch
 from flexmesa.testing import case_manifest, history_compare
+from flexmesa.testing import stage_steps as stage_steps_mod
 
 MASS_LOSS_AUGMENT_COLUMNS: tuple[str, ...] = (
     "log_abs_mdot",
@@ -36,8 +38,9 @@ class TraceRunOutcome:
     Attributes:
         suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
         case: Case directory name.
-        status: Execution status (``"ok"``, ``"error"``, ``"timeout"``, or
-            ``"oom_killed"``).
+        status: Execution status (``"ok"``, ``"error"``, ``"timeout"``,
+            ``"oom_killed"``, or ``"diverged"`` for a case stopped by
+            ``--early-stop-on-divergence``, ``DECISIONS #69``).
         termination_code: Observed termination code (or empty string on crash).
         steps: Total evolutionary steps completed before exit.
         retries: Total step retries recorded.
@@ -60,6 +63,9 @@ class TraceRunOutcome:
         track_history_paths: Per-track ``astero`` search histories
             (``sample_NNNN_history.data``) ordered by track number, the last
             one possibly cut short when the run did not finish (``#430``).
+        stage_steps: Model number at the end of each ``star`` stage the run
+            completed (empty when not reported), compared with MESA's stage
+            by stage (``DECISIONS #69``).
     """
 
     suite: str
@@ -78,6 +84,7 @@ class TraceRunOutcome:
     iters: int | None = None
     mean_iters: float | None = None
     track_history_paths: tuple[pathlib.Path, ...] = ()
+    stage_steps: tuple[int, ...] = ()
 
 
 _UNSUPPORTED_COUNT_RE = re.compile(
@@ -167,6 +174,26 @@ class CaseHarnessRecord:
     mesa_iters: int | None = None
     mesa_mean_iters: float | None = None
     mesa_iters_rows: int = 0
+    stage_steps: tuple[int, ...] = ()
+    mesa_stage_steps: tuple[int, ...] = ()
+
+    @property
+    def stage_step_deltas(self) -> tuple[stage_steps_mod.StageDelta, ...]:
+        """Return the aligned per-stage step counts of the run and MESA."""
+        return stage_steps_mod.stage_deltas(
+            self.stage_steps, self.mesa_stage_steps
+        )
+
+    @property
+    def step_count_differs(self) -> bool:
+        """Return whether any aligned stage ends at another model than MESA.
+
+        A run that reports fewer stages than MESA, or that was cut short
+        (status other than ``ok``), is not compared.
+        """
+        return self.run_status == "ok" and bool(
+            first_step_difference(self.stage_steps, self.mesa_stage_steps)
+        )
 
     @property
     def is_within_tolerances(self) -> bool:
@@ -625,6 +652,38 @@ def _sanitize_error_message(msg: str) -> str:
     return cleaned
 
 
+def first_step_difference(run: tuple[int, ...], mesa: tuple[int, ...]) -> str:
+    """Describe the first stage that ends at another model than MESA's.
+
+    Args:
+        run: FlexMESA's model number at the end of each stage.
+        mesa: MESA's model number at the end of each stage.
+
+    Returns:
+        ``"step count differs from MESA at stage S (N vs M)"``, or ``""``
+        when nothing was reported or every aligned stage agrees. A stage
+        MESA does not have counts as a difference.
+    """
+    if not run or not mesa:
+        return ""
+    for d in stage_steps_mod.stage_deltas(run, mesa):
+        if d.delta != 0:
+            return (
+                f"step count differs from MESA at stage {d.stage} "
+                f"({d.run} vs {d.mesa if d.mesa is not None else 'none'})"
+            )
+    return ""
+
+
+@functools.cache
+def _mesa_stage_table() -> dict[tuple[str, str], tuple[int, ...]]:
+    return stage_steps_mod.load_mesa_stage_steps()
+
+
+def _mesa_stage_steps(key: tuple[str, str]) -> tuple[int, ...]:
+    return _mesa_stage_table().get(key, ())
+
+
 def evaluate_case_record(
     spec: case_manifest.CaseManifestEntry,
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
@@ -638,8 +697,13 @@ def evaluate_case_record(
     ) = None,
     precomputed_has_component_error: bool = False,
     precomputed_mesa_stats: history_compare.HistoryRunStats | None = None,
+    enforce_step_counts: bool = False,
 ) -> CaseHarnessRecord:
     """Combine manifest metadata, run outcome, and comparison into a verdict.
+
+    With ``enforce_step_counts`` a run that would pass but ends a stage at
+    another model number than MESA is ``fail (step count)`` (``DECISIONS
+    #70``). Without it the difference is only reported (``DECISIONS #69``).
 
     An ``astero`` search case with a manifest ``track_reference_dir`` is
     compared track by track (:func:`compare_search_tracks`, ``#430``): the
@@ -856,6 +920,25 @@ def evaluate_case_record(
         and not outcome.controls_ignored
     )
     smoke_note = " (controls ignored)" if outcome.controls_ignored else ""
+    run_stages = outcome.stage_steps
+    mesa_stages = _mesa_stage_steps(spec.key)
+    if (
+        not run_stages
+        and spec.suite != "star"
+        and len(mesa_stages) == 1
+        and outcome.history_path is not None
+    ):
+        # Binary and astero reports carry no per-stage model numbers; a
+        # single-stage MESA run is compared by total steps.
+        run_stages = (outcome.steps,)
+    step_diff = (
+        first_step_difference(run_stages, mesa_stages)
+        if outcome.status == "ok" and max_steps is None
+        else ""
+    )
+    if enforce_step_counts and step_diff and step_diff not in comp_err:
+        # Idempotent: a stored row already carries the note from its run.
+        comp_err = "; ".join(filter(None, [comp_err, step_diff]))
     is_undeclared = False
     is_stale_gap = False
 
@@ -895,6 +978,14 @@ def evaluate_case_record(
                 else:
                     verdict = "fail (undeclared)"
                     is_undeclared = True
+            elif enforce_step_counts and step_diff:
+                # Within every tolerance but another step count than MESA
+                # (DECISIONS #70): not a pass.
+                if gap is not None:
+                    verdict = f"declared gap ({gap.issue})"
+                else:
+                    verdict = "fail (step count)"
+                    is_undeclared = True
             else:
                 verdict = "pass"
                 is_stale_gap = gap is not None
@@ -905,6 +996,12 @@ def evaluate_case_record(
             # never counts as passing, and the baseline gate checks it as a
             # prefix of the committed row (DECISIONS #59).
             verdict = f"inconclusive ({outcome.status})"
+        elif outcome.status == "diverged":
+            # Stopped by --early-stop-on-divergence: a tracked column was
+            # already out of its along-track tolerance, so the case cannot
+            # pass (DECISIONS #69). The column and age are in the message.
+            verdict = "fail (early stop)"
+            is_undeclared = True
         else:
             verdict = "fail (undeclared)"
             is_undeclared = True
@@ -937,6 +1034,8 @@ def evaluate_case_record(
         has_component_error=has_comp_err,
         iters=run_iters,
         mean_iters=run_mean_iters,
+        stage_steps=run_stages,
+        mesa_stage_steps=mesa_stages,
         mesa_steps=mesa_stats.steps if mesa_stats is not None else None,
         mesa_retries=mesa_stats.retries if mesa_stats is not None else None,
         mesa_iters=mesa_stats.iters_sum if mesa_stats is not None else None,

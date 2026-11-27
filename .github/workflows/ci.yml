@@ -313,6 +313,7 @@ jobs:
           mkdir -p "$OUT_DIR"
           flexmesa harness run \
             --preset pr-ci \
+            --enforce-step-counts \
             --jobs 2 \
             --timeout-sec 480 \
             --max-rss-gb 6.0 \

@@ -21,7 +21,8 @@ use flexmesa_eos::{
 };
 use flexmesa_star::hydro_state::{
     OtherAdjustMltGradtFractionHandle, OtherAdjustMltGradtFractionHook,
-    OtherOvershootingSchemeHandle, OtherOvershootingSchemeHook,
+    OtherOvershootingSchemeHandle, OtherOvershootingSchemeHook, StarModelHook,
+    StarModelHookHandle,
 };
 use flexmesa_star::inlist_runner::{
     DefaultStarExtras, ExtrasDirective, RspBuildOutcome, StarExtras,
@@ -1807,6 +1808,95 @@ impl OtherOvershootingSchemeHook for PyOtherOvershootingSchemeHook {
     }
 }
 
+struct PyOtherCgravHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl StarModelHook for PyOtherCgravHook {
+    fn apply(&self, model: &mut StarModel) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("other_cgrav", (snap,))
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_cgrav: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            if res.is_none() {
+                return Ok(());
+            }
+            if let Ok(vals) = res.extract::<Vec<f64>>() {
+                if vals.len() != model.nz {
+                    return Err(StarError::InvalidInput(format!(
+                        "other_cgrav returned {} values for nz = {}",
+                        vals.len(),
+                        model.nz
+                    )));
+                }
+                model.cgrav = vals;
+            } else {
+                let scalar = res.extract::<f64>().map_err(|e| {
+                    StarError::InvalidInput(format_py_err(py, &e))
+                })?;
+                model.cgrav.fill(scalar);
+            }
+            Ok(())
+        })
+    }
+}
+
+/// `other_alpha_mlt` returns `ierr` to `set_hydro_vars`
+/// (`star/private/hydro_vars.f90:572-579`), so Python errors fail the
+/// evaluation here.
+struct PyOtherAlphaMltHook {
+    py_obj: Arc<Py<PyAny>>,
+    state: Arc<PyAdapterState>,
+}
+
+impl StarModelHook for PyOtherAlphaMltHook {
+    fn apply(&self, model: &mut StarModel) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_star_snapshot(py, model, &case_dir, false)
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_alpha_mlt: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("other_alpha_mlt", (snap,))
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_alpha_mlt: {}",
+                        format_py_err(py, &e)
+                    ))
+                })?;
+            if res.is_none() {
+                return Ok(());
+            }
+            apply_alpha_mlt_py_value(model, &res, "other_alpha_mlt", true)
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "other_alpha_mlt: {}",
+                        format_py_err(py, &e)
+                    ))
+                })
+        })
+    }
+}
+
 struct PyOtherAdjustMltGradtFractionHook {
     py_obj: Arc<Py<PyAny>>,
     state: Arc<PyAdapterState>,
@@ -2445,89 +2535,6 @@ impl StarExtras for PyStarExtrasAdapter {
         })
     }
 
-    fn other_cgrav(&self, model: &mut StarModel) -> Result<(), StarError> {
-        self.state.take_pending_star_err()?;
-        if !self.has_other_cgrav {
-            return Ok(());
-        }
-        let case_dir = self.state.staged_dir_string();
-        Python::attach(|py| {
-            let snap = build_star_snapshot(py, model, &case_dir, false)
-                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
-            let res = self
-                .py_obj
-                .bind(py)
-                .call_method1("other_cgrav", (snap,))
-                .map_err(|e| {
-                    StarError::InvalidInput(format!(
-                        "other_cgrav: {}",
-                        format_py_err(py, &e)
-                    ))
-                })?;
-            if res.is_none() {
-                return Ok(());
-            }
-            if let Ok(vals) = res.extract::<Vec<f64>>() {
-                if vals.len() != model.nz {
-                    return Err(StarError::InvalidInput(format!(
-                        "other_cgrav returned {} values for nz = {}",
-                        vals.len(),
-                        model.nz
-                    )));
-                }
-                model.cgrav = vals;
-            } else {
-                let scalar = res.extract::<f64>().map_err(|e| {
-                    StarError::InvalidInput(format_py_err(py, &e))
-                })?;
-                model.cgrav.fill(scalar);
-            }
-            Ok(())
-        })
-    }
-
-    fn other_alpha_mlt(&self, model: &mut StarModel) {
-        if !self.has_other_alpha_mlt {
-            return;
-        }
-        let case_dir = self.state.staged_dir_string();
-        Python::attach(|py| {
-            let snap = match build_star_snapshot(py, model, &case_dir, false) {
-                Ok(s) => s,
-                Err(e) => {
-                    self.state.record_py_err(
-                        "other_alpha_mlt",
-                        format_py_err(py, &e),
-                    );
-                    return;
-                }
-            };
-            match self
-                .py_obj
-                .bind(py)
-                .call_method1("other_alpha_mlt", (snap,))
-            {
-                Ok(res) if !res.is_none() => {
-                    if let Err(e) = apply_alpha_mlt_py_value(
-                        model,
-                        &res,
-                        "other_alpha_mlt",
-                        true,
-                    ) {
-                        self.state.record_py_err(
-                            "other_alpha_mlt",
-                            format_py_err(py, &e),
-                        );
-                    }
-                }
-                Ok(_) => {}
-                Err(e) => self
-                    .state
-                    .record_py_err("other_alpha_mlt", format_py_err(py, &e)),
-            }
-        });
-    }
-
     fn other_wind(
         &self,
         model: &StarModel,
@@ -2871,6 +2878,24 @@ impl StarExtras for PyStarExtrasAdapter {
                     state: Arc::clone(&self.state),
                 },
             )
+        })
+    }
+
+    fn other_cgrav_handle(&self) -> Option<StarModelHookHandle> {
+        self.has_other_cgrav.then(|| {
+            StarModelHookHandle::new(PyOtherCgravHook {
+                py_obj: Arc::clone(&self.py_obj),
+                state: Arc::clone(&self.state),
+            })
+        })
+    }
+
+    fn other_alpha_mlt_handle(&self) -> Option<StarModelHookHandle> {
+        self.has_other_alpha_mlt.then(|| {
+            StarModelHookHandle::new(PyOtherAlphaMltHook {
+                py_obj: Arc::clone(&self.py_obj),
+                state: Arc::clone(&self.state),
+            })
         })
     }
 }

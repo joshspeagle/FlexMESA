@@ -446,6 +446,50 @@ impl std::fmt::Debug for OtherAdjustMltGradtFractionHandle {
     }
 }
 
+/// Callback trait for the `other_*` hooks that `set_hydro_vars` calls with
+/// only the star as argument: `other_cgrav` (`set_cgrav`,
+/// `star/private/hydro_vars.f90:763-776`) and `other_alpha_mlt`
+/// (`star/private/hydro_vars.f90:572-579`).
+pub trait StarModelHook: Send + Sync {
+    /// Updates the model in place (`call s% other_<name>(s% id, ierr)`).
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if the hook fails (`ierr /= 0`).
+    fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError>;
+}
+
+/// Cloneable reference-counted handle wrapping a [`StarModelHook`].
+#[derive(Clone)]
+pub struct StarModelHookHandle(pub std::sync::Arc<dyn StarModelHook>);
+
+impl StarModelHookHandle {
+    /// Wraps a [`StarModelHook`] implementation in a handle.
+    #[must_use]
+    pub fn new(hook: impl StarModelHook + 'static) -> Self {
+        Self(std::sync::Arc::new(hook))
+    }
+
+    /// Invokes the underlying hook.
+    ///
+    /// # Errors
+    /// Propagates any [`crate::controls::StarError`] returned by the hook.
+    pub fn apply(
+        &self,
+        model: &mut crate::model::StarModel,
+    ) -> Result<(), crate::controls::StarError> {
+        self.0.apply(model)
+    }
+}
+
+impl std::fmt::Debug for StarModelHookHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StarModelHookHandle(..)")
+    }
+}
+
 const fn default_k_below_const_q() -> usize {
     1
 }
@@ -493,6 +537,12 @@ pub struct HydroAuxState {
     /// Whether the model is currently inside `do_struct_burn_mix`
     /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
     pub doing_struct_burn_mix: bool,
+    /// Current Newton iteration of the hydro solve (`solver_iter` in
+    /// `star_data_step_work.inc`): `0` before the first iteration and outside
+    /// the solver, set by `star_solver.f90:191,284,610` and reset to `0` by
+    /// `struct_burn_mix.f90:207` and `evolve.f90:2009,2019`.
+    #[serde(default)]
+    pub solver_iter: usize,
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
@@ -696,6 +746,14 @@ pub struct HydroAuxState {
     #[serde(skip)]
     pub other_adjust_mlt_gradt_fraction:
         Option<OtherAdjustMltGradtFractionHandle>,
+    /// Optional custom effective gravitational constant hook (`other_cgrav`),
+    /// called from `set_cgrav` (`star/private/hydro_vars.f90:763-776`).
+    #[serde(skip)]
+    pub other_cgrav: Option<StarModelHookHandle>,
+    /// Optional custom mixing-length `alpha_mlt` hook (`other_alpha_mlt`,
+    /// `star/private/hydro_vars.f90:572-579`).
+    #[serde(skip)]
+    pub other_alpha_mlt: Option<StarModelHookHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
     /// Binomial-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
@@ -720,11 +778,6 @@ pub struct HydroAuxState {
     pub j_rot_old: Vec<f64>,
     /// Previous-step mass-change heating rate $\epsilon_{\dot{M},\mathrm{old},k}$ for step retry.
     pub eps_mdot_old: Vec<f64>,
-    /// Active Newton iteration index (`s% solver_iter` in `star_solver.f90:191,
-    /// 284, 610` and `turb_info.f90:56`) during `do_struct_burn_mix`, preserved
-    /// at solve exit for post-solve rotation conservation and reset by the
-    /// post-solve `set_mlt_vars` pass.
-    pub solver_mlt_eval_count: usize,
     /// Start-of-step outermost-zone Rosseland opacity $\kappa_{\mathrm{start},1}$
     /// (`s% opacity_start(1)` in `star/private/atm_support.f90:303`) used as the
     /// initial guess for `'iterated'` $T(\tau)$ atmospheres during solver iterations.
@@ -810,6 +863,7 @@ impl HydroAuxState {
             rotmix: crate::rotation_mix_info::RotMixArrays::default(),
             st_start: crate::rotation_mix_info::StStartInfo::default(),
             doing_struct_burn_mix: false,
+            solver_iter: 0,
             total_energy: 0.0,
             total_internal_energy_start: None,
             cumulative_energy_error: 0.0,
@@ -892,6 +946,8 @@ impl HydroAuxState {
             binary_other_torque_implicit: None,
             other_overshooting_scheme: None,
             other_adjust_mlt_gradt_fraction: None,
+            other_cgrav: None,
+            other_alpha_mlt: None,
             brunt_n2_composition_term: vec![0.0; nz],
             smoothed_brunt_b: vec![0.0; nz],
             mass_correction: vec![1.0; nz],
@@ -903,7 +959,6 @@ impl HydroAuxState {
             omega_old: vec![0.0; nz],
             j_rot_old: vec![0.0; nz],
             eps_mdot_old: vec![0.0; nz],
-            solver_mlt_eval_count: 0,
             opacity_start_surf: 0.0,
             fixed_gradr_sticky: vec![false; nz],
             mixing: crate::mixing_state::MixingAuxState::new(nz),

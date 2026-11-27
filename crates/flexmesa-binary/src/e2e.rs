@@ -10,7 +10,7 @@ use std::time::Instant;
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
     DefaultStarExtras, InlistBundle, InlistLoadOptions, StarError, StarModel,
-    ZamsCatalog, init_or_update_model_from_bundle,
+    ZamsCatalog, init_model_from_zams_seed, init_or_update_model_from_bundle,
     load_zams_model_from_catalog,
 };
 
@@ -129,11 +129,16 @@ fn init_binary_star_component(
         None
     };
     let mut star_extras = DefaultStarExtras;
-    let mut model = init_or_update_model_from_bundle(
-        &init_bundle,
-        seed_zams,
-        &mut star_extras,
-    )?;
+    let mut model = match seed_zams {
+        Some(seed) => {
+            init_model_from_zams_seed(&init_bundle, seed, &mut star_extras)?
+        }
+        None => init_or_update_model_from_bundle(
+            &init_bundle,
+            None,
+            &mut star_extras,
+        )?,
+    };
     model.job = bundle.job.clone();
     Ok(model)
 }

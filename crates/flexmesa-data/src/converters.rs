@@ -339,7 +339,13 @@ pub fn parse_helm_table_text(
             "imax and jmax must be >= 2, got ({imax}, {jmax})"
         )));
     }
-    if !(log_rho_min < log_rho_max && log_temp_min < log_temp_max) {
+    if !(log_rho_min.is_finite()
+        && log_rho_max.is_finite()
+        && log_temp_min.is_finite()
+        && log_temp_max.is_finite()
+        && log_rho_min < log_rho_max
+        && log_temp_min < log_temp_max)
+    {
         return Err(DataError::ParseError(format!(
             "invalid helm_table bounds [{log_rho_min}, {log_rho_max}], \
              [{log_temp_min}, {log_temp_max}]"

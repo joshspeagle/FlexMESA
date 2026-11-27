@@ -15,7 +15,8 @@ use flexmesa_eos::{
 use flexmesa_turb::{
     set_mlt, set_semiconvection, set_tdc, set_thermohaline, MltInputs,
     MltOption, MltParams, SemiconvectionInputs, SemiconvectionParams,
-    TdcInputs, TdcParams, ThermohalineInputs, ThermohalineParams,
+    TdcInputs, TdcParams, ThermohalineInputs, ThermohalineOption,
+    ThermohalineParams,
 };
 
 use crate::controls::StarError;
@@ -44,7 +45,6 @@ use crate::star_ad::{
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` / `set_tdc` fails at
 /// any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    refresh_rotation_info_outside_solver(model);
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
@@ -55,18 +55,17 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    if !model.aux.doing_struct_burn_mix {
-        model.aux.solver_mlt_eval_count = 0;
-        model.aux.fixed_gradr_sticky.fill(false);
-    }
+    // Upstream `set_mlt_vars` (`star/private/turb_info.f90:40-67`) does not
+    // clear `fixed_gradr_for_rest_of_solver_iters`; `set_hydro_vars` does,
+    // under `.not. skip_mixing_info` (`star/private/hydro_vars.f90:567-570`).
     set_mlt_vars_range(model, 0, nz - 1)
 }
 
-/// Refreshes the rotation information that `set_hydro_vars` sets outside the
-/// solver iterations (`star/private/hydro_vars.f90:540-543`, `skip_rotation`
-/// is false there), whether or not MLT is evaluated.
+/// Refreshes the rotation information that `set_hydro_vars` sets before the
+/// gradients (`star/private/hydro_vars.f90:539-543`; `skip_rotation` is false
+/// for every caller of `set_hydro_vars`), whether or not MLT is evaluated.
 fn refresh_rotation_info_outside_solver(model: &mut StarModel) {
-    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
+    if model.controls.rotation_flag {
         if model.j_rot.iter().any(|&j| j != 0.0)
             || model.omega.iter().all(|&w| w == 0.0)
         {
@@ -98,11 +97,8 @@ pub(crate) fn set_mlt_vars_range(
     if model.aux.mixing.mlt_mixing_type.len() != nz {
         model.aux.mixing.resize(nz);
     }
-    let solver_iter = if model.aux.doing_struct_burn_mix {
-        model.aux.solver_mlt_eval_count
-    } else {
-        0
-    };
+    // `s% solver_iter > 3` (`star/private/turb_info.f90:56`).
+    let solver_iter = model.aux.solver_iter;
     for k in k_lo..=k_hi {
         let make_sticky = do1_mlt_2(model, k, None, None)?;
         if make_sticky
@@ -487,8 +483,8 @@ pub(crate) fn do1_mlt_2(
         make_gradr_sticky = max_lnt_start / LN10
             >= mw.min_logt_for_make_gradr_sticky_in_solver_iters;
     }
+    // `star/private/turb_info.f90:220`: no solver-iteration test here.
     if make_gradr_sticky
-        && model.aux.doing_struct_burn_mix
         && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false)
     {
         set_no_mixing_face(
@@ -613,16 +609,21 @@ pub(crate) fn do1_mlt_2(
             };
             let dv_f = (StarAdOrder1::constant(1.0) / rho_f)
                 - (StarAdOrder1::constant(1.0) / rho_start_f);
-            let l_ref = if model.aux.doing_struct_burn_mix
-                && model.lum_start.len() == nz
-            {
+            // Scale for the TDC luminosity equation
+            // (`star/private/turb_support.f90:319-325`): `L` when
+            // `s% solver_iter == 0`, otherwise `L_start`.
+            let l_ref = if model.aux.solver_iter == 0 {
+                &model.lum
+            } else if model.lum_start.len() == nz {
                 &model.lum_start
             } else {
-                &model.lum
+                return Err(StarError::MicrophysicsError(String::from(
+                    "TDC scale needs L_start inside the solver \
+                     (`star/private/turb_support.f90:324`), but it is unset",
+                )));
             };
-            let l_max =
-                l_ref.iter().copied().fold(f64::NEG_INFINITY, f64::max).max(0.0);
-            let scale = l_ref[k].abs().max(1.0e-3 * l_max).max(1.0e-30);
+            let l_max = l_ref.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let scale = l_ref[k].abs().max(1.0e-3 * l_max);
             let tdc_params = TdcParams {
                 conv_vel_start: vc_old,
                 mixing_length_alpha,
@@ -633,7 +634,7 @@ pub(crate) fn do1_mlt_2(
                 tdc_alpha_s: model.controls.tdc_alpha_s,
                 dt: model.dt,
                 cgrav: cgrav_k,
-                m: m_grav_k.max(1.0),
+                m: m_grav_k,
                 scale,
                 max_conv_vel,
                 include_mlt_corr_to_tdc: model.controls.include_mlt_corr_to_tdc,
@@ -779,10 +780,12 @@ pub(crate) fn do1_mlt_2(
                     .get(k)
                     .copied()
                     .unwrap_or(0);
+                let th_option = model.controls.thermohaline_option;
+                let xh1 = thermohaline_xh1(model, k, th_option)?;
                 let th_params = ThermohalineParams {
-                    option: model.controls.thermohaline_option,
+                    option: th_option,
                     gradl_composition_term,
-                    xh1: model.xh_mass[k],
+                    xh1,
                     thermohaline_coeff: model.controls.thermohaline_coeff,
                     species: driving_species_for_cid(iso_cid),
                 };
@@ -812,7 +815,7 @@ pub(crate) fn do1_mlt_2(
                     alpha_semiconvection: model.controls.alpha_semiconvection,
                     cgrav: cgrav_k,
                     gradl_composition_term,
-                    m: m_grav_k.max(1.0),
+                    m: m_grav_k,
                 };
                 let sc_in = SemiconvectionInputs {
                     l: lum_k,
@@ -924,6 +927,39 @@ pub(crate) fn do1_mlt_2(
     }
 
     Ok(make_gradr_sticky)
+}
+
+/// `XH1` for `set_thermohaline` at face `k` (0-based): the `h1` mass
+/// fraction `XH1 = s% xa(s% net_iso(ih1),k)`
+/// (`star/private/turb_support.f90:174`), not `X`, the summed hydrogen
+/// isotopes (#556).
+///
+/// Upstream reads `xa(0,k)`, outside the array, when the network has no
+/// `h1` (#557). Only the `Traxler_Garaud_Stellmach_11` and
+/// `Brown_Garaud_Stellmach_13` options read `XH1`
+/// (`turb/private/thermohaline.f90:69`); for them that path is an explicit
+/// error (DECISIONS #43). `Kippenhahn` does not read it, and gets `NaN`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when the network has no `h1` and
+/// `option` reads `XH1`.
+pub(crate) fn thermohaline_xh1(
+    model: &StarModel,
+    k: usize,
+    option: ThermohalineOption,
+) -> Result<f64, StarError> {
+    let h1 = flexmesa_chem::NuclideCatalog::builtin_ref()
+        .get_by_name("h1")
+        .and_then(|e| model.net_iso.get(e.chem_id).copied().flatten());
+    match (h1, option) {
+        (Some(j), _) => Ok(model.xa[k * model.species + j]),
+        (None, ThermohalineOption::Kippenhahn) => Ok(f64::NAN),
+        (None, _) => Err(StarError::InvalidInput(String::from(
+            "thermohaline XH1: the network has no h1, where upstream reads \
+             xa(0,k) outside the array (star/private/turb_support.f90:174; \
+             #557, DECISIONS #43)",
+        ))),
+    }
 }
 
 fn set_no_mixing_face(
@@ -1341,11 +1377,16 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
+    // The Newton solver evaluates its variables through this function
+    // (`eval_henyey_equations_into`) while `doing_struct_burn_mix`; that is
+    // upstream's `set_vars_for_solver` skip set
+    // (`star/private/solver_support.f90:825-837`).
+    let solver = model.aux.doing_struct_burn_mix;
     set_hydro_vars_with_skips(
         model,
         skip_net,
         skip_net_jacobian,
-        SetHydroVarsSkips::default(),
+        SetHydroVarsSkips { solver, ..SetHydroVarsSkips::default() },
     )
 }
 
@@ -1364,6 +1405,14 @@ pub(crate) struct SetHydroVarsSkips {
     /// (`star/private/hydro_vars.f90:80`), so the start values are refilled
     /// from the current state (`hydro_vars.f90:719-741`).
     pub(crate) reset_starting_vectors: bool,
+    /// The skip set of the solver's `set_vars_for_solver`
+    /// (`star/private/solver_support.f90:825-837`): `skip_other_cgrav`,
+    /// `skip_m_grav_and_grav`, `skip_grads`, `skip_rotation`, `skip_brunt`,
+    /// `skip_mixing_info` and `skip_set_cz_bdy_mass`, and no irradiation
+    /// update. `set_vars` and `set_final_vars` pass all of these as false
+    /// (`star/private/hydro_vars.f90:62-85,91-164`), including the post-burn
+    /// `set_vars` inside `do_struct_burn_mix` (`struct_burn_mix.f90:112`).
+    pub(crate) solver: bool,
 }
 
 /// Refills the start values that `set_basic_vars` sets after
@@ -1383,6 +1432,28 @@ fn fill_reset_starting_vectors(model: &mut StarModel) {
     }
     if model.controls.rti_flag {
         model.aux.alpha_rti_start.clone_from(&model.aux.alpha_rti);
+    }
+}
+
+/// `set_cgrav` (`star/private/hydro_vars.f90:763-776`): the installed
+/// `other_cgrav` hook when `use_other_cgrav`, else `cgrav(1:nz) =
+/// standard_cgrav`.
+///
+/// # Errors
+/// Returns [`StarError`] if `use_other_cgrav` is set without an installed
+/// hook, or if the hook fails.
+fn set_cgrav(model: &mut StarModel) -> Result<(), StarError> {
+    if model.controls.use_other_cgrav {
+        let hook = model.aux.other_cgrav.clone().ok_or_else(|| {
+            StarError::InvalidInput(String::from(
+                "use_other_cgrav is set but no other_cgrav hook is installed",
+            ))
+        })?;
+        hook.apply(model)
+    } else {
+        let nz = model.nz;
+        model.cgrav[..nz].fill(flexmesa_const::STANDARD_CGRAV);
+        Ok(())
     }
 }
 
@@ -1434,10 +1505,17 @@ pub(crate) fn set_hydro_vars_with_skips(
     if nz == 0 {
         return Ok(());
     }
+    // `if (.not. skip_other_cgrav) call set_cgrav(s, ierr)` after the micro
+    // variables and before `set_m_grav_and_grav`
+    // (`star/private/hydro_vars.f90:525,533`).
+    if !skips.solver {
+        set_cgrav(model)?;
+        model.set_m_grav_and_grav();
+    }
     // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
-    // 258-265`) only from `set_vars`; the solver's `set_vars_for_solver` and
-    // `set_final_vars` leave it as it was at the start of the step.
-    if !model.aux.doing_struct_burn_mix {
+    // 258-265`) from `set_vars`; the solver leaves it, and `set_final_vars`
+    // restores the start-of-step value at its call site.
+    if !skips.solver {
         set_irradiation_heat(model);
     }
     if model.aux.mixing.mlt_mixing_type.len() != nz {
@@ -1445,13 +1523,16 @@ pub(crate) fn set_hydro_vars_with_skips(
     }
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
 
-    if !model.aux.doing_struct_burn_mix {
+    // `set_rotation_info` before `do_brunt_B` and `set_grads`
+    // (`star/private/hydro_vars.f90:539-543`).
+    if !skips.solver {
+        refresh_rotation_info_outside_solver(model);
         do_brunt_b(model)?;
         crate::mixing_state::set_grads(model);
     }
 
     // `other_adjust_mlt_gradT_fraction` (`star/private/hydro_vars.f90:555-560`).
-    if !model.aux.doing_struct_burn_mix
+    if !skips.solver
         && model.aux.mixing.okay_to_set_mixing_info
         && !model.controls.rsp2_flag
     {
@@ -1476,17 +1557,22 @@ pub(crate) fn set_hydro_vars_with_skips(
         }
     }
 
-    if skips.mlt {
-        refresh_rotation_info_outside_solver(model);
-    } else if !model.controls.rsp_flag {
-        if !model.aux.doing_struct_burn_mix
-            && model.aux.mixing.okay_to_set_mixing_info
-        {
+    if !skips.mlt && !model.controls.rsp_flag {
+        if !skips.solver && model.aux.mixing.okay_to_set_mixing_info {
             if model.controls.mix_wind.make_gradr_sticky_in_solver_iters {
                 model.aux.fixed_gradr_sticky.fill(false);
             }
             model.aux.mixing.alpha_mlt[..nz]
                 .fill(model.controls.mixing_length_alpha);
+            // `star/private/hydro_vars.f90:572-579`.
+            if model.controls.use_other_alpha_mlt {
+                let hook = model.aux.other_alpha_mlt.clone().ok_or_else(|| {
+                    StarError::InvalidInput(String::from(
+                        "use_other_alpha_mlt is set but no other_alpha_mlt hook is installed",
+                    ))
+                })?;
+                hook.apply(model)?;
+            }
         }
         if model.controls.mix_wind.use_t_tau_gradr_factor {
             let t_tau_id = model.controls.atm_t_tau_relation.id();
@@ -1546,7 +1632,7 @@ pub(crate) fn set_hydro_vars_with_skips(
                     model.gradt[k] - grada_f;
             }
         }
-        if !model.aux.doing_struct_burn_mix && sig_was_zero {
+        if !skips.solver && sig_was_zero {
             model.sig.fill(0.0);
             update_sig_from_d_mix(model)?;
         }
@@ -1557,7 +1643,7 @@ pub(crate) fn set_hydro_vars_with_skips(
         return Ok(());
     }
 
-    if !model.aux.doing_struct_burn_mix {
+    if !skips.solver {
         do_brunt_n2(model)?;
         if model.aux.mixing.okay_to_set_mixing_info {
             let skip_set_cz_bdy_mass = !model.aux.mixing.have_new_generation;
@@ -1577,4 +1663,62 @@ pub(crate) fn set_hydro_vars_with_skips(
         crate::riemann_ad::do_uface_and_pface(model)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+
+    fn cid(name: &str) -> usize {
+        flexmesa_chem::NuclideCatalog::builtin_ref()
+            .get_by_name(name)
+            .expect("isotope in the catalog")
+            .chem_id
+    }
+
+    fn model(names: &[&str], xa: &[f64]) -> StarModel {
+        let mut m = StarModel::new(
+            2,
+            names.iter().map(|n| cid(n)).collect(),
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        m.xa = xa.to_vec();
+        m
+    }
+
+    /// `turb_support.f90:174`: `XH1 = xa(h1,k)`, not `X = h1 + h2` (#556).
+    #[test]
+    fn thermohaline_xh1_is_the_h1_mass_fraction_not_summed_hydrogen() {
+        // Zone 1 (0-based) has h1 = 0.25, h2 = 0.125, he4 = 0.625.
+        let m = model(
+            &["h1", "h2", "he4"],
+            &[0.5, 0.25, 0.25, 0.25, 0.125, 0.625],
+        );
+        let x = thermohaline_xh1(
+            &m,
+            1,
+            ThermohalineOption::BrownGaraudStellmach13,
+        )
+        .unwrap();
+        assert_eq!(x.to_bits(), 0.25_f64.to_bits());
+    }
+
+    /// #557: no `h1` in the network is an explicit error for the options
+    /// that read `XH1`, and an unread `NaN` for `Kippenhahn`.
+    #[test]
+    fn thermohaline_xh1_without_h1_errors_only_for_options_that_read_it() {
+        let m = model(&["he4", "c12"], &[0.5, 0.5, 0.5, 0.5]);
+        for opt in [
+            ThermohalineOption::BrownGaraudStellmach13,
+            ThermohalineOption::TraxlerGaraudStellmach11,
+        ] {
+            let err = thermohaline_xh1(&m, 0, opt).unwrap_err();
+            assert!(format!("{err}").contains("#557"), "{err}");
+        }
+        assert!(thermohaline_xh1(&m, 0, ThermohalineOption::Kippenhahn)
+            .unwrap()
+            .is_nan());
+    }
 }

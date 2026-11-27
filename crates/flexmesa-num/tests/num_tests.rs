@@ -84,6 +84,49 @@ fn test_binary_search_increasing_and_decreasing_matches_upstream() {
     assert!((a - 0.5).abs() <= 1e-15 && (b - 0.5).abs() <= 1e-15 && c == 0.0);
 }
 
+/// `two_piece_linear_coeffs` follows `num/public/num_lib.f90:580-613`: the
+/// far-node weight is computed first and the near node takes `1 - weight`,
+/// queries outside the grid take the endpoint coefficients, a non-monotonic
+/// grid is an error, and NaN (left unset upstream) is an error (`#550`).
+#[test]
+fn two_piece_linear_coeffs_follows_upstream_weight_order_and_endpoint_branches(
+) {
+    // Ascending grid, lower segment: a1 = (x - x0)/(x1 - x0), a0 = 1 - a1.
+    let (x, x0, x1, x2) = (0.3_f64, 0.1_f64, 0.7_f64, 1.9_f64);
+    let a1 = (x - x0) / (x1 - x0);
+    assert_eq!(
+        two_piece_linear_coeffs(x, x0, x1, x2).unwrap(),
+        (1.0 - a1, a1, 0.0)
+    );
+    // Upper segment: a2 = (x - x1)/(x2 - x1), a1 = 1 - a2.
+    let a2 = (1.3 - x1) / (x2 - x1);
+    assert_eq!(
+        two_piece_linear_coeffs(1.3, x0, x1, x2).unwrap(),
+        (0.0, 1.0 - a2, a2)
+    );
+    // Endpoints and beyond take the endpoint coefficients.
+    assert_eq!(
+        two_piece_linear_coeffs(-5.0, x0, x1, x2).unwrap(),
+        (1.0, 0.0, 0.0)
+    );
+    assert_eq!(
+        two_piece_linear_coeffs(9.0, x0, x1, x2).unwrap(),
+        (0.0, 0.0, 1.0)
+    );
+    // Descending grid mirrors the ascending branches.
+    assert_eq!(
+        two_piece_linear_coeffs(9.0, x2, x1, x0).unwrap(),
+        (1.0, 0.0, 0.0)
+    );
+    let d1 = (1.3 - x2) / (x1 - x2);
+    assert_eq!(
+        two_piece_linear_coeffs(1.3, x2, x1, x0).unwrap(),
+        (1.0 - d1, d1, 0.0)
+    );
+    assert!(two_piece_linear_coeffs(0.5, 0.0, 2.0, 1.0).is_err());
+    assert!(two_piece_linear_coeffs(f64::NAN, x0, x1, x2).is_err());
+}
+
 /// Verifies [`qsort_index`] permutation ordering on unsorted slice inputs.
 #[test]
 fn test_qsort_index_orders_values_monotonically() {

@@ -7,7 +7,8 @@ use flexmesa_const::{AVO, CLIGHT, KEV, LN2, ME, MEV_TO_ERGS, QCONV};
 use flexmesa_rates::{
     eval_ecapture_pair_with_derivs, eval_fl_epsnuc_3alf_with_derivs,
     eval_reaclib_terms, eval_weak_reaction_pair, CoulombMuiOption,
-    CoulombVsOption, RatesCatalog, WeakRateEval, DEFAULT_REACLIB_MIN_T9,
+    CoulombVsOption, RatesCatalog, ReaclibTerm, WeakRateEval,
+    DEFAULT_REACLIB_MIN_T9,
 };
 
 use crate::types::{
@@ -259,6 +260,17 @@ pub fn eval_single_weak_blended(
     ev
 }
 
+/// Returns `true` when `term` is MESA's weaklib-only `reaclib_rates`
+/// placeholder (`also_in_reaclib = .false.`, `chapter = 1`, `rflag = 'w'`,
+/// `coefficients = [-99, 0, 0, 0, 0, 0, 0]` in
+/// `rates/private/reaclib_input.f90:279-294`).
+#[inline]
+pub(crate) fn is_weaklib_placeholder(term: &ReaclibTerm) -> bool {
+    term.chapter == 1
+        && term.rflag == b'w'
+        && term.coeffs == [-99.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+}
+
 fn weak_low_t_rate(
     cat: &RatesCatalog,
     rxn_name: &str,
@@ -272,8 +284,14 @@ fn weak_low_t_rate(
     // `reaclib_rates% reaction_dict` is still null (`reaclib_eval.f90:249-252`),
     // `do_reaclib_indices_for_reaction` fails and falls back to `weak_info.list`
     // (`LN2 / half_life` when present, e.g. `r_be7_wk_li7`, else `-1.0e-99`).
-    // Reactions added dynamically via `add_reaction_from_reaclib` (`142-239`, `325`)
-    // run after `finish_rates_def_init` and therefore resolve in `reaclib_rates`.
+    //
+    // Reactions added dynamically via `add_reaction_from_reaclib` (`142-239`,
+    // `325`) run after `finish_rates_def_init`: weaklib transitions always
+    // resolve at `lo <= num_from_weaklib` (`reaclib_input.f90:279-294`, either
+    // via a `-99` placeholder or directly from weaklib), so
+    // `also_in_reaclib == .false.` sets `weak_lowT_rate = -1` without
+    // evaluating `exp(-99)` or falling back to `weak_info.list`
+    // (`rates_initialize.f90:448-451`).
     let is_predefined = cat.reaction_id_by_name(rxn_name).is_some();
     if !is_predefined {
         if let Ok((is_rev, terms)) = cat.reaclib_terms(rxn_name) {
@@ -283,6 +301,9 @@ fn weak_low_t_rate(
                 } else {
                     terms
                 };
+                if has_weaklib && is_weaklib_placeholder(&slice[0]) {
+                    return -1.0;
+                }
                 let (fw, _, rv, _) = eval_reaclib_terms(
                     slice,
                     0.01,
@@ -292,14 +313,14 @@ fn weak_low_t_rate(
                 return if is_rev { rv } else { fw };
             }
         }
+        if has_weaklib {
+            return -1.0;
+        }
     }
     if let Some((half_life, _)) = cat.weak_info_by_ids(lhs_id, rhs_id) {
         if half_life > 0.0 {
             return LN2 / half_life;
         }
-    }
-    if !is_predefined && has_weaklib {
-        return -1.0;
     }
     -1.0e-99
 }
@@ -684,6 +705,33 @@ mod tests {
                 false,
             );
             assert_eq!(o15_rate.to_bits(), 0x3F77_458B_4A11_2F36);
+
+            let h1_neut_rate = weak_low_t_rate(
+                cat,
+                "r_h1_wk_neut",
+                cid("h1"),
+                cid("neut"),
+                true,
+            );
+            assert_eq!(h1_neut_rate.to_bits(), (-1.0_f64).to_bits());
+
+            let neut_h1_rate = weak_low_t_rate(
+                cat,
+                "r_neut_wk-minus_h1",
+                cid("neut"),
+                cid("h1"),
+                true,
+            );
+            assert_eq!(neut_h1_rate.to_bits(), (-1.0_f64).to_bits());
+
+            let mn54_fe54_rate = weak_low_t_rate(
+                cat,
+                "r_mn54_wk-minus_fe54",
+                cid("mn54"),
+                cid("fe54"),
+                true,
+            );
+            assert_eq!(mn54_fe54_rate.to_bits(), (-1.0_f64).to_bits());
 
             assert_eq!(RATTAB_TEMP_LO.to_bits(), 0x4108_69FF_FFFF_FFE9);
             assert_eq!(RATTAB_TEMP_LO.to_bits(), exp10(RATTAB_TLO).to_bits());

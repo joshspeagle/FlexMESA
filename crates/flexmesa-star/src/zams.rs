@@ -56,9 +56,16 @@ pub struct ZamsCatalog {
     pub initial_z: f64,
     /// Initial helium mass fraction $Y$ (`0.28`).
     pub initial_y: f64,
+    /// Network of the catalog's models, from the file header's `net_name`
+    /// (`read_zams_header`, `star/private/init_model.f90:185`).
+    pub net_name: String,
     /// Ordered ZAMS model entries.
     pub models: Vec<ZamsEntry>,
 }
+
+/// Quote characters that may delimit a Fortran character value: the
+/// apostrophe and the double quote.
+const FORTRAN_QUOTES: [char; 2] = ['\u{27}', '\u{22}'];
 
 impl ZamsCatalog {
     /// Returns the built-in $Z = 0.02, Y = 0.28$ ZAMS catalog (`basic.net`,
@@ -165,6 +172,9 @@ impl ZamsCatalog {
         Ok(Self {
             initial_z,
             initial_y,
+            // The header of `data/star_data/zams_models/zams_z2m2_y28.data`
+            // has `net_name 'basic.net'`.
+            net_name: String::from("basic.net"),
             models,
         })
     }
@@ -177,6 +187,7 @@ impl ZamsCatalog {
         let mut lines = text.lines();
         let mut initial_z = 0.02;
         let mut initial_y = 0.28;
+        let mut net_name: Option<String> = None;
         for line in lines.by_ref() {
             let trimmed = line.trim();
             if trimmed.starts_with("initial_Z")
@@ -191,6 +202,11 @@ impl ZamsCatalog {
                 if let Some(tok) = trimmed.split_whitespace().nth(1) {
                     initial_y = parse_fortran_f64(tok)?;
                 }
+            } else if trimmed.starts_with("net_name") {
+                net_name = trimmed
+                    .split_whitespace()
+                    .nth(1)
+                    .map(|tok| tok.trim_matches(FORTRAN_QUOTES).to_string());
             } else if trimmed.starts_with("M/Msun") {
                 break;
             }
@@ -327,9 +343,15 @@ impl ZamsCatalog {
                 }
             }
         }
+        let net_name = net_name.ok_or_else(|| {
+            StarError::IoError(String::from(
+                "ZAMS file header has no net_name (read_zams_header, star/private/init_model.f90:185)",
+            ))
+        })?;
         Ok(Self {
             initial_z,
             initial_y,
+            net_name,
             models,
         })
     }
@@ -564,6 +586,12 @@ pub fn load_zams_model_from_catalog(
     let nz = e1.nz;
     let species = e1.species;
     let mut model = StarModel::new(nz, e1.chem_id.clone(), job, model_controls);
+    // `read_zams_header` sets `s% net_name` from the file header and
+    // `set_net` loads that net before the models are read
+    // (`star/private/init_model.f90:185-193`); a `&star_job` net change
+    // applies later, in `do_star_job_controls_after`
+    // (`star/job/run_star_support.f90:1912-1916`).
+    model.job.net_name.clone_from(&catalog.net_name);
     model.dq.clone_from(&e1.dq);
 
     if idx1 == idx2 || e1.index_m_msun == e2.index_m_msun {

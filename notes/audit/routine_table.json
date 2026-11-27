@@ -1067,6 +1067,7 @@
 {"upstream_path": "utils/public/utils_lib.f90", "module": "utils", "status": "partial", "upstream_lines": 1189, "routines": 75, "routines_mapped": 0, "lines_in_routines": 1015, "lines_in_mapped_routines": 0, "routines_oracle": 0, "lines_in_oracle_routines": 0, "lines_outside_routines": 174, "whole_file_ported": false, "ceiling": null}
 ],
 "backlog": [
+{"upstream_path": "binary/work/src/run_binary_extras.f90", "routine": "extras_binary_finish_step", "kind": "function", "parent": "", "first": 151, "last": 161, "lines": 11, "cases": ["binary/double_bh"], "basis": "routine"},
 {"upstream_path": "star/private/profile_getval.f90", "routine": "getval_for_profile", "kind": "subroutine", "parent": "", "first": 263, "last": 2464, "lines": 2202, "cases": [], "basis": ""},
 {"upstream_path": "star/private/history.f90", "routine": "history_getval", "kind": "subroutine", "parent": "", "first": 1241, "last": 3083, "lines": 1843, "cases": [], "basis": ""},
 {"upstream_path": "star/private/ctrls_io.f90", "routine": "store_controls", "kind": "subroutine", "parent": "", "first": 767, "last": 2486, "lines": 1720, "cases": [], "basis": ""},
@@ -2326,7 +2327,6 @@
 {"upstream_path": "binary/private/binary_job_ctrls_io.f90", "routine": "do_read_binary_job", "kind": "subroutine", "parent": "", "first": 71, "last": 81, "lines": 11, "cases": [], "basis": ""},
 {"upstream_path": "binary/public/binary_def.f90", "routine": "get_binary_ptr", "kind": "subroutine", "parent": "", "first": 269, "last": 279, "lines": 11, "cases": [], "basis": ""},
 {"upstream_path": "binary/work/src/run_binary_extras.f90", "routine": "extras_binary_check_model", "kind": "function", "parent": "", "first": 137, "last": 147, "lines": 11, "cases": [], "basis": ""},
-{"upstream_path": "binary/work/src/run_binary_extras.f90", "routine": "extras_binary_finish_step", "kind": "function", "parent": "", "first": 151, "last": 161, "lines": 11, "cases": [], "basis": ""},
 {"upstream_path": "star/job/run_star_support.f90", "routine": "save1", "kind": "subroutine", "parent": "show_times", "first": 1244, "last": 1254, "lines": 11, "cases": [], "basis": ""},
 {"upstream_path": "star/other/other_astero_freq_corr.f90", "routine": "default_other_astero_freq_corr", "kind": "subroutine", "parent": "", "first": 30, "last": 40, "lines": 11, "cases": [], "basis": ""},
 {"upstream_path": "star/other/other_cgrav.f90", "routine": "default_other_cgrav", "kind": "subroutine", "parent": "", "first": 33, "last": 43, "lines": 11, "cases": [], "basis": ""},

@@ -492,13 +492,13 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 The 45 declared gaps in `known_gaps.toml` are the non-passing cases. A routine is attributed to a case only when that case's gap `reason` names the routine (an identifier equal to its Fortran name, at least eight characters or containing an underscore), basis `routine`, or names its upstream file, basis `file`, which attributes every unmapped routine of that file. A name found in several backlog files counts only when the reason also names one of the files. No other signal is used: the unsupported-controls report and `extras_status.toml` name controls and cases but no routines, so a missing control or an unported extras hook cannot be tied to a routine mechanically. Most gap reasons name neither a routine nor a file, so most routines are unattributed. Unattributed does not mean unneeded, and the case counts are lower bounds. Rows are sorted by number of cases named, then lines.
 
-0 backlog routines are attributed to at least one case.
+1 backlog routines are attributed to at least one case.
 
 ### Attributed routines
 
 | # | Upstream file | Routine | Cases | Lines | Basis | Cases named |
 | ---: | :--- | :--- | ---: | ---: | :--- | :--- |
-| - | none | - | 0 | 0 | - | - |
+| 1 | `binary/work/src/run_binary_extras.f90` | `extras_binary_finish_step` | 1 | 11 | routine | `binary/double_bh` |
 
 ### Largest unattributed routines
 

@@ -327,11 +327,14 @@ pub fn op_split_burn_zones(
         let k = out.k;
         let base_s = k * species;
         let base_ss = k * species * species;
-        // `star/private/struct_burn_mix.f90:909,1068,1096,1107-1135`: update
-        // `xa` without mutating `xa_start` (`save_start_values` snapshots it
-        // afterwards), and record accepted 1-zone burn substeps (`num_iters_out = naccpt`).
+        // `star/private/struct_burn_mix.f90:909,1068,1096,1107-1135`
+        // (`:1120` inside `burn1_zone`): update `xa` without mutating
+        // `xa_start` (`save_start_values` snapshots it afterwards), keep
+        // `eps_nuc` zeroed until `apply_burn_avg_epsnuc`
+        // (`hydro_vars.f90:160`), record `burn_avg_epsnuc`, and store
+        // accepted 1-zone burn substeps (`num_iters_out = naccpt`).
         model.xa[base_s..base_s + species].copy_from_slice(&out.xa_after);
-        model.eps_nuc[k] = out.avg_epsnuc;
+        model.eps_nuc[k] = 0.0;
         model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
         model.aux.burn_num_iters[k] = out.naccpt;
         model.aux.eps_nuc_categories[k] = out.eps_cats;
@@ -518,18 +521,23 @@ fn run_struct_burn_mix_core(
         crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
         model.pack_xh();
     }
+    // Save pre-burn thermodynamic start values (`lnd`, `lnT`, `lnR`, `v`); do
+    // NOT restore `csound_start` back to pre-burn `csound`: after
+    // `op_split_burn` alters composition, `set_vars` resets
+    // `csound_start = -1e99` (`star/private/star_utils.f90:1575`),
+    // `set_hydro_vars_with_skips` latches post-burn `csound`
+    // (`star/private/micro.f90:84-88`), and `save_start_values` copies that
+    // post-burn `csound` forward (`struct_burn_mix.f90:112, 297`).
     let pre_burn_start = (
         model.lnd.clone(),
         model.ln_t.clone(),
         model.ln_r.clone(),
         model.v.clone(),
-        model.csound.clone(),
     );
     model.lnd_start.clone_from(&pre_burn_start.0);
     model.ln_t_start.clone_from(&pre_burn_start.1);
     model.ln_r_start.clone_from(&pre_burn_start.2);
     model.v_start.clone_from(&pre_burn_start.3);
-    model.aux.csound_start.clone_from(&pre_burn_start.4);
 
     // `star/private/struct_burn_mix.f90:82-84`: only clear `burn_num_iters`
     // (and `burn_avg_epsnuc`) when `op_split_burn` is active so non-split runs
@@ -611,7 +619,6 @@ fn run_struct_burn_mix_core(
         model.ln_t_start,
         model.ln_r_start,
         model.v_start,
-        model.aux.csound_start,
     ) = pre_burn_start;
 
     // `do_chem = (s% do_burn .or. s% do_mix)` with `s% do_burn =

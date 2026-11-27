@@ -233,11 +233,9 @@ fn test_save_model_when_terminate_overwrites_existing_mod() {
     assert_eq!(reloaded.model_number, model.model_number);
 }
 
-/// A step-capped smoke run stops after the capped stage without synthesizing
-/// a fake handoff `.mod` or running later stages against missing inputs.
-#[test]
-fn test_capped_smoke_stops_after_capped_stage_without_synthesizing_mod() {
-    let tmp = TempCaseGuard::new("capped_smoke");
+/// Writes the two-stage capped-smoke case; stage 1 saves `stage1.mod` only
+/// when `save_s1` is true.
+fn write_capped_smoke_case(tmp: &TempCaseGuard, save_s1: bool) {
     fs::write(
         tmp.root.join("rn"),
         "#!/usr/bin/env bash\n\
@@ -247,19 +245,22 @@ fn test_capped_smoke_stops_after_capped_stage_without_synthesizing_mod() {
     .expect("write rn");
     fs::write(
         tmp.root.join("inlist_s1"),
-        "&star_job\n\
-           save_model_when_terminate = .true.\n\
-           save_model_filename = 'stage1.mod'\n\
-           required_termination_code_string(1) = 'max_model_number'\n\
-         /\n\
-         &kap\n\
-           Zbase = 0.02d0\n\
-         /\n\
-         &controls\n\
-           initial_mass = 1.0d0\n\
-           max_model_number = 5\n\
-           photo_interval = -1\n\
-         /\n",
+        format!(
+            "&star_job\n\
+               save_model_when_terminate = {}\n\
+               save_model_filename = 'stage1.mod'\n\
+               required_termination_code_string(1) = 'max_model_number'\n\
+             /\n\
+             &kap\n\
+               Zbase = 0.02d0\n\
+             /\n\
+             &controls\n\
+               initial_mass = 1.0d0\n\
+               max_model_number = 5\n\
+               photo_interval = -1\n\
+             /\n",
+            if save_s1 { ".true." } else { ".false." }
+        ),
     )
     .expect("write inlist_s1");
     fs::write(
@@ -267,8 +268,12 @@ fn test_capped_smoke_stops_after_capped_stage_without_synthesizing_mod() {
         stage_inlist(Some("stage1.mod"), "final.mod", 6),
     )
     .expect("write inlist_s2");
+}
 
-    let rep = run_test_suite_case_with_extras(
+fn run_capped_smoke(
+    tmp: &TempCaseGuard,
+) -> flexmesa_star::inlist_runner::CaseRunReport {
+    run_test_suite_case_with_extras(
         &tmp.root,
         true,
         Some(1),
@@ -277,12 +282,38 @@ fn test_capped_smoke_stops_after_capped_stage_without_synthesizing_mod() {
         InlistLoadOptions::default(),
         &mut DefaultStarExtras,
     )
-    .expect("capped smoke run must stop cleanly without error");
+    .expect("capped smoke run must stop cleanly without error")
+}
+
+/// A step-capped smoke stage that requests `save_model_when_terminate` still
+/// runs `do_saves`, so the next stage can reload the handoff model.
+#[test]
+fn test_capped_smoke_saves_requested_mod_and_advances_stage() {
+    let tmp = TempCaseGuard::new("capped_smoke_saves");
+    write_capped_smoke_case(&tmp, true);
+    let rep = run_capped_smoke(&tmp);
+    assert!(
+        tmp.root.join("stage1.mod").is_file(),
+        "capped stage must write the requested stage1.mod"
+    );
+    assert_eq!(rep.stages.len(), 2);
+    assert_eq!(rep.total_steps, 2);
+    assert_eq!(rep.termination_code, "max_steps_cap");
+    assert!(!rep.passed);
+}
+
+/// A step-capped smoke stage that did not request a save stops cleanly
+/// without synthesizing a handoff `.mod` or running later stages.
+#[test]
+fn test_capped_smoke_stops_cleanly_without_synthesizing_unrequested_mod() {
+    let tmp = TempCaseGuard::new("capped_smoke_nosave");
+    write_capped_smoke_case(&tmp, false);
+    let rep = run_capped_smoke(&tmp);
+    assert!(
+        !tmp.root.join("stage1.mod").exists(),
+        "capped stage must not synthesize an unrequested stage1.mod"
+    );
     assert_eq!(rep.stages.len(), 1);
     assert_eq!(rep.termination_code, "max_steps_cap");
     assert!(!rep.passed);
-    assert!(
-        !tmp.root.join("stage1.mod").exists(),
-        "capped stage must not synthesize stage1.mod"
-    );
 }

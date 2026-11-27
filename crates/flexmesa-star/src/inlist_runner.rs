@@ -1147,9 +1147,14 @@ fn run_inlist_stage_with_logs_inner(
         }
     }
 
+    // A step-capped smoke stage takes the same `do_saves` path as a normal
+    // termination so later stages can reload the handoff model.
+    let is_capped_smoke =
+        max_steps_cap.is_some() && termination_code == "max_steps_cap";
+
     // Termination model save (`star/job/run_star_support.f90:791-792,823,1270-1274`).
     if !abnormal_termination
-        && term_str_ok
+        && (term_str_ok || is_capped_smoke)
         && model.job.save_model_when_terminate
         && !model.job.save_model_filename.is_empty()
         && !model
@@ -1527,7 +1532,14 @@ pub fn run_test_suite_case_with_extras(
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
                 last_stage_model = Some(model);
-                if stage_abnormal || stage_term_mismatch || is_capped_smoke {
+                let capped_missing_handoff = is_capped_smoke
+                    && output_mod.as_ref().is_some_and(|out_name| {
+                        !case_dir.join(out_name).is_file()
+                    });
+                if stage_abnormal
+                    || stage_term_mismatch
+                    || capped_missing_handoff
+                {
                     break;
                 }
                 // A selected step-dump stage is the last one that matters.

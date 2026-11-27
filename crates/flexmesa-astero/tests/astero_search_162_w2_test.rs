@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Zero-`$MESA_DIR` unit and track regression tests for `astero` search parity
+//! Zero-`$MESA_DIR` unit and track invariant tests for `astero` search
 //! against MESA `26.4.1` (`from_file`, unused `'Rcz'`, `checking_age`, and
 //! `extras_after_evolve`).
 

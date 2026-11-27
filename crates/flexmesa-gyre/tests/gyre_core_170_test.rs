@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Standalone zero-`$MESA_DIR` unit and algebraic parity tests for the core
+//! Standalone zero-`$MESA_DIR` unit and algebraic invariant tests for the core
 //! `flexmesa-gyre` modules (`#170` Wave 12): `mode`, `search`, `prox`, `grid`,
 //! `grid_refine`, `sysmtx`, `magnus`, `rad`, `ad`, `nad`, `context`, `model`,
 //! and `mesa`.
@@ -208,7 +208,7 @@ fn mode_classify_l1_non_cowling_all_evanescent_and_active_windings() {
 
     // Case 1: completely evanescent l=1 non-Cowling mode where find_turn
     // returns j_turn == n and y_1(n) == 0. Previously panicked with
-    // slice start > end (&y_1[n..n - 1]); Fortran produces empty slice (0, 0).
+    // slice start > end (&y_1[n..n - 1]); upstream produces empty slice (0, 0).
     let (j_turn_ev, _) =
         find_turn(&cx, &gr, 1.0e-4, &nm_p, &os_p).expect("find_turn ev");
     assert_eq!(j_turn_ev, n);
@@ -272,7 +272,7 @@ fn mode_classify_l1_non_cowling_all_evanescent_and_active_windings() {
 }
 
 #[test]
-fn search_brent_root_scan_and_critical_layer_parity() {
+fn search_brent_root_scan_and_critical_layer() {
     let nm_p = NumPar::default();
 
     // Closed-form sqrt(2) root via Brent.
@@ -407,7 +407,7 @@ fn search_brent_root_scan_and_critical_layer_parity() {
 }
 
 #[test]
-fn grid_nesting_splitting_and_refinement_parity() {
+fn grid_nesting_splitting_and_refinement() {
     let gr =
         Grid::from_x(&[0.0, 0.25, 0.5, 0.5, 0.75, 1.0]).expect("multi-seg");
     assert_eq!(gr.s_i(), 1);
@@ -493,7 +493,7 @@ fn grid_nesting_splitting_and_refinement_parity() {
 }
 
 #[test]
-fn sysmtx_block_det_and_hom_nullspace_parity() {
+fn sysmtx_block_det_and_hom_nullspace() {
     // Real singular 2-block system: B_i u_1 = 0, E_l u_k + E_r u_{k+1} = 0,
     // B_o u_3 = 0 with nullspace u_k = c [1, 1].
     let mut sm_r = BlockSysmtx::<f64>::new(2, 2, 1, 1);
@@ -541,7 +541,7 @@ fn sysmtx_block_det_and_hom_nullspace_parity() {
 }
 
 #[test]
-fn magnus_eigendecomposition_and_gl2_exponential_parity() {
+fn magnus_eigendecomposition_and_gl2_exponential() {
     // 2x2 real eigendecomposition with complex conjugate eigenvalues (rotation).
     let a2 = [0.0, 2.0, -2.0, 0.0];
     let (lam, vl, vr) = eigen_decompose_2_r(&a2);
@@ -659,7 +659,7 @@ fn magnus_eigendecomposition_and_gl2_exponential_parity() {
 }
 
 #[test]
-fn equations_bvp_prox_and_gyre_mesa_end_to_end_parity() {
+fn equations_bvp_prox_and_gyre_mesa_end_to_end() {
     let k = standard_constants();
     let (global, rows, version) = pekeris_sphere_mesa_data(33);
     let ml =
@@ -700,7 +700,8 @@ fn equations_bvp_prox_and_gyre_mesa_end_to_end_parity() {
         }
     }
 
-    // 2. Context freq_scale parity across unit families (including DELTA units).
+    // 2. Context freq_scale consistency across unit families
+    //    (including DELTA units).
     let f_none = cx.freq_scale("NONE").expect("NONE");
     assert_eq!(f_none, 1.0);
     let f_crit = cx.freq_scale("CRITICAL").expect("CRITICAL");
@@ -743,8 +744,9 @@ fn equations_bvp_prox_and_gyre_mesa_end_to_end_parity() {
     .expect("bracket_search");
     let (w0, npg0, _id0) = ad_modes.first().copied().expect("radial modes");
 
-    // Verify RadBvp vs AdBvp parity on an envelope grid (x >= 0.09375, ZERO_R),
-    // where AdBvp avoids the l=0 x=0 COLLOC_GL2 center-row degeneracy.
+    // Check RadBvp vs AdBvp consistency on an envelope grid
+    // (x >= 0.09375, ZERO_R), where AdBvp avoids the l=0 x=0 COLLOC_GL2
+    // center-row degeneracy.
     let env_ml_p = ModelPar {
         add_center: false,
         ..ModelPar::default()

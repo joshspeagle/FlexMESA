@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #![forbid(unsafe_code)]
-//! Unit parity and regression tests for `flexmesa-adipls` issue #171 fixes.
+//! Unit invariant tests for `flexmesa-adipls` issue #171 fixes.
 
 use flexmesa_adipls::{
     order, parse_adipls_pruned_in, rsnfit, sigout, stevft, takata, AdiFileUnit,

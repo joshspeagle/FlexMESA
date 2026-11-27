@@ -45,11 +45,10 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/adipls_oracles/data/*.taps.tsv (MESA 26.4.1 Package A2b, #171)"
 
 [[tests]]
-path = "crates/flexmesa-adipls/tests/adipls_core_171_parity_test.rs"
+path = "crates/flexmesa-adipls/tests/adipls_core_171_test.rs"
 language = "rust"
 module = "adipls"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-astero/tests/adipls_a3_test.rs"
@@ -57,6 +56,12 @@ language = "rust"
 module = "astero"
 kind = "oracle"
 provenance = "MESA 26.4.1 Package A0 ADIPLS captures (FLEXMESA_ADIPLS_CAPTURES a0tap/modes.tsv) & AMDL oracle (#171)"
+
+[[tests]]
+path = "crates/flexmesa-astero/tests/astero_search_162_w2_test.rs"
+language = "rust"
+module = "astero"
+kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-astero/tests/astero_suite.rs"
@@ -71,24 +76,16 @@ module = "astero"
 kind = "invariant"
 
 [[tests]]
-path = "crates/flexmesa-astero/tests/controls_162_parity_test.rs"
+path = "crates/flexmesa-astero/tests/controls_162_test.rs"
 language = "rust"
 module = "astero"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-astero/tests/loud_controls_test.rs"
 language = "rust"
 module = "astero"
 kind = "invariant"
-
-[[tests]]
-path = "crates/flexmesa-astero/tests/parity_162_w2_test.rs"
-language = "rust"
-module = "astero"
-kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-atm/tests/atm_161_parity_test.rs"
@@ -468,11 +465,10 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/gyre_oracles/data/star__gyre_in_mesa_* (6 MESA 26.4.1 cases, #170)"
 
 [[tests]]
-path = "crates/flexmesa-gyre/tests/gyre_core_170_parity_test.rs"
+path = "crates/flexmesa-gyre/tests/gyre_core_170_test.rs"
 language = "rust"
 module = "gyre"
 kind = "invariant"
-mislabel_reason = "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
 
 [[tests]]
 path = "crates/flexmesa-interp1d/tests/interp1d_161_parity_test.rs"

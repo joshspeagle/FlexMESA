@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Verification tests for MESA `26.4.1` `&astero_search_controls` coverage,
+//! Invariant and control-coverage tests for `&astero_search_controls`,
 //! surface corrections, separation ratios, optimizer drivers, restarts,
-//! ADIPLS/GYRE controls, and model/table output parity (`#162` / `#147`).
+//! ADIPLS/GYRE controls, and model/table output invariants (`#162` / `#147`).
 
 #![allow(clippy::too_many_lines)]
 
@@ -209,7 +209,7 @@ impl AsteroCaseHooks for AlphaHook {
 }
 
 #[test]
-fn test_inventory_complete_all_153_controls_and_roundtrip_save_controls() {
+fn test_inventory_all_153_controls_and_roundtrip_save_controls() {
     let inv = supported_astero_control_inventory();
     assert_eq!(inv.supported.len(), 153);
     assert_eq!(ASTERO_SEARCH_CONTROLS_SUPPORTED.len(), 153);
@@ -421,7 +421,7 @@ fn test_kjeldsen_numax_order_gap_and_eval_surf_coefs_exact() {
 }
 
 #[test]
-fn test_ratios_max_seq_trim_and_r02_fixed_pairing_oracle() {
+fn test_ratios_max_seq_trim_and_r02_fixed_pairing_identity() {
     // Small variation `< 0.75 * dnu` must NOT break sequence; gap `> 1.5 * dnu` MUST split.
     let dnu = 100.0;
     let freqs = [900.0, 960.0, 1060.0, 1160.0, 1260.0, 1360.0, 1520.0];

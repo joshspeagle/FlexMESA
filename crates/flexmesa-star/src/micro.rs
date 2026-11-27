@@ -1031,11 +1031,25 @@ pub(crate) fn do_eos_fix_pgas_range(
     Ok(())
 }
 
-/// Evaluates `eosDT_get` across all `nz` zones in parallel and populates
-/// cell-centered thermodynamic quantities, composition partial derivatives
-/// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
-/// variables (`do_eos_for_cell` and `store_eos_for_cell` in
-/// `star/private/micro.f90:292-545` and `star/private/eos_support.f90:44-101`).
+/// Latches negative `csound_start[k]` entries to the post-EOS `csound[k]`
+/// (`star/private/micro.f90:84-88`, called from `set_hydro_vars`).
+pub(crate) fn latch_csound_start(model: &mut StarModel) {
+    let nz = model.nz;
+    if model.aux.csound_start.len() != nz {
+        model.aux.csound_start.resize(nz, -1.0e99);
+    }
+    for k in 0..nz {
+        if model.aux.csound_start[k] < 0.0 {
+            model.aux.csound_start[k] = model.csound[k];
+        }
+    }
+}
+
+/// Evaluates the equation of state (`do_eos`, `do_eos_for_cell`, and
+/// `store_eos_for_cell` in `star/private/micro.f90:292-545`) across all zones.
+///
+/// Matches `star/private/micro.f90:292-545` and
+/// `star/private/eos_support.f90:44-101`.
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields

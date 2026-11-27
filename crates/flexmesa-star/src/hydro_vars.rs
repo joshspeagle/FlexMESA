@@ -1572,12 +1572,18 @@ pub(crate) struct SetHydroVarsSkips {
 /// Refills the start values that `set_basic_vars` sets after
 /// `reset_starting_vectors` (`star/private/star_utils.f90:1563-1580`,
 /// `star/private/hydro_vars.f90:719-741`): `lnd_start` (and so `rho_start`),
-/// `lnT_start`, `r_start`, and `v_start`, `u_start` and `alpha_RTI_start`
-/// when those variables are in use.
+/// `lnT_start`, `r_start`, and `v_start`, `u_start`, `alpha_RTI_start` when
+/// those variables are in use, plus resetting `csound_start = -1e99` to be
+/// latched on the subsequent EOS evaluation (`star/private/micro.f90:84-88`).
 fn fill_reset_starting_vectors(model: &mut StarModel) {
     model.lnd_start.clone_from(&model.lnd);
     model.ln_t_start.clone_from(&model.ln_t);
     model.ln_r_start.clone_from(&model.ln_r);
+    if model.aux.csound_start.len() == model.nz {
+        model.aux.csound_start.fill(-1.0e99);
+    } else {
+        model.aux.csound_start.resize(model.nz, -1.0e99);
+    }
     if model.controls.v_flag {
         model.v_start.clone_from(&model.v);
     }
@@ -1654,6 +1660,7 @@ pub(crate) fn set_hydro_vars_with_skips(
     }
     if !skips.micro {
         MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
+        crate::micro::latch_csound_start(model);
     }
     let nz = model.nz;
     if nz == 0 {

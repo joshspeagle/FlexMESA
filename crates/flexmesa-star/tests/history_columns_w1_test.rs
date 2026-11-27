@@ -236,7 +236,10 @@ fn test_gradt_excess_columns_track_mltpp_activation() {
     model.aux.mixing.gradt_excess_alpha_old = 0.5;
 
     let nz = model.nz;
+    // `set_gradT_excess_alpha` reads `s% Pgas(k)` (`turb_info.f90:444`);
+    // keep `lnPgas` consistent with it.
     model.ln_pgas[10] = flexmesa_math::log(0.1 * model.peos[10]);
+    model.pgas[10] = flexmesa_math::exp(model.ln_pgas[10]);
     model.t[10] *= 5.0;
     for k in 0..nz {
         model.xh_mass[k] = 0.0;

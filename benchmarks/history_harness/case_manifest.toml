@@ -310,8 +310,6 @@ case = "gyre_in_mesa_envelope"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_envelope.data"
 required_termination = "max_model_number"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"
@@ -642,8 +640,6 @@ case = "rsp_gyre"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/rsp_gyre.data"
 required_termination = "extras_finish_step"
-uses_pulsation_scaffolding = true
-scaffolding_issue = "#170"
 
 [[cases]]
 suite = "star"

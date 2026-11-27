@@ -13,7 +13,7 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 42,389 (8.5%) | 5,640 (1.1%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
 | `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 complete, 16 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 16 / 23 remaining module suites marked verified in manifest |
-| End-to-end `test_suite` cases | 106 cases | 106 in manifest | **57 / 106** passing | 39 declared gaps, 4 `no_reference_yet` |
+| End-to-end `test_suite` cases | 106 cases | 106 in manifest | **62 / 106** passing | 36 declared gaps, 4 `no_reference_yet` |
 
 ## Per-Module Port Status (`26` MESA `26.4.1` Modules)
 
@@ -61,7 +61,7 @@ Compared against MESA `26.4.1` `.defaults` schemas, **238 / 1,444** `&controls` 
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
 | `kap &kap` | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
 
-## Key Structural & Physics Gaps Driving `57 / 106` Parity
+## Key Structural & Physics Gaps Driving `62 / 106` Parity
 
 - **Model Construction & Relaxation (`#154`, `#150`)**: Multi-step `relax.f90` and `create_initial_model.f90` operations (`#154`) and upstream binary `.photo` compatibility (`#150`) remain unported; current `.photo` byte round-trips validate internal continuation consistency only.
 - **Silent Inlist Drops & Default Mismatches (`#147`, `#149`)**: Existing parsers silently ignore unimplemented namelist keys or map unknown option strings (`mlt_option`, `atm_option`, `screening_mode`) onto defaults instead of failing loudly.

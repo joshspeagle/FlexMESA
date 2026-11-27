@@ -214,7 +214,6 @@ issue = "#161"
 reason = "Strict run hits power_nuc_burn_upper_limit at step 1 (23 retries vs MESA 668 steps, 9 retries) (#161, #152)."
 [[gaps]]
 suite = "star"
-suite = "star"
 case = "wd_he_shell_ignition"
 issue = "#587"
 reason = "Within every MESA 26.4.1 history tolerance but takes a different number of steps than MESA per stage (FlexMESA [1111] vs MESA [1112]), which DECISIONS #70 does not count as a pass (#587)."

@@ -336,10 +336,44 @@ pub(crate) fn eval_simple_pdv_p_tot_ad(
             p_tot_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
     }
     if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        p_tot_ad = p_tot_ad
-            + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
+        p_tot_ad = p_tot_ad + eval_simple_pdv_mlt_pturb_ad(model, k);
     }
     (p_tot_ad, p_theta)
+}
+
+/// `mlt_Pturb_ad` of `calc_Ptot_ad_tw` (`star/private/star_utils.f90:3424-3432`)
+/// at cell `k > 0`: `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3`,
+/// with the face density `alfa*rho(k) + beta*rho(k-1)`; when time centering
+/// applies (`:3392-3394`) it is blended with the start-of-step value
+/// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*(rho_start(k-1) + rho_start(k))/6`
+/// using `alfa = P_theta_for_velocity_time_centering`.
+fn eval_simple_pdv_mlt_pturb_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+    if vc_old <= 0.0 {
+        return StarAdOrder1::ZERO;
+    }
+    let (alfa_f, beta_f) = model.get_face_weights(k);
+    let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
+    let rho_m1 = StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
+    let rho_face = rho_00 * alfa_f + rho_m1 * beta_f;
+    let coef = model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old);
+    let mlt_pturb = (rho_face * coef) / 3.0;
+    let alfa = crate::hydro_momentum::eval_p_theta(model, k);
+    let time_center = model
+        .controls
+        .is_velocity_time_centered(model.model_number_old)
+        && model.controls.include_p_in_velocity_time_centering
+        && model.ln_t[k] / flexmesa_const::LN10
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering;
+    if !time_center {
+        return mlt_pturb;
+    }
+    let rho_start_m1 = flexmesa_math::exp(model.lnd_start[k - 1]);
+    let rho_start_00 = flexmesa_math::exp(model.lnd_start[k]);
+    let mlt_pturb_start = coef * (rho_start_m1 + rho_start_00) / 6.0;
+    mlt_pturb * alfa + mlt_pturb_start * (1.0 - alfa)
 }
 
 /// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$, `(P_tot * dV)/dm_k`

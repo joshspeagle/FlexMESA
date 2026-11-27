@@ -176,7 +176,7 @@ fn test_equal_ratios_select_the_lowest_tlim_index() {
     let (_, rep) = timestep_controller(&mut m);
     assert_eq!(rep.dt_limit_ratio, 2.0);
     assert_eq!(rep.why_tlim, TLIM_XHE_CNTR);
-    assert!(TLIM_XHE_CNTR < TLIM_XC_CNTR);
+    const { assert!(TLIM_XHE_CNTR < TLIM_XC_CNTR) };
 
     // Slot 26 (`lg_XH_cntr`) precedes slot 38 (`XH_cntr`): lg change
     // log10(1/2) per limit log10(2)/2 -> 2, and X change 0.25 per 0.125.

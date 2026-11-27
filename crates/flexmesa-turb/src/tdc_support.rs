@@ -87,6 +87,21 @@ pub struct TdcInfo<T> {
     pub h: T,
 }
 
+/// Subexpressions of `eval_xis` that upstream evaluates in the structure
+/// type and then lifts with `convert` (`turb/private/tdc_support.f90:537-557`).
+#[derive(Debug, Clone, Copy)]
+pub struct StarXiTerms<T> {
+    /// `convert(Cp*T/h)`.
+    pub cp_t_div_h: T,
+    /// `convert(TDC_alpha_S*x_ALFAS*mixing_length_alpha*Cp*T/Hp)`.
+    pub s0_pref: T,
+    /// `convert(TDC_alpha_D*x_CEDE/(mixing_length_alpha*Hp))`.
+    pub d0: T,
+    /// `convert(4*boltz_sigma*pow2(gammar_div_alfa)*pow3(T)
+    /// /(pow2(rho)*Cp*kap))`.
+    pub dr0: T,
+}
+
 impl<T: crate::tdc_dual::TdcLift> TdcInfo<T> {
     /// Lifts every structure quantity into the Newton solver's dual number
     /// (`convert` in `turb/private/tdc_support.f90:424-430`).
@@ -241,10 +256,16 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
     let one = T::from_f64(1.0);
     let x_gammar = 2.0 * 3.0_f64.sqrt();
 
+    let star = T::star_xi_terms(info);
+
     let mut scale = one;
     if y.val() > 0.0 && info.use_tdc_enthalpy_flux_limiter {
         // `turb/private/tdc_support.f90`, `eval_xis`: left to right.
-        let x = ((info.cp * info.t).div_ad(info.h)
+        let cp_t_div_h = match star {
+            Some(st) => st.cp_t_div_h,
+            None => (info.cp * info.t).div_ad(info.h),
+        };
+        let x = (cp_t_div_h
             * T::from_f64(info.mixing_length_alpha)
             * T::from_f64(info.tdc_alpha_s)
             * T::from_f64(X_ALFAS)
@@ -256,27 +277,35 @@ pub fn eval_xis<T: TurbScalar>(info: &TdcInfo<T>, y: T) -> (T, T, T) {
         }
     }
 
-    let s0_pref =
-        (T::from_f64(info.tdc_alpha_s * X_ALFAS * info.mixing_length_alpha)
-            * info.cp
-            * info.t)
-            .div_ad(info.hp)
-            * info.grada;
+    let s0_pref = match star {
+        Some(st) => st.s0_pref,
+        None => {
+            (T::from_f64(info.tdc_alpha_s * X_ALFAS * info.mixing_length_alpha)
+                * info.cp
+                * info.t)
+                .div_ad(info.hp)
+        }
+    } * info.grada;
     let s0 = if info.use_tdc_enthalpy_flux_limiter {
         s0_pref * (scale * y) + info.eq_div_w
     } else {
         s0_pref * y + info.eq_div_w
     };
 
-    // Upstream divides by the product `mixing_length_alpha*Hp`.
-    let alpha_hp = T::from_f64(info.mixing_length_alpha) * info.hp;
-    let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE).div_ad(alpha_hp);
-    let gammar_div_alfa =
-        T::from_f64(info.tdc_alpha_r * x_gammar).div_ad(alpha_hp);
-    let dr0 = (T::from_f64(4.0 * BOLTZ_SIGMA)
-        * gammar_div_alfa.pow2()
-        * info.t.pow3())
-    .div_ad(info.rho.pow2() * info.cp * info.kap);
+    let (d0, dr0) = if let Some(st) = star {
+        (st.d0, st.dr0)
+    } else {
+        // Upstream divides by the product `mixing_length_alpha*Hp`.
+        let alpha_hp = T::from_f64(info.mixing_length_alpha) * info.hp;
+        let d0 = T::from_f64(info.tdc_alpha_d * X_CEDE).div_ad(alpha_hp);
+        let gammar_div_alfa =
+            T::from_f64(info.tdc_alpha_r * x_gammar).div_ad(alpha_hp);
+        let dr0 = (T::from_f64(4.0 * BOLTZ_SIGMA)
+            * gammar_div_alfa.pow2()
+            * info.t.pow3())
+        .div_ad(info.rho.pow2() * info.cp * info.kap);
+        (d0, dr0)
+    };
     let pt0 = T::from_f64(info.tdc_alpha_pt * X_ALFAP) * info.rho;
     let dv_dt = info.dv.div_real(info.dt);
 

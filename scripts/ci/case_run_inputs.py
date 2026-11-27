@@ -178,7 +178,7 @@ def resolve_dump(
     if window:
         if not _WINDOW_RE.fullmatch(window):
             raise InputError(f"bad window id: {window!r}")
-        path = mesa_dir / WINDOWS_BUNDLE / suite / case / f"{window}.stepdump"
+        path = mesa_dir / WINDOWS_BUNDLE / window / suite / f"{case}.stepdump"
     else:
         path = mesa_dir / "mesa_stepdumps" / suite / f"{case}.stepdump"
     if not path.is_file():

@@ -22,20 +22,20 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 31,559 |
+| Lines in routines mapped in full | 32,026 |
 | Lines in routines mapped in part | 44,081 |
 | Lines in not-applicable routines | 2,535 |
-| Lines in unmapped routines | 45,159 |
+| Lines in unmapped routines | 44,692 |
 | Lines outside routines | 21,618 |
 | Lines in routines with oracle evidence | 4,469 |
-| Line-weighted full-mapping fraction (all lines) | 21.8% |
+| Line-weighted full-mapping fraction (all lines) | 22.1% |
 | Line-weighted partial-mapping fraction (all lines) | 30.4% |
-| Full-mapping fraction excluding not-applicable lines | 22.2% |
+| Full-mapping fraction excluding not-applicable lines | 22.5% |
 | Partial-mapping fraction excluding not-applicable lines | 31.0% |
 | Not-applicable fraction of all lines | 1.7% |
 | Line-weighted oracle fraction | 3.1% |
-| Whole-file ported fraction (existing headline) | 30.7% |
-| Routines (full / partial / N/A / unmapped / total) | 628 / 489 / 106 / 1,365 / 2,588 |
+| Whole-file ported fraction (existing headline) | 31.1% |
+| Routines (full / partial / N/A / unmapped / total) | 639 / 489 / 106 / 1,354 / 2,588 |
 | Routines with oracle evidence | 23 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
@@ -44,7 +44,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 549 | 359 | 72 | 1,196 | 23 | 120,509 | 29,174 | 36,546 | 1,843 | 40,288 | 12,658 | 24.2% | 30.3% | 24.6% | 3.7% | 35.1% |
+| `star` | 173 | 2,176 | 560 | 359 | 72 | 1,185 | 23 | 120,509 | 29,641 | 36,546 | 1,843 | 39,821 | 12,658 | 24.6% | 30.3% | 25.0% | 3.7% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% | 0.0% |
@@ -82,7 +82,7 @@ The ceiling is the highest status that the routine evidence of a file supports. 
 
 `case_level_evidence` is never a ceiling because the `exercised` level is not derived. Contained procedures count as routines. A ceiling over the hand-set status is a candidate for review, not a raise: the table reads no status as evidence and changes none, and nothing gates on this section.
 
-### Hand-set status above the ceiling (37 files)
+### Hand-set status above the ceiling (38 files)
 
 Files whose status needs more than the routine evidence gives. Files with no ceiling claim are not listed; 5 files with a ported status have no ceiling claim. Largest ten:
 
@@ -468,6 +468,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 | 115 | 890 | 0 | 894 | 41 |
 | `star/private/star_utils.f90` | `star` | partial | partial | 4,149 | 156 | 86 | 30 | 5 | 0 | 1,941 | 1,022 | 131 | 566 | 489 |
 | `star/private/struct_burn_mix.f90` | `star` | partial | partial | 1,213 | 19 | 1 | 13 | 2 | 0 | 6 | 1,045 | 39 | 60 | 63 |
+| `star/private/tdc_hydro.f90` | `star` | ported_unverified | partial | 658 | 16 | 11 | 0 | 0 | 0 | 467 | 0 | 0 | 128 | 63 |
 | `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 58 | 5 | 0 | 0 | 1,687 | 574 | 0 | 10 | 161 |
 | `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 6 | 5 | 0 | 0 | 305 | 240 | 0 | 7 | 56 |
 | `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 2 | 3 | 0 | 0 | 71 | 387 | 0 | 0 | 54 |
@@ -499,7 +500,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 ## Backlog of unmapped core-engine routines
 
-1,117 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (32,533 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
+1,101 routines in core-engine files with status `stub`, `partial`, or `absent` have no gate-checked `routine_map` entry (31,938 own lines). Partial and not-applicable routines are not in the backlog. Some may already be implemented without a map entry; the table cannot tell.
 
 ### How cases are attributed, and its limits
 

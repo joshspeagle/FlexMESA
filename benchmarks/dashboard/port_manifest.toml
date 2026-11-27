@@ -1190,7 +1190,7 @@ flexmesa_files = ["crates/flexmesa-astero/src/sample_eval.rs", "crates/flexmesa-
 routine_map_partial = ["astero_extras_after_evolve", "astero_extras_check_model", "astero_extras_controls", "astero_extras_finish_step", "check_limits", "do_astero_extras_check_model", "final_checks", "get_all_el_info", "have_all_l0_freqs", "store_best_info", "write_best"]
 notes = "seeded from coverage-map.md (partial): quick. 2/28 names"
 [files.routine_map]
-"astero_extras_after_evolve" = "crates/flexmesa-astero/src/search_driver.rs::extras_after_evolve"
+"astero_extras_after_evolve" = "crates/flexmesa-astero/src/search_driver.rs::AsteroTrackExtras::extras_after_evolve"
 "astero_extras_check_model" = "crates/flexmesa-astero/src/search_driver.rs::extras_check_model"
 "astero_extras_controls" = "crates/flexmesa-astero/src/search_driver.rs::apply_params_to_bundle"
 "astero_extras_finish_step" = "crates/flexmesa-astero/src/search_driver.rs::extras_finish_step"

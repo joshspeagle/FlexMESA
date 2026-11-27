@@ -9,15 +9,15 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 86 | 4 | 78 | 12 | 75 | 30 | 55 |
+| `star` | 90 | 86 | 4 | 78 | 12 | 75 | 29 | 56 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
 | `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 3 |
-| **Total** | **106** | **102** | **4** | **94** | **12** | **90** | **36** | **62** |
+| **Total** | **106** | **102** | **4** | **94** | **12** | **90** | **35** | **63** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
 - **Undeclared Failures**: `0`
-- **Within Numeric Tolerance While Governed as Gaps**: `9` cases (`star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/relax_composition_j_entropy` ([#154](https://github.com/joshspeagle/FlexMESA/issues/154)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
+- **Within Numeric Tolerance While Governed as Gaps**: `8` cases (`star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
 
@@ -35,7 +35,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 13 | Restore upstream EOS, opacity, network, and atm control paths |
-| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 6 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
+| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 5 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 4 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 4 | Align `astero` search and chi-squared drivers |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
@@ -43,7 +43,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (36 Cases)
+## Complete Known-Gaps Registry (35 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -67,7 +67,6 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `other_physics_hooks` | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | `xa_central_lower_limit` | `error` (0 steps; strict) | Case requires custom overshoot_scheme = 'other' and use_other_mesh_functions hooks (#231). |
 | `star` | `pisn` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `fe_core_infall_limit\|log_Rsurf_upper_limit\|remnant_mass_min_limit\|Star is unbound` | `timeout` (728 steps; strict) | Strict run ends on the 3000 s campaign budget after 728 history rows (48 retries; runner dependent); MESA takes [432] steps; final values out of tolerance: log_L, log_R, log_center_T, log_center_Rho (Train 15 campaign; #161). |
 | `star` | `ppisn` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `Successful test: evolved 100 days past first relax` | `error` (0 steps; diagnostic (6 controls ignored)) | Case requires custom other_wind hook alongside unported massive-star relaxation, rotation, retry, and net controls (#154, #152, #158, #161, #231). |
-| `star` | `relax_composition_j_entropy` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `xa_central_lower_limit` | `xa_central_lower_limit` (259 steps; strict) | Strict run reaches xa_central_lower_limit in [260] steps (MESA [260]); every compared column is within tolerance; held because the case's run_star_extras handler is not ported (Train 14 campaign; #154). |
 | `star` | `rsp_Delta_Scuti` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (7973 steps; strict) | Strict run reaches extras_finish_step in [7973] steps (MESA [7973]); final values out of tolerance: rel_star_age; MESA writes models 5820 to 7973 to map_history.data, which the reference does not include, so the comparison ends at model 5810 (Train 14 campaign; #162). |
 | `star` | `rsp_Type_II_Cepheid` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `extras_finish_step` | `extras_finish_step` (14680 steps; strict) | Strict run reaches extras_finish_step in [14680] steps (MESA [14683]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: log_Teff, log_L (first at step 4392) (Train 14 campaign; #162). |
 | `star` | `split_burn_big_net` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `xa_central_lower_limit` | `xa_central_lower_limit` (9 steps; strict) | Strict run reaches xa_central_lower_limit in [9] steps (MESA [9]); final values out of tolerance: rel_star_age, log_L, log_Teff, log_center_T; track columns out of tolerance: log_Teff, log_L (first at step 9) (Train 15 campaign; #161). |

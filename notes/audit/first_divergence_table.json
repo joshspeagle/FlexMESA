@@ -1,0 +1,1276 @@
+[
+  {
+    "case": "astero/astero_adipls",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/astero_gyre",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/example_astero",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/fast_from_file",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/fast_newuoa",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/fast_scan_grid",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/fast_simplex",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "astero/surface_effects",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/double_bh",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 missing star",
+    "detail": "",
+    "divergence": {
+      "star": 2,
+      "model_index": 0,
+      "mesa_model": -1,
+      "flex_model": 1,
+      "kind": "missing",
+      "record": "star",
+      "position": null,
+      "zone": null,
+      "field": "",
+      "mesa": "none",
+      "flex": "star 2",
+      "ulps": null
+    }
+  },
+  {
+    "case": "binary/evolve_both_stars",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/jdot_gr_check",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/jdot_ls_check",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/jdot_ml_check",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/star_plus_point_mass",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/star_plus_point_mass_explicit_mdot",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/star_plus_point_mass_explicit_mdot (stage 1, occurrence 1, models 127..129)",
+    "window": "models 127..+3",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1",
+    "detail": "lnd, 573456336 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 127,
+      "flex_model": 127,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1,
+      "field": "lnd",
+      "mesa": "-2.10803354668654599e+01 (C0351490DD7AE563)",
+      "flex": "-2.10803334295392908e+01 (C0351490BB4CA593)",
+      "ulps": 573456336
+    }
+  },
+  {
+    "case": "binary/star_plus_point_mass_explicit_mdot (stage 1, occurrence 1, models 190..192)",
+    "window": "models 190..+3",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1",
+    "detail": "lnd, 1526014085887 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 190,
+      "flex_model": 190,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1,
+      "field": "lnd",
+      "mesa": "-2.19947727899116643e+01 (C035FEA96DF79F0C)",
+      "flex": "-2.19893512987946913e+01 (C035FD462070940D)",
+      "ulps": 1526014085887
+    }
+  },
+  {
+    "case": "binary/star_plus_point_mass_explicit_mdot (stage 1, occurrence 1, models 64..66)",
+    "window": "models 64..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/wind_fed_bhhmxb",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "binary/wind_fed_bhhmxb (stage 1, occurrence 1, models 94..106)",
+    "window": "models 94..+13",
+    "run": "ok",
+    "first_divergence": "model #9 value CALL record 261",
+    "detail": "residual_norm, 120666 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 8,
+      "mesa_model": 102,
+      "flex_model": 102,
+      "kind": "value",
+      "record": "CALL",
+      "position": 261,
+      "zone": null,
+      "field": "residual_norm",
+      "mesa": "3.43087356938739652e-02 (3FA190EA238B6A74)",
+      "flex": "3.43087356930366766e-02 (3FA190EA2389931A)",
+      "ulps": 120666
+    }
+  },
+  {
+    "case": "star/1.3M_ms_high_Z",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/1.5M_with_diffusion",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #2 zone STATE zone 1",
+    "detail": "h1, 1861586638 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 1,
+      "mesa_model": 2,
+      "flex_model": 2,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1,
+      "field": "h1",
+      "mesa": "9.99999997402956087e-01 (3FEFFFFFFE9B10A4)",
+      "flex": "1.00000040816118174e+00 (3FF000006D909F72)",
+      "ulps": 1861586638
+    }
+  },
+  {
+    "case": "star/12M_pre_ms_to_core_collapse",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1660",
+    "detail": "neut, 1 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 2592,
+      "flex_model": 2592,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1660,
+      "field": "neut",
+      "mesa": "4.84811150616520767e-26 (3AAE0223AADDA2A8)",
+      "flex": "4.84811150616520709e-26 (3AAE0223AADDA2A7)",
+      "ulps": 1
+    }
+  },
+  {
+    "case": "star/15M_dynamo",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/16M_conv_premix",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/16M_predictive_mix",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/1M_pre_ms_to_wd",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/1M_thermohaline",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/20M_pre_ms_to_core_collapse",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1581",
+    "detail": "he3, 2 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 2099,
+      "flex_model": 2099,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1581,
+      "field": "he3",
+      "mesa": "3.05267024075444802e-30 (39CEF52F5F79FD0A)",
+      "flex": "3.05267024075444872e-30 (39CEF52F5F79FD0C)",
+      "ulps": 2
+    }
+  },
+  {
+    "case": "star/20M_z2m2_high_rotation",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value CORR record 1",
+    "detail": "correction_norm, 5 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "CORR",
+      "position": 1,
+      "zone": null,
+      "field": "correction_norm",
+      "mesa": "5.18195403351932524e-03 (3F7539AC31A748AC)",
+      "flex": "5.18195403351932957e-03 (3F7539AC31A748B1)",
+      "ulps": 5
+    }
+  },
+  {
+    "case": "star/5M_cepheid_blue_loop",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/7M_prems_to_AGB",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/R_CrB_star",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/T_tau_gradr",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/accreted_material_j",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/adjust_net",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 390",
+    "detail": "mlt_vc, 4413675282539186799 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 390,
+      "field": "mlt_vc",
+      "mesa": "0.00000000000000000e+00 (0000000000000000)",
+      "flex": "1.17413990072880931e-13 (3D408648E9AB8A6F)",
+      "ulps": 4413675282539186799
+    }
+  },
+  {
+    "case": "star/c13_pocket",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/carbon_kh",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/cburn_inward",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/ccsn_IIp",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value CORR record 1",
+    "detail": "correction_norm, 82633 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "CORR",
+      "position": 1,
+      "zone": null,
+      "field": "correction_norm",
+      "mesa": "2.59919932700643769e-07 (3E917163F403A258)",
+      "flex": "2.59919932705018324e-07 (3E917163F404E521)",
+      "ulps": 82633
+    }
+  },
+  {
+    "case": "star/check_pulse_atm",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/check_redo",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/conductive_flame",
+    "window": "start of run",
+    "run": "error",
+    "first_divergence": "no FlexMESA dump (run stopped first)",
+    "detail": "ValueError: invalid star input: use_other_build_initial_model = .true. requires an other_build_initial_model hook"
+  },
+  {
+    "case": "star/conserve_angular_momentum",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/conserve_angular_momentum (stage 1, occurrence 1, models 135..137)",
+    "window": "models 135..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/conserve_angular_momentum (stage 1, occurrence 1, models 202..204)",
+    "window": "models 202..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/conserve_angular_momentum (stage 1, occurrence 1, models 67..69)",
+    "window": "models 67..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/conv_core_cpm",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/custom_colors",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/custom_rates",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 1",
+    "detail": "eps_nuc, 278078612426700634 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 1,
+      "field": "eps_nuc",
+      "mesa": "-8.46153228745225408e-66 (B26C83EB2F8A2351)",
+      "flex": "-2.13387074286894636e-84 (AE9094E4DE366BF7)",
+      "ulps": 278078612426700634
+    }
+  },
+  {
+    "case": "star/diffusion_smoothness",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/extended_convective_penetration",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_bcep",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_envelope",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_ms",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_rsg",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_spb",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/gyre_in_mesa_wd",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hb_2M",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/high_mass",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/high_rot_darkening",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1",
+    "detail": "w_div_wc, 4604480259023574973 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1,
+      "field": "w_div_wc",
+      "mesa": "0.00000000000000000e+00 (0000000000000000)",
+      "flex": "6.99999999997764299e-01 (3FE66666666617BD)",
+      "ulps": 4604480259023574973
+    }
+  },
+  {
+    "case": "star/high_z",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/high_z (stage 1, occurrence 1, models 250..260)",
+    "window": "models 250..+11",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hot_cool_wind",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hot_cool_wind (stage 1, occurrence 1, models 185..187)",
+    "window": "models 185..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hot_cool_wind (stage 1, occurrence 1, models 277..279)",
+    "window": "models 277..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hot_cool_wind (stage 1, occurrence 1, models 92..94)",
+    "window": "models 92..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/hse_riemann",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value CORR record 1",
+    "detail": "correction_norm, 34659 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "CORR",
+      "position": 1,
+      "zone": null,
+      "field": "correction_norm",
+      "mesa": "2.67243845322296583e-06 (3EC66B0493B0D822)",
+      "flex": "2.67243845320828717e-06 (3EC66B0493B050BF)",
+      "ulps": 34659
+    }
+  },
+  {
+    "case": "star/irradiated_planet",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/low_z",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/magnetic_braking",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_brown_dwarf",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_co_wd",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_env",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value RESID record 4",
+    "detail": "residual_norm, 52211 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "RESID",
+      "position": 4,
+      "zone": null,
+      "field": "residual_norm",
+      "mesa": "3.96711799307844986e-05 (3F04CC935CF8D082)",
+      "flex": "3.96711799311382941e-05 (3F04CC935CF99C75)",
+      "ulps": 52211
+    }
+  },
+  {
+    "case": "star/make_he_wd",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_metals",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_o_ne_wd",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 830",
+    "detail": "eps_nuc, 4497261493369293441 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1010,
+      "flex_model": 1010,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 830,
+      "field": "eps_nuc",
+      "mesa": "0.00000000000000000e+00 (0000000000000000)",
+      "flex": "4.74647146386226975e-08 (3E697B802E51CA81)",
+      "ulps": 4497261493369293441
+    }
+  },
+  {
+    "case": "star/make_planets",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_planets (stage 3, occurrence 1, models 107..111)",
+    "window": "models 107..+5",
+    "run": "skipped",
+    "first_divergence": "not compared",
+    "detail": "stage 3 (FlexMESA dump has no stage selector)"
+  },
+  {
+    "case": "star/make_planets (stage 3, occurrence 1, models 23..45)",
+    "window": "models 23..+23",
+    "run": "skipped",
+    "first_divergence": "not compared",
+    "detail": "stage 3 (FlexMESA dump has no stage selector)"
+  },
+  {
+    "case": "star/make_pre_ccsn_13bvn",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 2",
+    "detail": "gradT, 367940162371980 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 3823,
+      "flex_model": 3823,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 2,
+      "field": "gradT",
+      "mesa": "4.50929918680221864e-01 (3FDCDC0929613F5D)",
+      "flex": "4.30505136682737322e-01 (3FDB8D656AB3FDD1)",
+      "ulps": 367940162371980
+    }
+  },
+  {
+    "case": "star/make_sdb",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_zams",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_zams_low_mass",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/make_zams_ultra_high_mass",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/ns_c",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value RESID record 4",
+    "detail": "residual_norm, 2197 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "RESID",
+      "position": 4,
+      "zone": null,
+      "field": "residual_norm",
+      "mesa": "9.42747810916309686e-02 (3FB822645DA04905)",
+      "flex": "9.42747810916614581e-02 (3FB822645DA0519A)",
+      "ulps": 2197
+    }
+  },
+  {
+    "case": "star/ns_h",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/ns_h (stage 2, occurrence 1, models 1..22)",
+    "window": "models 1..+22",
+    "run": "skipped",
+    "first_divergence": "not compared",
+    "detail": "stage 2 (FlexMESA dump has no stage selector)"
+  },
+  {
+    "case": "star/ns_h (stage 2, occurrence 1, models 90..101)",
+    "window": "models 90..+12",
+    "run": "skipped",
+    "first_divergence": "not compared",
+    "detail": "stage 2 (FlexMESA dump has no stage selector)"
+  },
+  {
+    "case": "star/ns_he",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/ns_he (stage 1, occurrence 1, models 255..284)",
+    "window": "models 255..+30",
+    "run": "ok",
+    "first_divergence": "model #16 value RESID record 21",
+    "detail": "residual_norm, 3 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 15,
+      "mesa_model": 270,
+      "flex_model": 270,
+      "kind": "value",
+      "record": "RESID",
+      "position": 21,
+      "zone": null,
+      "field": "residual_norm",
+      "mesa": "8.30958942277536907e-07 (3EABE1E209D9A439)",
+      "flex": "8.30958942277537225e-07 (3EABE1E209D9A43C)",
+      "ulps": 3
+    }
+  },
+  {
+    "case": "star/other_physics_hooks",
+    "window": "start of run",
+    "run": "error",
+    "first_divergence": "no FlexMESA dump (run stopped first)",
+    "detail": "ValueError: invalid star input: overshoot_scheme(1) = 'other' requires a custom other_overshooting_scheme hook (default null_other_overshooting_scheme returns i"
+  },
+  {
+    "case": "star/pisn",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 515",
+    "detail": "eps_nuc, 4731744140776809275 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 101,
+      "flex_model": 101,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 515,
+      "field": "eps_nuc",
+      "mesa": "0.00000000000000000e+00 (0000000000000000)",
+      "flex": "2.22567667518823475e+08 (41AA8839E709A33B)",
+      "ulps": 4731744140776809275
+    }
+  },
+  {
+    "case": "star/ppisn",
+    "window": "start of run",
+    "run": "error",
+    "first_divergence": "no FlexMESA dump (run stopped first)",
+    "detail": "ValueError: invalid star input: use_other_kap = .true. requires an other_kap hook"
+  },
+  {
+    "case": "star/relax_composition_j_entropy",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/relax_composition_j_entropy (stage 1, occurrence 1, models 110..121)",
+    "window": "models 110..+12",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/relax_composition_j_entropy (stage 1, occurrence 1, models 147..149)",
+    "window": "models 147..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/relax_composition_j_entropy (stage 1, occurrence 1, models 49..51)",
+    "window": "models 49..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/relax_composition_j_entropy (stage 1, occurrence 1, models 98..100)",
+    "window": "models 98..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/semiconvection",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/simplex_solar_calibration",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/split_burn_big_net",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 1490",
+    "detail": "eps_nuc, 4725389315934872213 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 1490,
+      "field": "eps_nuc",
+      "mesa": "0.00000000000000000e+00 (0000000000000000)",
+      "flex": "8.36984284310401231e+07 (4193F48BF1B96295)",
+      "ulps": 4725389315934872213
+    }
+  },
+  {
+    "case": "star/starspots",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/timing",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/twin_studies",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 value RESID record 4",
+    "detail": "residual_norm, 65934 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "value",
+      "record": "RESID",
+      "position": 4,
+      "zone": null,
+      "field": "residual_norm",
+      "mesa": "3.75516661581731998e-04 (3F389C1FC7D52E6A)",
+      "flex": "3.75516661578157709e-04 (3F389C1FC7D42CDC)",
+      "ulps": 65934
+    }
+  },
+  {
+    "case": "star/tzo",
+    "window": "start of run",
+    "run": "timeout",
+    "first_divergence": "model #1 zone AUX zone 1",
+    "detail": "gradT, 100329261173 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 1,
+      "field": "gradT",
+      "mesa": "1.64222694704702160e-01 (3FC5053FCF82439B)",
+      "flex": "1.64225479401097108e-01 (3FC505572B994C10)",
+      "ulps": 100329261173
+    }
+  },
+  {
+    "case": "star/wd_acc_small_dm",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_aic",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone AUX zone 911",
+    "detail": "eps_nuc, 2 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 1,
+      "flex_model": 1,
+      "kind": "zone",
+      "record": "AUX",
+      "position": null,
+      "zone": 911,
+      "field": "eps_nuc",
+      "mesa": "2.02327076787967335e-25 (3ACF4F005299F1FF)",
+      "flex": "2.02327076787967289e-25 (3ACF4F005299F1FD)",
+      "ulps": 2
+    }
+  },
+  {
+    "case": "star/wd_c_core_ignition",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_c_core_ignition (stage 1, occurrence 1, models 190..192)",
+    "window": "models 190..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_c_core_ignition (stage 1, occurrence 1, models 250..261)",
+    "window": "models 250..+12",
+    "run": "ok",
+    "first_divergence": "model #4 value CORR record 13",
+    "detail": "correction_norm, 2 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 3,
+      "mesa_model": 253,
+      "flex_model": 253,
+      "kind": "value",
+      "record": "CORR",
+      "position": 13,
+      "zone": null,
+      "field": "correction_norm",
+      "mesa": "1.32088353895800962e-10 (3DE227721F6DDE8C)",
+      "flex": "1.32088353895800911e-10 (3DE227721F6DDE8A)",
+      "ulps": 2
+    }
+  },
+  {
+    "case": "star/wd_c_core_ignition (stage 1, occurrence 1, models 285..287)",
+    "window": "models 285..+3",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1",
+    "detail": "lnd, 14761830262 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 285,
+      "flex_model": 285,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1,
+      "field": "lnd",
+      "mesa": "-3.02454216605114690e+00 (C008324329C4805D)",
+      "flex": "-3.02454872162068389e+00 (C008324699A427D3)",
+      "ulps": 14761830262
+    }
+  },
+  {
+    "case": "star/wd_c_core_ignition (stage 1, occurrence 1, models 95..97)",
+    "window": "models 95..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_cool_0.6M",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_diffusion",
+    "window": "start of run",
+    "run": "error",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_he_shell_ignition",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_he_shell_ignition (stage 1, occurrence 1, models 810..821)",
+    "window": "models 810..+12",
+    "run": "timeout",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_he_shell_ignition (stage 1, occurrence 1, models 850..861)",
+    "window": "models 850..+12",
+    "run": "timeout",
+    "first_divergence": "model #9 zone STATE zone 651",
+    "detail": "n14, 16 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 8,
+      "mesa_model": 858,
+      "flex_model": 858,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 651,
+      "field": "n14",
+      "mesa": "8.05263598620316920e-50 (35BE20E4993BFD26)",
+      "flex": "8.05263598620315400e-50 (35BE20E4993BFD16)",
+      "ulps": 16
+    }
+  },
+  {
+    "case": "star/wd_nova_burst",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_stable_h_burn",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_stable_h_burn (stage 1, occurrence 1, models 131..133)",
+    "window": "models 131..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_stable_h_burn (stage 1, occurrence 1, models 44..46)",
+    "window": "models 44..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_stable_h_burn (stage 1, occurrence 1, models 70..81)",
+    "window": "models 70..+12",
+    "run": "ok",
+    "first_divergence": "model #12 missing CALL record 13",
+    "detail": "",
+    "divergence": {
+      "star": 1,
+      "model_index": 11,
+      "mesa_model": 81,
+      "flex_model": 81,
+      "kind": "missing",
+      "record": "CALL",
+      "position": 13,
+      "zone": null,
+      "field": "",
+      "mesa": "CALL",
+      "flex": "none",
+      "ulps": null
+    }
+  },
+  {
+    "case": "star/wd_stable_h_burn (stage 1, occurrence 1, models 87..89)",
+    "window": "models 87..+3",
+    "run": "ok",
+    "first_divergence": "none (bit-identical)",
+    "detail": ""
+  },
+  {
+    "case": "star/wd_stable_h_burn (stage 1, occurrence 2, models 70..81)",
+    "window": "models 70..+12",
+    "run": "skipped",
+    "first_divergence": "not compared",
+    "detail": "occurrence 2 (FlexMESA dump has no occurrence selector)"
+  },
+  {
+    "case": "star/zams_to_cc_80",
+    "window": "start of run",
+    "run": "ok",
+    "first_divergence": "model #1 zone STATE zone 1371",
+    "detail": "he4, 1 ULP",
+    "divergence": {
+      "star": 1,
+      "model_index": 0,
+      "mesa_model": 2296,
+      "flex_model": 2296,
+      "kind": "zone",
+      "record": "STATE",
+      "position": null,
+      "zone": 1371,
+      "field": "he4",
+      "mesa": "3.36167366431801577e-09 (3E2CE066086201F6)",
+      "flex": "3.36167366431801536e-09 (3E2CE066086201F5)",
+      "ulps": 1
+    }
+  }
+]

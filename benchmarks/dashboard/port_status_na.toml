@@ -964,3 +964,12 @@ first = 475
 last = 489
 category = "dead_code"
 reason = "Private function with no caller in tdc_hydro.f90; hydro_rsp2.f90 calls its own copy (hydro_rsp2.f90:653)."
+
+[[na]]
+upstream_path = "utils/private/utils_idict.f90"
+routine = "do_integer_idict_create_hash"
+parent = ""
+first = 313
+last = 346
+category = "fortran_mem"
+reason = "Builds an internal 4*cnt Fortran hash table for O(1) lookup; Rust IntegerIdict uses BTreeMap directly."

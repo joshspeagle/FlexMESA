@@ -10,7 +10,7 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 
 * `full`: the `routine_map` names the routine, the target passes the `routine_map` gate, and the routine is not listed in `routine_map_partial`.
 * `partial`: mapped as above and listed in the file's `routine_map_partial`, because the Rust counterpart implements only part of the upstream routine.
-* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (107 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
+* `N/A`: declared not applicable to a Rust port in `benchmarks/dashboard/port_status_na.toml` (108 declared). Never counted as mapped and never removed from a denominator; both fractions are shown.
 * `unmapped`: none of the above.
 * `oracle`: the routine is mapped in full and a test file classified `oracle` in the taxonomy lists its `<upstream path>::<routine>` id in its `routines` field. This is the taxonomy's own record of per-routine oracle cover; it is a listing, not a call-site check.
 * `exercised` (reached by a strict-pass history case) is not derived.
@@ -62,10 +62,10 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `mtx` | 23 | 163 | 0 | 0 | 0 | 163 | 0 | 5,802 | 0 | 0 | 0 | 5,147 | 655 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `interp_1d` | 11 | 111 | 0 | 0 | 0 | 111 | 0 | 4,969 | 0 | 0 | 0 | 4,351 | 618 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `interp_2d` | 10 | 82 | 2 | 0 | 0 | 80 | 2 | 13,565 | 90 | 0 | 0 | 12,965 | 510 | 0.7% | 0.0% | 0.7% | 0.7% | 0.9% |
-| `auto_diff` | 10 | 927 | 0 | 0 | 0 | 927 | 0 | 14,353 | 0 | 0 | 0 | 10,306 | 4,047 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `math` | 6 | 35 | 0 | 0 | 0 | 35 | 0 | 936 | 0 | 0 | 0 | 485 | 451 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `auto_diff` | 10 | 927 | 459 | 4 | 0 | 464 | 70 | 14,353 | 6,133 | 30 | 0 | 4,143 | 4,047 | 42.7% | 0.2% | 42.7% | 4.1% | 0.0% |
+| `math` | 6 | 35 | 21 | 4 | 0 | 10 | 21 | 936 | 228 | 52 | 0 | 205 | 451 | 24.4% | 5.6% | 24.4% | 24.4% | 0.0% |
 | `const` | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 256 | 0 | 0 | 0 | 48 | 208 | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
-| `utils` | 11 | 150 | 0 | 0 | 0 | 150 | 0 | 3,398 | 0 | 0 | 0 | 2,614 | 784 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `utils` | 11 | 150 | 6 | 15 | 1 | 128 | 0 | 3,398 | 55 | 288 | 34 | 2,237 | 784 | 1.6% | 8.5% | 1.6% | 0.0% | 0.0% |
 | `gyre` | 171 | 983 | 198 | 85 | 0 | 700 | 0 | 55,708 | 7,874 | 4,891 | 0 | 27,976 | 14,967 | 14.1% | 8.8% | 14.1% | 0.0% | 0.0% |
 | `adipls` | 133 | 221 | 36 | 10 | 0 | 175 | 0 | 30,923 | 5,633 | 3,889 | 0 | 21,242 | 159 | 18.2% | 12.6% | 18.2% | 0.0% | 0.0% |
 | `stella` | 109 | 238 | 0 | 0 | 0 | 238 | 0 | 45,351 | 0 | 0 | 0 | 39,716 | 5,635 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -99,7 +99,7 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 |
 | `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 |
 
-### `partial` files with every applicable routine mapped in full (57 files)
+### `partial` files with every applicable routine mapped in full (59 files)
 
 Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
@@ -175,14 +175,14 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `atm/private/table_atm.f90` | `atm` | partial | - | 684 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 644 | 40 |
 | `atm/public/atm_def.f90` | `atm` | partial | - | 146 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 146 |
 | `atm/public/atm_lib.f90` | `atm` | partial | - | 93 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 16 | 77 |
-| `auto_diff/private/auto_diff_real_15var_order1_module.f90` | `auto_diff` | partial | - | 1,132 | 101 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 714 | 418 |
-| `auto_diff/private/auto_diff_real_1var_order1_module.f90` | `auto_diff` | partial | - | 1,319 | 116 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 820 | 499 |
-| `auto_diff/private/auto_diff_real_2var_order1_module.f90` | `auto_diff` | partial | - | 1,545 | 117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,039 | 506 |
-| `auto_diff/private/auto_diff_real_2var_order2_module.f90` | `auto_diff` | partial | - | 2,009 | 117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,500 | 509 |
-| `auto_diff/private/auto_diff_real_2var_order3_module.f90` | `auto_diff` | partial | - | 3,410 | 117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2,897 | 513 |
-| `auto_diff/private/auto_diff_real_4var_order1_module.f90` | `auto_diff` | partial | - | 1,751 | 119 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,231 | 520 |
-| `auto_diff/private/auto_diff_real_star_order1_module.f90` | `auto_diff` | partial | - | 1,307 | 115 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 814 | 493 |
-| `auto_diff/private/support_functions.f90` | `auto_diff` | partial | - | 135 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 77 | 58 |
+| `auto_diff/private/auto_diff_real_15var_order1_module.f90` | `auto_diff` | partial | partial | 1,132 | 101 | 49 | 4 | 0 | 0 | 340 | 30 | 0 | 344 | 418 |
+| `auto_diff/private/auto_diff_real_1var_order1_module.f90` | `auto_diff` | partial | partial | 1,319 | 116 | 67 | 0 | 0 | 32 | 470 | 0 | 0 | 350 | 499 |
+| `auto_diff/private/auto_diff_real_2var_order1_module.f90` | `auto_diff` | partial | partial | 1,545 | 117 | 67 | 0 | 0 | 36 | 644 | 0 | 0 | 395 | 506 |
+| `auto_diff/private/auto_diff_real_2var_order2_module.f90` | `auto_diff` | partial | partial | 2,009 | 117 | 70 | 0 | 0 | 0 | 1,065 | 0 | 0 | 435 | 509 |
+| `auto_diff/private/auto_diff_real_2var_order3_module.f90` | `auto_diff` | partial | partial | 3,410 | 117 | 70 | 0 | 0 | 0 | 2,348 | 0 | 0 | 549 | 513 |
+| `auto_diff/private/auto_diff_real_4var_order1_module.f90` | `auto_diff` | partial | partial | 1,751 | 119 | 67 | 0 | 0 | 0 | 776 | 0 | 0 | 455 | 520 |
+| `auto_diff/private/auto_diff_real_star_order1_module.f90` | `auto_diff` | partial | partial | 1,307 | 115 | 67 | 0 | 0 | 2 | 470 | 0 | 0 | 344 | 493 |
+| `auto_diff/private/support_functions.f90` | `auto_diff` | partial | partial | 135 | 9 | 2 | 0 | 0 | 0 | 20 | 0 | 0 | 57 | 58 |
 | `auto_diff/public/auto_diff.f90` | `auto_diff` | partial | - | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 30 |
 | `binary/job/run_binary.f90` | `binary` | ported_unverified | ported_unverified | 44 | 1 | 1 | 0 | 0 | 0 | 17 | 0 | 0 | 0 | 27 |
 | `binary/private/binary_ctrls_io.f90` | `binary` | partial | partial | 821 | 9 | 0 | 5 | 1 | 0 | 0 | 302 | 197 | 69 | 253 |
@@ -352,10 +352,10 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `kap/private/load_kap.f90` | `kap` | partial | - | 765 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 710 | 55 |
 | `kap/public/kap_def.f90` | `kap` | partial | - | 834 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 320 | 514 |
 | `kap/public/kap_lib.f90` | `kap` | partial | - | 868 | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 697 | 171 |
-| `math/private/math_pown.f90` | `math` | partial | - | 143 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 64 | 79 |
+| `math/private/math_pown.f90` | `math` | partial | kernel_reference_vectors | 143 | 8 | 8 | 0 | 0 | 8 | 64 | 0 | 0 | 0 | 79 |
 | `math/public/math_def.f90` | `math` | partial | - | 49 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 49 |
-| `math/public/math_lib_intrinsic.f90` | `math` | partial | - | 324 | 16 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 164 | 160 |
-| `math/public/precompute_zs.inc` | `math` | partial | - | 52 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 52 | 0 |
+| `math/public/math_lib_intrinsic.f90` | `math` | partial | partial | 324 | 16 | 12 | 4 | 0 | 12 | 112 | 52 | 0 | 0 | 160 |
+| `math/public/precompute_zs.inc` | `math` | partial | kernel_reference_vectors | 52 | 1 | 1 | 0 | 0 | 1 | 52 | 0 | 0 | 0 | 0 |
 | `mtx/private/bcyclic.f90` | `mtx` | partial | - | 603 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 539 | 64 |
 | `mtx/private/mtx_support.f90` | `mtx` | partial | - | 1,099 | 32 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 998 | 101 |
 | `mtx/private/my_lapack95.f90` | `mtx` | partial | - | 1,414 | 24 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,338 | 76 |
@@ -596,11 +596,11 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `turb/private/tdc_support.f90` | `turb` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 | 448 | 0 | 0 | 0 | 233 |
 | `turb/private/thermohaline.f90` | `turb` | ported_unverified | partial | 363 | 6 | 5 | 1 | 0 | 0 | 221 | 86 | 0 | 0 | 56 |
 | `turb/public/turb.f90` | `turb` | ported_unverified | kernel_reference_vectors | 294 | 4 | 4 | 0 | 0 | 4 | 151 | 0 | 0 | 0 | 143 |
-| `utils/private/utils_idict.f90` | `utils` | partial | - | 525 | 20 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 472 | 53 |
+| `utils/private/utils_idict.f90` | `utils` | partial | partial | 525 | 20 | 1 | 3 | 1 | 0 | 15 | 74 | 34 | 349 | 53 |
 | `utils/private/utils_nan.f90` | `utils` | partial | - | 32 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 |
-| `utils/private/utils_nan_dp.f90` | `utils` | partial | - | 270 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 191 | 79 |
+| `utils/private/utils_nan_dp.f90` | `utils` | partial | partial | 270 | 8 | 1 | 0 | 0 | 0 | 12 | 0 | 0 | 179 | 79 |
 | `utils/public/utils_def.f90` | `utils` | partial | - | 62 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 62 |
-| `utils/public/utils_lib.f90` | `utils` | partial | - | 1,189 | 75 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,015 | 174 |
+| `utils/public/utils_lib.f90` | `utils` | partial | partial | 1,189 | 75 | 4 | 12 | 0 | 0 | 28 | 214 | 0 | 773 | 174 |
 
 ## Backlog of unmapped core-engine routines
 

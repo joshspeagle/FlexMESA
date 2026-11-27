@@ -190,12 +190,7 @@ pub fn compute_x_scale_into(
             .copied()
             .unwrap_or(model.ln_t[k])
             .abs();
-        let lnr_s = model
-            .ln_r_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.ln_r[k])
-            .abs();
+        let lnr_s = model.ln_r_start[k].abs();
         let lum_s = model
             .lum_start
             .get(k)
@@ -838,6 +833,36 @@ fn check_unported_eval_equ_switches(
     Ok(())
 }
 
+/// Checks that the start-of-step arrays the equations read for every zone,
+/// `s% r_start` (as `ln_r_start`) and `s% mlt_vc_old`, cover all `nz` zones.
+/// Upstream allocates both with the model (`star/private/alloc.f90`) and
+/// sets them at the start of the step (`r_start` in `set_basic_vars`,
+/// `star/private/hydro_vars.f90:744`; `mlt_vc_old` in `new_generation`,
+/// `star/private/evolve_support.f90:58`), so a missing value has no
+/// upstream counterpart. The equation routines index them directly; this is
+/// their single check per evaluation, run by [`assemble_henyey_system`] and
+/// at the start of the solver.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] naming the short array.
+pub(crate) fn check_start_of_step_arrays(
+    model: &StarModel,
+) -> Result<(), StarError> {
+    let nz = model.nz;
+    for (name, len) in [
+        ("ln_r_start", model.ln_r_start.len()),
+        ("mlt_vc_old", model.aux.mlt_vc_old.len()),
+    ] {
+        if len < nz {
+            return Err(StarError::InvalidInput(format!(
+                "{name} has {len} entries for nz = {nz}; the equations read \
+                 it at every zone"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Assembles the coupled 1D Henyey residual vector and scaled block-tridiagonal
 /// Jacobian blocks into `sys` from the current microphysical and [`StarAdOrder1`]
 /// fields on `model` without re-running `set_hydro_vars` or `eval_eps_grav`.
@@ -850,6 +875,7 @@ pub fn assemble_henyey_system(
     include_chem: bool,
     sys: &mut HenyeySystem,
 ) -> Result<(), StarError> {
+    check_start_of_step_arrays(model)?;
     let nz = model.nz;
     let nvar = model.layout.nvar(include_chem);
     sys.nvar = nvar;

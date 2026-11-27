@@ -1209,6 +1209,14 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     // `use_other_cgrav` is set; the hook's values return at the next
     // `set_hydro_vars`.
     model.cgrav.fill(STANDARD_CGRAV);
+    // The same resize sets `s% alpha_mlt(1:nz) = s% mixing_length_alpha`
+    // (`star/private/alloc.f90:980-984`); `other_alpha_mlt` values return at
+    // the next `set_hydro_vars` (`star/private/hydro_vars.f90:571-579`).
+    model
+        .aux
+        .mixing
+        .alpha_mlt
+        .fill(model.controls.mixing_length_alpha);
     model.dq.copy_from_slice(&plan.dq_new);
     fix_tail_dq(&mut model.dq)?;
     model.set_qs();

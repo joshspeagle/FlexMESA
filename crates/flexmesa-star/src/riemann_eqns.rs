@@ -189,11 +189,8 @@ pub(crate) fn eval1_work_u_flag_ad(
                 * model.v_center,
         );
     }
-    let using_v_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let using_v_tc =
+        model.controls.using_velocity_time_centering && model.dt > 0.0;
     let (area_f, _) = get_area_info_opt_time_center(model, f_idx);
 
     let uf_ad = model

@@ -125,8 +125,7 @@ fn build_xh_start_buffer(model: &StarModel) -> Vec<f64> {
             model.lnd_start.get(k).copied().unwrap_or(model.lnd[k]);
         buf[base + layout.i_lnt] =
             model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]);
-        buf[base + layout.i_lnr] =
-            model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
+        buf[base + layout.i_lnr] = model.ln_r_start[k];
         buf[base + layout.i_lum] =
             model.lum_start.get(k).copied().unwrap_or(model.lum[k]);
         if let Some(iv) = layout.i_v {
@@ -570,6 +569,7 @@ pub fn solve_henyey_step(
         });
     }
 
+    crate::hydro_eqns::check_start_of_step_arrays(model)?;
     let nz = model.nz;
     let nvar_hydro = model.layout.nvar_hydro;
     let nvar = model.layout.nvar(include_chem);

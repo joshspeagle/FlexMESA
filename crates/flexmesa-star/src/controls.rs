@@ -490,7 +490,9 @@ pub struct StarControls {
     pub x_character_ctrl: Vec<String>,
 
     // --- Fidelity-1 Hydrodynamic, Energy & `eps_grav` Controls (`hydro_*.f90`, `eps_grav.f90`) ---
-    /// Whether velocity time-centering is active (`using_velocity_time_centering`).
+    /// Step state `s% using_velocity_time_centering`, not an inlist control:
+    /// `.false.` for a new star (`star/private/init.f90:347`) and switched on
+    /// at the start of a step (`star/private/evolve.f90:386-389`).
     pub using_velocity_time_centering: bool,
     /// Step threshold at or after which velocity time-centering activates (`steps_before_use_velocity_time_centering`, `-1` disables).
     pub steps_before_use_velocity_time_centering: isize,
@@ -942,19 +944,20 @@ impl Default for ColorsControls {
 }
 
 impl StarControls {
-    /// Returns `true` when velocity time-centering is active at `model_number`
-    /// (`star/private/evolve.f90:386-388`).
-    ///
-    /// Upstream evaluates the threshold on the first try of a step, before
-    /// `prepare_for_new_try` advances `model_number` (`evolve.f90:401-402,
-    /// 2012`), so callers pass the previous generation's number,
-    /// `StarModel::model_number_old`.
-    #[must_use]
-    pub fn is_velocity_time_centered(&self, model_number: usize) -> bool {
-        self.using_velocity_time_centering
-            || (self.steps_before_use_velocity_time_centering >= 0
-                && (model_number as isize)
-                    >= self.steps_before_use_velocity_time_centering)
+    /// Sets `s% using_velocity_time_centering` on a step's first try, after
+    /// `prepare_for_new_step` and before `prepare_for_new_try` advances
+    /// `model_number` (`star/private/evolve.f90:386-389`). Upstream only ever
+    /// sets it `.true.` here; it starts `.false.` for a new star
+    /// (`star/private/init.f90:347`) and is never reset during a run, a
+    /// relax included.
+    pub(crate) fn set_velocity_time_centering_for_new_step(
+        &mut self,
+        model_number: usize,
+    ) {
+        let steps = self.steps_before_use_velocity_time_centering;
+        if steps == 0 || (steps > 0 && (model_number as isize) >= steps) {
+            self.using_velocity_time_centering = true;
+        }
     }
 }
 

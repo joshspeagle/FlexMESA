@@ -712,6 +712,14 @@ impl StarModel {
             ln_t_surf_ad: StarAdOrder1::ZERO,
             aux: HydroAuxState::new(nz, species),
         };
+        // `allocate_star_info_arrays` sets
+        // `s% alpha_mlt(1:nz) = s% mixing_length_alpha`
+        // (`star/private/alloc.f90:980-984`).
+        model
+            .aux
+            .mixing
+            .alpha_mlt
+            .fill(model.controls.mixing_length_alpha);
         // The case's `other_*` hooks are set on the star in `extras_controls`,
         // before any model is built or loaded
         // (`star/job/run_star_support.f90:429-459`).

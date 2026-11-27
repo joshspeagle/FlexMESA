@@ -104,9 +104,7 @@ fn alfam_alfa(model: &StarModel) -> f64 {
 /// it (`s% using_velocity_time_centering`,
 /// `star/private/auto_diff_support.f90:1121-1256`).
 fn time_centered(model: &StarModel) -> bool {
-    model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    model.controls.using_velocity_time_centering
 }
 
 /// `s% r_start(k)`; [`check_r_start`] guarantees `k < ln_r_start.len()`.

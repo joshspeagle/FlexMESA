@@ -141,9 +141,7 @@ pub fn eval_cell_pressure_for_work_ad(
 #[must_use]
 pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    if model.controls.using_velocity_time_centering
         && model.controls.include_l_in_velocity_time_centering
         && logt
             <= model
@@ -416,8 +414,7 @@ pub fn setup_d_turbulent_energy_dt(
         // `hydro_energy.f90:360-382`; the start-of-step value is zero until
         // `mlt_vc_old` has been set (`okay_to_set_mlt_vc`).
         let have_old = model.aux.okay_to_set_mlt_vc;
-        let vc_old =
-            |j: usize| model.aux.mlt_vc_old.get(j).copied().unwrap_or(0.0);
+        let vc_old = |j: usize| model.aux.mlt_vc_old[j];
         let vc_00 = model.mlt_vc_ad[k];
         let (eturb_cell, eturb_cell_start) = if k + 1 < model.nz {
             let vc_p1 = model.mlt_vc_ad[k + 1].shift_p1();
@@ -510,11 +507,7 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let vel_tc = model.controls.using_velocity_time_centering && model.dt > 0.0;
     let simple_pdv = !u_flag_only
         && vel_tc
         && model
@@ -632,11 +625,7 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
 
     let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let vel_tc = model.controls.using_velocity_time_centering && model.dt > 0.0;
 
     // `d_dwork_dxam1`, `d_dwork_dxa00`, `d_dwork_dxap1` (zero unless a work
     // term with `Peos` is evaluated; `hydro_energy.f90:163-190`).

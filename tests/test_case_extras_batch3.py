@@ -180,10 +180,17 @@ def test_alpha_mlt_and_core_collapse_split_burn_handlers() -> None:
     )
 
     cc12 = star_core_collapse.PreMs12MCoreCollapseStarExtras()
-    with pytest.raises(NotImplementedError, match="#155"):
-        cc12.other_alpha_mlt({"x_ctrl": x_ctrl, "net_iso_h1": 2})
+    assert cc12.other_alpha_mlt(
+        {
+            "x_ctrl": x_ctrl,
+            "net_iso_h1": 2,
+            "nz": 3,
+            "xa_h1": [0.7, 0.5, 0.1],
+        }
+    ) == [3.0, 3.0, 1.5]
     assert cc12.other_alpha_mlt({"x_ctrl": [0.0] * 30, "net_iso_h1": 2}) is None
     assert cc12.other_alpha_mlt({"x_ctrl": x_ctrl, "net_iso_h1": 0}) is None
+    assert cc12.other_alpha_mlt({"x_ctrl": x_ctrl}) is None
     x_log = [False] * 40
     cc12.extras_startup({"x_logical_ctrl": x_log}, False)
     assert cc12.extras_finish_step({"x_logical_ctrl": x_log}) == "keep_going"
@@ -896,8 +903,8 @@ def test_batch3_handlers_raise_key_error_on_missing_snapshot_fields() -> None:
     """Every Batch 3 hook indexes snapshots directly and raises `KeyError`."""
     calls: list[Any] = [
         lambda: star_core_collapse.compute_alpha_mlt_vector({}),
-        lambda: star_core_collapse.require_per_cell_alpha_mlt(
-            {"x_ctrl": [2.0] * 30}, "12M_pre_ms_to_core_collapse", ":63-93"
+        lambda: star_core_collapse.compute_alpha_mlt_vector(
+            {"x_ctrl": [2.0] * 30, "net_iso_h1": 1}
         ),
         lambda: (
             star_core_collapse.PreMs12MCoreCollapseStarExtras().extras_after_evolve(

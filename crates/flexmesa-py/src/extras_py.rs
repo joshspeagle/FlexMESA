@@ -1105,6 +1105,15 @@ fn set_star_aux_radial_arrays(
         Ok(())
     };
     set_f64_or_zeros("alpha_mlt", &model.aux.mixing.alpha_mlt)?;
+    if model.aux.burn_num_iters.len() >= nz {
+        let iters: Vec<i64> = model.aux.burn_num_iters[..nz]
+            .iter()
+            .map(|&n| n as i64)
+            .collect();
+        d.set_item("burn_num_iters", PyArray1::from_vec(py, iters))?;
+    } else {
+        d.set_item("burn_num_iters", PyArray1::from_vec(py, vec![0_i64; nz]))?;
+    }
     set_f64_or_zeros("d_es", &model.aux.rotmix.d_es)?;
     set_f64_or_zeros("d_st", &model.aux.rotmix.d_st)?;
     set_f64_or_zeros("nu_st", &model.aux.rotmix.nu_st)?;

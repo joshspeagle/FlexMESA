@@ -615,6 +615,10 @@ pub struct HydroAuxState {
     /// Operator-split time-averaged nuclear energy rate $\bar{\epsilon}_{\mathrm{nuc},k}$
     /// (`burn_avg_epsnuc`).
     pub burn_avg_epsnuc: Vec<f64>,
+    /// Operator-split 1-zone nuclear burn substep count per zone (`burn_num_iters`,
+    /// `star/private/struct_burn_mix.f90:909` and `star/private/alloc.f90:1285`).
+    #[serde(default)]
+    pub burn_num_iters: Vec<usize>,
     /// Category-resolved nuclear energy generation rates (`eps_nuc_categories`,
     /// `len = nz`).
     pub eps_nuc_categories: Vec<[f64; flexmesa_chem::NUM_CATEGORIES]>,
@@ -900,6 +904,7 @@ impl HydroAuxState {
             latent_ddlnt_start: vec![0.0; nz],
             d_eps_grav_dx: vec![0.0; nz * species],
             burn_avg_epsnuc: vec![0.0; nz],
+            burn_num_iters: vec![0; nz],
             eps_nuc_categories: vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz],
             extra_heat: vec![0.0; nz],
             d_extra_heat_dlnd: vec![0.0; nz],
@@ -1107,6 +1112,7 @@ impl HydroAuxState {
         self.v_rad.resize(n_sp, 0.0);
         self.g_rad.resize(n_sp, 0.0);
         self.diffusion_dx.resize(n_sp, 0.0);
+        self.burn_num_iters.resize(nz, 0);
         self.fixed_gradr_sticky.resize(nz, false);
         self.mixing.resize(nz);
         self.rsp.resize(nz);

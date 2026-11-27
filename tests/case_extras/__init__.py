@@ -136,15 +136,14 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   at `:141, 144, 340`, missing `l(1)` radial array in `extras_py.rs`, and
 #   `#154` composition/J/entropy relaxation controls; `initial_mass` update in
 #   `extras_controls` is now supported in `apply_star_updates`).
-# - `#155` (per-cell MLT/drag/burn diagnostics):
+# - `#155` (per-cell drag/burn diagnostics; per-cell `other_alpha_mlt` and
+#   `burn_num_iters` are now adapter-served via `#231`):
 #   `PreMs12MCoreCollapseStarExtras`, `PreMs20MCoreCollapseStarExtras`
-#   (`20M_pre_ms_to_core_collapse` and `zams_to_cc_80`),
-#   `SplitBurnBigNetStarExtras`, `MakePreCcsn13bvnStarExtras` (all enable
-#   `use_other_alpha_mlt` whose per-cell `alpha_mlt(1:nz)` is overwritten by
-#   `hydro_vars.rs` during `set_vars` after `inlist_runner.rs` calls
-#   `other_alpha_mlt`, plus `burn_num_iters` at `split_burn_big_net:129` and
-#   `dvdt_drag`/`fdotv_drag_energy` at `make_pre_ccsn_13bvn:151, 187-188` are
-#   absent from `extras_py.rs`).
+#   (`20M_pre_ms_to_core_collapse` and `zams_to_cc_80`), and
+#   `SplitBurnBigNetStarExtras` are graduated below;
+#   `MakePreCcsn13bvnStarExtras` remains unserved because `dvdt_drag` /
+#   `fdotv_drag_energy` at `make_pre_ccsn_13bvn:151, 187-188` are absent from
+#   `extras_py.rs`.
 # - `#159` (rotation-distortion hooks): `PpisnStarExtras` (`other_kap_get` at
 #   `:136`, `other_eval_fp_ft` at `:135`, `other_before_struct_burn_mix` at
 #   `:134`, plus `#152`/`#154`/`#231`).
@@ -168,8 +167,8 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 #   `:227`, `other_photo_read`/`write` at `:59-60`, and `other_remove_surface`
 #   at `:56-77`), and `WdAicStarExtras` (custom `t_xtra1..4` at
 #   `:149, 158, 161, 169`).
-# - `#172` (CCSN/STELLA + per-cell `alpha_mlt`): `CcsnIIpStarExtras`
-#   (`#154`/`#155`/`#172`).
+# - `#172` (CCSN/STELLA + relax controls): `CcsnIIpStarExtras`
+#   (`#152`/`#154`/`#172`).
 #
 # Attaching an unserved handler stops a run that otherwise takes steps, so
 # `resolve_case_extras` leaves it detached and the case stays `unported` (it
@@ -200,11 +199,14 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
         "MakeONeWdStarExtras",
         "MakeSdbStarExtras",
         "NeutronStarEnvStarExtras",
+        "PreMs12MCoreCollapseStarExtras",
         "PreMs1MToWdStarExtras",
+        "PreMs20MCoreCollapseStarExtras",
         "RCrBStarExtras",
         "RspGyreExtras",
         "SemiconvectionStarExtras",
         "SimplexSolarCalibrationStarExtras",
+        "SplitBurnBigNetStarExtras",
         "TTauGradrStarExtras",
         "Thermohaline1MStarExtras",
         "WdAccSmallDmStarExtras",

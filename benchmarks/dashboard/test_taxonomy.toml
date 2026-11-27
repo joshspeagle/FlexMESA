@@ -1156,6 +1156,12 @@ provenance = "benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_or
 routines = ["star/private/solve_omega_mix.f90::do_solve_omega_mix"]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/other_alpha_mlt_231_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/other_overshoot_hook_test.rs"
 language = "rust"
 module = "star"

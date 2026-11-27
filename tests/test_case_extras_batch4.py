@@ -167,10 +167,17 @@ def test_star_extras_snapshot_supplies_general_fields_and_omits_absent_isos(
         "xa_h1",
         "xa_he4",
         "xa_c12",
+        "alpha_mlt",
     ):
         arr = snap[radial_key]
         assert isinstance(arr, np.ndarray)
         assert arr.shape == (nz,)
+
+    burn_iters = snap["burn_num_iters"]
+    assert isinstance(burn_iters, np.ndarray)
+    assert burn_iters.shape == (nz,)
+    assert np.issubdtype(burn_iters.dtype, np.integer)
+    assert isinstance(snap["use_other_alpha_mlt"], bool)
 
     # Absent isotopes in `basic.net` must stay omitted so hooks fail loudly.
     for absent_key in ("xa_c13", "xa_na24", "xa_fe56", "net_iso_fe56"):
@@ -446,6 +453,37 @@ def test_history_column_blocked_graduated_cases_step_live_when_staged(
         extras_factory="tests.case_extras:resolve_case_extras",
     )
     assert int(rep["total_steps"]) >= cap
+
+
+def test_core_collapse_and_split_burn_graduate_via_other_alpha_mlt(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`12M_pre_ms_to_core_collapse`, `20M_pre_ms_to_core_collapse`,
+    `zams_to_cc_80`, and `split_burn_big_net` are graduated via `#231` and
+    execute strictly (`allow_unsupported_controls=False`) through PyO3.
+    """
+    for case in (
+        "12M_pre_ms_to_core_collapse",
+        "20M_pre_ms_to_core_collapse",
+        "zams_to_cc_80",
+        "split_burn_big_net",
+    ):
+        case_dir = harness_runner.resolve_case_dir("star", case)
+        assert case_extras.resolve_case_extras("star", case_dir) is not None
+        assert case_extras.classify_case_extras("star", case_dir) == "ported"
+
+    cc12_dir = harness_runner.resolve_case_dir(
+        "star", "12M_pre_ms_to_core_collapse"
+    )
+    rep = harness_runner.run_trace_inprocess(
+        "star",
+        cc12_dir,
+        tmp_path / "out_12m_strict",
+        max_steps=1,
+        allow_unsupported_controls=False,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert int(rep["total_steps"]) >= 1
 
 
 def test_unserved_star_handlers_detached_and_binaries_covered() -> None:

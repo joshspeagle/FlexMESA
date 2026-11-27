@@ -195,6 +195,7 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.conv_vel.clone_from(&model.aux.mlt_vc_old);
     model.aux.okay_to_set_mlt_vc = true;
     model.aux.burn_avg_epsnuc.fill(0.0);
+    model.aux.burn_num_iters.fill(0);
     record_start_of_step_energy_integrals(model);
     model.save_start_values()?;
     snapshot_step_start_extras(model);

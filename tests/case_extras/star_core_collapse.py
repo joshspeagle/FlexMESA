@@ -34,7 +34,7 @@ def compute_alpha_mlt_vector(state: dict[str, Any]) -> list[float] | None:
     alpha_h = float(x_ctrl[20])
     alpha_other = float(x_ctrl[21])
     h_limit = float(x_ctrl[22])
-    h1 = int(state["net_iso_h1"])
+    h1 = int(state.get("net_iso_h1", 0))
     if alpha_h <= 0.0 or alpha_other <= 0.0 or h1 <= 0:
         return None
     nz = int(state["nz"])
@@ -43,39 +43,6 @@ def compute_alpha_mlt_vector(state: dict[str, Any]) -> list[float] | None:
         alpha_h if float(xa_h1[k]) >= h_limit else alpha_other
         for k in range(nz)
     ]
-
-
-def require_per_cell_alpha_mlt(
-    state: dict[str, Any], case_label: str, line_span: str
-) -> float | None:
-    """Check `alpha_mlt_routine` guards and fail on per-cell assignment
-    (`#155`, `#231`).
-
-    Args:
-        state: Star snapshot mapping with `x_ctrl` `(>=23,)` and `net_iso_h1`.
-        case_label: Upstream test-suite case label for diagnostics.
-        line_span: Upstream Fortran line span string (`:<lo>-<hi>`).
-
-    Returns:
-        `None` when `alpha_H <= 0`, `alpha_other <= 0`, or `net_iso_h1 <= 0`.
-
-    Raises:
-        NotImplementedError: When `alpha_mlt_routine` is active, because
-            `StarExtras.other_alpha_mlt` accepts only a scalar `alpha` rather
-            than a per-cell `(nz,)` vector (`#155`, `#231`).
-    """
-    x_ctrl = state["x_ctrl"]
-    alpha_h = float(x_ctrl[20])
-    alpha_other = float(x_ctrl[21])
-    _ = float(x_ctrl[22])
-    h1 = int(state["net_iso_h1"])
-    if alpha_h <= 0.0 or alpha_other <= 0.0 or h1 <= 0:
-        return None
-    raise NotImplementedError(
-        f"{case_label}: alpha_mlt_routine ({line_span}) assigns per-cell "
-        "s% alpha_mlt(1:nz), whereas flexmesa-star StarExtras.other_alpha_mlt "
-        "accepts only a scalar mixing_length_alpha (#155, #231)"
-    )
 
 
 class _CoreCollapseFeInfallBase:
@@ -90,9 +57,9 @@ class _CoreCollapseFeInfallBase:
         self.testhub_extras: dict[str, float] = {}
         self.within_tolerance: bool | None = None
 
-    def other_alpha_mlt(self, state: dict[str, Any]) -> float | None:
-        """Guard per-cell `alpha_mlt_routine` (`:63-93`)."""
-        return require_per_cell_alpha_mlt(state, self._CASE_LABEL, ":63-93")
+    def other_alpha_mlt(self, state: dict[str, Any]) -> list[float] | None:
+        """Set per-cell `alpha_mlt(1:nz)` via H1 mass fraction (`:63-93`)."""
+        return compute_alpha_mlt_vector(state)
 
     def extras_startup(self, state: dict[str, Any], _restart: bool) -> None:
         """Read `x_logical_ctrl(37)` (`:96-108`)."""
@@ -157,9 +124,9 @@ class SplitBurnBigNetStarExtras:
     def __init__(self) -> None:
         self.testhub_extras: dict[str, float] = {}
 
-    def other_alpha_mlt(self, state: dict[str, Any]) -> float | None:
-        """Guard per-cell `alpha_mlt_routine` (`:66-96`)."""
-        return require_per_cell_alpha_mlt(state, "split_burn_big_net", ":66-96")
+    def other_alpha_mlt(self, state: dict[str, Any]) -> list[float] | None:
+        """Set per-cell `alpha_mlt(1:nz)` via H1 mass fraction (`:66-96`)."""
+        return compute_alpha_mlt_vector(state)
 
     def extras_check_model(self, _state: dict[str, Any]) -> str:
         """Return `keep_going` (`:141-149`)."""
@@ -194,11 +161,9 @@ class MakePreCcsn13bvnStarExtras:
     `star/test_suite/make_pre_ccsn_13bvn/src/run_star_extras.f90:37-280`.
     """
 
-    def other_alpha_mlt(self, state: dict[str, Any]) -> float | None:
-        """Guard per-cell `alpha_mlt_routine` (`:58-88`)."""
-        return require_per_cell_alpha_mlt(
-            state, "make_pre_ccsn_13bvn", ":58-88"
-        )
+    def other_alpha_mlt(self, state: dict[str, Any]) -> list[float] | None:
+        """Set per-cell `alpha_mlt(1:nz)` via H1 mass fraction (`:58-88`)."""
+        return compute_alpha_mlt_vector(state)
 
     def extras_startup(self, _state: dict[str, Any], _restart: bool) -> None:
         """No-op (`:92-101`; `:45-54` leaves `s% other_photo_read` unassigned,

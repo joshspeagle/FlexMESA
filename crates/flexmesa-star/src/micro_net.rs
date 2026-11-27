@@ -268,7 +268,8 @@ fn do_net_inner(
     let dxdt_fac = model.controls.dxdt_nuc_factor;
     if eps_fac == 0.0 && dxdt_fac == 0.0 {
         // `star/private/net.f90:59-77`: zero all zones (including
-        // `burn_avg_epsnuc` when `op_split_burn`) and return early.
+        // `burn_avg_epsnuc` and `burn_num_iters` when `op_split_burn`) and
+        // return early.
         model.eps_nuc[..nz].fill(0.0);
         model.d_epsnuc_dlnd[..nz].fill(0.0);
         model.d_epsnuc_dlnt[..nz].fill(0.0);
@@ -279,9 +280,13 @@ fn do_net_inner(
         model.d_dxdt_nuc_dlnt[..nz * species].fill(0.0);
         model.d_dxdt_nuc_dx[..nz * species * species].fill(0.0);
         model.eps_nuc_neu_total[..nz].fill(0.0);
-        if model.controls.op_split_burn && model.aux.burn_avg_epsnuc.len() >= nz
-        {
-            model.aux.burn_avg_epsnuc[..nz].fill(0.0);
+        if model.controls.op_split_burn {
+            if model.aux.burn_avg_epsnuc.len() >= nz {
+                model.aux.burn_avg_epsnuc[..nz].fill(0.0);
+            }
+            if model.aux.burn_num_iters.len() >= nz {
+                model.aux.burn_num_iters[..nz].fill(0);
+            }
         }
         return Ok(());
     }

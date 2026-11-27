@@ -68,14 +68,16 @@ pub fn op_split_burn_zones(
     model: &mut StarModel,
     dt: f64,
 ) -> Result<(), StarError> {
-    if dt <= 0.0 || model.nz == 0 || model.species == 0 {
-        return Ok(());
-    }
     let nz = model.nz;
     let species = model.species;
-    let net_info = resolve_model_net(model)?;
+    if nz == 0 || species == 0 {
+        return Ok(());
+    }
     if model.aux.burn_avg_epsnuc.len() != nz {
         model.aux.burn_avg_epsnuc.resize(nz, 0.0);
+    }
+    if model.aux.burn_num_iters.len() != nz {
+        model.aux.burn_num_iters.resize(nz, 0);
     }
     if model.aux.eps_nuc_categories.len() != nz {
         model
@@ -83,13 +85,23 @@ pub fn op_split_burn_zones(
             .eps_nuc_categories
             .resize(nz, [0.0; NUM_CATEGORIES]);
     }
+    let eps_nuc_factor = model.controls.eps_nuc_factor;
+    let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
+    if eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0 {
+        model.eps_nuc[..nz].fill(0.0);
+        model.aux.burn_num_iters[..nz].fill(0);
+        model.aux.burn_avg_epsnuc[..nz].fill(0.0);
+        return Ok(());
+    }
+    if dt <= 0.0 {
+        return Ok(());
+    }
+    let net_info = resolve_model_net(model)?;
 
     let min_t_split = model.controls.op_split_burn_min_t;
     let min_t_var = model.controls.op_split_burn_min_t_for_variable_t_solver;
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
-    let eps_nuc_factor = model.controls.eps_nuc_factor;
-    let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
     let max_abs_eps_nuc = model.controls.max_abs_eps_nuc;
     let screening_mode = model.controls.screening_mode;
     let use_3a_fl87 = model.job.use_3a_fl87;
@@ -114,6 +126,7 @@ pub fn op_split_burn_zones(
             model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
         );
         if t_start_k < min_t_split {
+            model.aux.burn_num_iters[k] = 0;
             model.aux.burn_avg_epsnuc[k] = 0.0;
         } else {
             split_indices.push(k);
@@ -305,6 +318,7 @@ pub fn op_split_burn_zones(
         model.xa[base_s..base_s + species].copy_from_slice(&out.xa_after);
         model.eps_nuc[k] = out.avg_epsnuc;
         model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
+        model.aux.burn_num_iters[k] = out.nstep;
         model.aux.eps_nuc_categories[k] = out.eps_cats;
         model.eps_nuc_neu_total[k] = out.eps_neu_total;
         model.d_epsnuc_dlnd[k] = 0.0;
@@ -509,6 +523,10 @@ fn run_struct_burn_mix_core(
             model.aux.burn_avg_epsnuc.resize(nz, 0.0);
         }
         model.aux.burn_avg_epsnuc.fill(0.0);
+        if model.aux.burn_num_iters.len() != nz {
+            model.aux.burn_num_iters.resize(nz, 0);
+        }
+        model.aux.burn_num_iters.fill(0);
         let min_t_split = model.controls.op_split_burn_min_t;
         for k in 0..nz {
             if model.t[k] >= min_t_split {
@@ -616,6 +634,10 @@ pub fn do_struct_burn_mix(
     model.aux.doing_struct_burn_mix = true;
     model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
     model.aux.step_hist.burn_max_num_substeps = 0;
+    if model.aux.burn_num_iters.len() != model.nz {
+        model.aux.burn_num_iters.resize(model.nz, 0);
+    }
+    model.aux.burn_num_iters.fill(0);
 
     let do_burn =
         model.controls.do_burn && model.controls.dxdt_nuc_factor > 0.0;

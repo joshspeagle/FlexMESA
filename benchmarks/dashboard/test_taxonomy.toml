@@ -1981,6 +1981,12 @@ module = "utils"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_docs_api_coverage.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_docs_snippets.py"
 language = "python"
 module = "tooling"

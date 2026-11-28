@@ -154,11 +154,6 @@ issue = "#161"
 reason = "Strict run reaches extras_check_model in [11, 472] steps (MESA [11, 480]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_R (first at step 409) (Train 14 campaign; #161)."
 [[gaps]]
 suite = "star"
-case = "wd_stable_h_burn"
-issue = "#154"
-reason = "Strict run reaches star_mass_max_limit in [830] steps (MESA [829]); track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_R (first at step 322) (Train 14 campaign; #154)."
-[[gaps]]
-suite = "star"
 case = "zams_to_cc_80"
 issue = "#161"
 reason = "Strict run reaches fe_core_infall_limit in [2470] steps (MESA [2477]); final values out of tolerance: log_L, log_Teff, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_center_T, log_center_Rho (first at step 2344) (Train 15 campaign; #161)."
@@ -177,11 +172,6 @@ suite = "binary"
 case = "star_plus_point_mass_explicit_mdot"
 issue = "#160"
 reason = "Strict run reaches xa_central_lower_limit in [539] steps (MESA [548]); final values out of tolerance: rel_age, period_days; track columns out of tolerance: star_1_mass, star_2_mass (first at step 254) (Train 14 campaign; #160)."
-[[gaps]]
-suite = "binary"
-case = "wind_fed_bhhmxb"
-issue = "#587"
-reason = "Strict run reaches xa_central_lower_limit in [392] steps (MESA [393]); every compared column is within tolerance (Train 14 campaign; #587)."
 [[gaps]]
 suite = "astero"
 case = "example_astero"

@@ -164,3 +164,8 @@ Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for 1D stellar st
 - **`star_run_stella_from_hyd_abn`** (`(hyd_str: str, abn_str: str, eta_str: str, times_days: list[float]) -> tuple[list[tuple[float, float]], list[tuple[float, float, float, float]]]`): Runs `STELLA` radiation-hydrodynamics light-curve and Sobolev `Fe II` 5169 line-velocity evaluation on `.hyd`, `.abn`, and `FeII_5169_eta.dat` strings.
 - **`star_solve_adipls_fgong_modes`** (`(fgong_str: str, l: int, freq_min_uhz: float, freq_max_uhz: float, n_scan: int = 500) -> list[tuple[int, int, int, int, float, float, float, float]]`): Solves the 4th-order `ADIPLS` BVP on an `FGONG` model string.
 - **`star_solve_gyre_mesa_modes`** (`(mesa_str: str, l: int, omega_min: float, omega_max: float, n_scan: int = 200, _nonadiabatic: bool = True) -> list[tuple[int, int, int, int, float, float, float, float, float]]`): Solves the 4th-order BVP on a `GYRE` MESA-format model string.
+
+
+## Frozen JAX Engine Status (`flexmesa.star.JAX_ENGINE_STATUS`)
+
+- **`JAX_ENGINE_STATUS`** (`str`, `"frozen-unverified-until-#143"`): Marks the derived JAX `star` engine twins as frozen and not an upstream parity oracle until the canonical Rust engine passes the upstream-history harness (`#143`, `#166`).

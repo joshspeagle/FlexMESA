@@ -23,6 +23,7 @@
 )]
 
 pub mod band;
+pub mod band_lapack;
 pub mod bcyclic;
 pub mod block_io;
 pub mod block_tridiag;

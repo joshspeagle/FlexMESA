@@ -1180,7 +1180,7 @@ pub fn eval_coupled_edot_breakdown(
             &donor.gamma1,
             is_kolb,
             ctrl.anomaly_steps,
-        );
+        )?;
         if enh > ctrl.max_abs_edot_enhance {
             enh = ctrl.max_abs_edot_enhance;
         }

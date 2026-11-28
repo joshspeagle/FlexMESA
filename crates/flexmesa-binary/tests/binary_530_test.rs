@@ -104,7 +104,8 @@ fn kolb_circular_photosphere_gate_zeroes_thick_branch_below_rlobe() {
         &donor.t,
         &donor.mu,
         &donor.gamma1,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert!(
         raw_thick < 0.0,
         "expected nonzero thick branch when r[0] > rl"
@@ -119,7 +120,8 @@ fn kolb_circular_photosphere_gate_zeroes_thick_branch_below_rlobe() {
         &donor.t,
         &donor.mu,
         &donor.gamma1,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert_eq!(gated_thick.to_bits(), 0.0_f64.to_bits());
 
     let kolb_explicit = eval_scheme_explicit_mdot(
@@ -157,7 +159,8 @@ fn kolb_circular_photosphere_gate_zeroes_thick_branch_below_rlobe() {
         &donor.t,
         &donor.mu,
         &donor.gamma1,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert_eq!(overflow_thick.to_bits(), raw_thick.to_bits());
 }
 
@@ -182,7 +185,8 @@ fn kolb_eccentric_photosphere_gate_applies_to_mdot_and_edot() {
         &donor.mu,
         &donor.gamma1,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert!(raw_ecc_thick < 0.0);
     let gated_ecc_thick = eval_kolb_mdot_eccentric_photosphere(
         m_d,
@@ -196,7 +200,8 @@ fn kolb_eccentric_photosphere_gate_applies_to_mdot_and_edot() {
         &donor.mu,
         &donor.gamma1,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert_eq!(gated_ecc_thick.to_bits(), 0.0_f64.to_bits());
 
     let edot_kolb = eval_edot_enhancement_isotropic(
@@ -216,7 +221,8 @@ fn kolb_eccentric_photosphere_gate_applies_to_mdot_and_edot() {
         &donor.gamma1,
         true,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     let edot_thin = eval_edot_enhancement_isotropic(
         m_d,
         m_acc,
@@ -234,7 +240,8 @@ fn kolb_eccentric_photosphere_gate_applies_to_mdot_and_edot() {
         &donor.gamma1,
         false,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert!(edot_thin > 0.0);
     assert_eq!(edot_kolb.to_bits(), edot_thin.to_bits());
 
@@ -251,7 +258,8 @@ fn kolb_eccentric_photosphere_gate_applies_to_mdot_and_edot() {
         &donor.mu,
         &donor.gamma1,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert_eq!(overflow_ecc_thick.to_bits(), raw_ecc_thick.to_bits());
 }
 
@@ -387,7 +395,8 @@ fn coupled_edot_preserves_raw_surface_values_below_legacy_floors() {
         &donor.gamma1,
         false,
         200,
-    );
+    )
+    .expect("Kolb zone search in bounds");
     assert!(expected_enh > 0.0 && expected_enh.is_finite());
     assert!(
         (eb.edot_enhance - expected_enh).abs() <= 1.0e-13 * expected_enh.abs(),
@@ -578,4 +587,32 @@ fn post_part2_mdot_redo_syncs_component_mdot_and_mdot_system_wind() {
         bin.donor.mstar_dot.to_bits(),
         "post-part2 mdot_system_wind[0] must reflect revised donor wind"
     );
+}
+
+/// Upstream's zone search `do while (r(i) > rl)` (`binary_mdot.f90:773-779`)
+/// has no `i <= nz` bound: it reads `r(nz+1)` when every zone is outside the
+/// Roche lobe and `r(1)` of an empty profile (deferred bug #717, DECISIONS
+/// #43). `r(1) <= rl` (`i == 1`) is defined and gives `mdot_thick = 0`.
+#[test]
+fn kolb_zone_search_errors_past_last_zone_and_empty_profile() {
+    let kolb = |rl: f64, r: &[f64]| {
+        let n = r.len();
+        let p: Vec<f64> = (0..n).map(|k| 1.0e5 * (1.0 + k as f64)).collect();
+        let t = vec![1.0e5; n];
+        let mu = vec![0.6; n];
+        let gamma1 = vec![5.0 / 3.0; n];
+        eval_kolb_mdot_thick(MSUN, 0.5 * MSUN, rl, r, &p, &t, &mu, &gamma1)
+    };
+    // Every zone outside the Roche lobe: reads r(nz+1).
+    let err = kolb(1.0, &[3.0, 2.0, 1.5]).expect_err("passes the last zone");
+    assert!(err.to_string().contains("#717"), "{err}");
+    // nz = 1 with r(1) > rl reads r(2); nz = 0 reads r(1).
+    assert!(kolb(1.0, &[3.0]).is_err());
+    assert!(kolb(1.0, &[]).is_err());
+    // `i == 1` is defined for any nz >= 1: zero, no error.
+    assert_eq!(kolb(5.0, &[3.0]).unwrap().to_bits(), 0.0_f64.to_bits());
+    assert_eq!(kolb(5.0, &[3.0, 2.0]).unwrap().to_bits(), 0.0_f64.to_bits());
+    // In-bounds crossing (r(3) <= rl) stays finite and negative.
+    let v = kolb(1.8, &[3.0, 2.0, 1.5, 1.0]).unwrap();
+    assert!(v < 0.0 && v.is_finite(), "{v}");
 }

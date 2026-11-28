@@ -41,7 +41,9 @@ pub struct BurnConstDensityInput<'a> {
     pub weak_rate_factor: f64,
     /// Plasma screening prescription (`ScreeningMode`).
     pub screening_mode: ScreeningMode,
-    /// Suggested initial step size (`stptry_in`, or `0.0` for automatic).
+    /// Suggested initial step size (`stptry_in`). Ignored, as upstream
+    /// replaces it with `max(start * 1e-10, 1e-16)`
+    /// (`net_burn_const_density.f90:257-258`).
     pub stptry_in: f64,
     /// Maximum allowed number of integration substeps (`max_steps`).
     pub max_steps: usize,
@@ -111,11 +113,8 @@ pub fn burn_1_zone_const_density(
     let rho = exp10(lg_rho);
     let start = input.t_start;
     let stopp = input.t_end;
-    let stptry = if input.stptry_in > 0.0 {
-        input.stptry_in
-    } else {
-        (start * 1.0e-10).max(1.0e-16)
-    };
+    // Upstream overwrites `stptry_in` (`net_burn_const_density.f90:257-258`).
+    let stptry = (start * 1.0e-10).max(1.0e-16);
     let stpmin = stptry * 1.0e-12;
 
     let mut step_buf = OneZoneStepBuf::new(species);

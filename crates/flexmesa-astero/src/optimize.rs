@@ -5,7 +5,8 @@
 //! (`astero/private/astero_run_support.f90:366-982`).
 
 use flexmesa_num::{
-    bobyqa, newuoa, nm_simplex, r8_uniform_01, NumError, SimplexConfig,
+    bobyqa, newuoa_with_workspace, nm_simplex, r8_uniform_01, NumError,
+    SimplexConfig,
 };
 use flexmesa_star::StarError;
 
@@ -577,12 +578,16 @@ where
     let npt = 2 * n_eff + 1;
     let mut u = vec![0.0_f64; n_eff];
     let r_beg = rhobeg.max(1.0e-6);
-    let r_end = rhoend.clamp(1.0e-12, r_beg);
-    let max_evals_eff = if rhoend >= r_beg {
-        max_evals.min(npt + 1)
-    } else {
-        max_evals
-    };
+    // `do_bobyqa_or_newuoa` passes `newuoa_rhoend` unchanged (the shipped
+    // `fast_newuoa` inlist sets 1.0 > RHOBEG = 0.45) and lets NEWUOA's own
+    // RHO schedule end the search (`astero_run_support.f90:688-691`,
+    // `mod_newuoa.f:663`).
+    let r_end = rhoend;
+    // `w((npt+5)*(npt+nvar)+3*nvar*(nvar+5)/2)` as allocated upstream
+    // (`astero_run_support.f90:670-671`). This is the BOBYQA length, which is
+    // too short for NEWUOA's BIGDEN: that path errors (`DECISIONS #43`).
+    let mut w =
+        vec![0.0_f64; (npt + 5) * (npt + n_eff) + 3 * n_eff * (n_eff + 5) / 2];
     let mut best_x: Vec<f64> = (0..n)
         .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
         .collect();
@@ -590,18 +595,16 @@ where
     let mut evals = 0usize;
     let mut cb_err: Option<StarError> = None;
 
-    let res = newuoa(
+    let res = newuoa_with_workspace(
         n_eff,
         npt,
         &mut u,
         r_beg,
         r_end,
-        max_evals_eff,
+        max_evals,
+        &mut w,
         1.0e6,
         |u_try| -> Result<f64, NumError> {
-            if evals >= max_evals_eff {
-                return Ok(best_f.min(1.0e6));
-            }
             let phys: Vec<f64> = (0..n)
                 .map(|i| {
                     map_bobyqa_param(

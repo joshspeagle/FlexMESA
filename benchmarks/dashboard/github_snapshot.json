@@ -338,13 +338,7 @@
       ]
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 687,
-      "title": "Train 17: num, mtx, net, utils and interp_1d parity fixes; per-routine oracle provenance (DECISIONS #80)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

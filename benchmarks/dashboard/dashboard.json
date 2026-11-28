@@ -14,14 +14,14 @@
         "absent": 17101,
         "stub": 6378,
         "partial": 54084,
-        "ported_unverified": 37306,
-        "kernel_reference_vectors": 5640,
+        "ported_unverified": 38027,
+        "kernel_reference_vectors": 4919,
         "case_level_evidence": 0,
         "ported_total": 42946,
-        "verified_total": 5640,
+        "verified_total": 4919,
         "pct_ported": 35.6,
-        "pct_verified": 4.7,
-        "rust_lines": 115124,
+        "pct_verified": 4.1,
+        "rust_lines": 115376,
         "python_jax_lines": 3985
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 12230,
+        "rust_lines": 12415,
         "python_jax_lines": 1295
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 16028,
+        "rust_lines": 16040,
         "python_jax_lines": 9911
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11705,
+        "rust_lines": 12924,
         "python_jax_lines": 728
       },
       {
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5330,
+        "rust_lines": 5551,
         "python_jax_lines": 3608
       },
       {
@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 8420,
+        "rust_lines": 8522,
         "python_jax_lines": 1775
       },
       {
@@ -293,7 +293,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 1190,
+        "rust_lines": 1181,
         "python_jax_lines": 1311
       },
       {
@@ -378,8 +378,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5189,
-        "python_jax_lines": 2780
+        "rust_lines": 5343,
+        "python_jax_lines": 2789
       },
       {
         "module": "gyre",
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 23233,
-      "python_testing_bench": 25477
+      "rust_bridge_testing_bench": 23307,
+      "python_testing_bench": 26448
     }
   },
   "numerics": {
@@ -1289,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 329,
-    "total_tests": 1915,
+    "total_files": 330,
+    "total_tests": 1942,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 194
+        "files": 195
       },
       "regression": {
         "files": 2
@@ -1305,11 +1305,11 @@
     "by_language": {
       "rust": {
         "files": 231,
-        "tests": 1143
+        "tests": 1150
       },
       "python": {
-        "files": 98,
-        "tests": 772
+        "files": 99,
+        "tests": 792
       }
     },
     "mislabeled_count": 2,
@@ -1328,8 +1328,8 @@
       }
     ],
     "mapped_routines_total": 1623,
-    "listed_oracle_routines_total": 69,
-    "listed_oracle_routines_pct": 4.3,
+    "listed_oracle_routines_total": 64,
+    "listed_oracle_routines_pct": 3.9,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1371,7 +1371,6 @@
       "neu/public/neu_lib.f90::neu_get",
       "star/private/diffusion.f90::do_solve_diffusion",
       "star/private/diffusion_support.f90::get_matrix_coeffs",
-      "star/private/element_diffusion.f90::do_element_diffusion",
       "star/private/eps_mdot.f90::calculate_eps_mdot",
       "star/private/hydro_chem_eqns.f90::do1_chem_eqns",
       "star/private/init_model.f90::get_zams_model",
@@ -1385,12 +1384,8 @@
       "star/private/phase_separation.f90::do_phase_separation",
       "star/private/rsp.f90::build_rsp_model",
       "star/private/rsp_build.f90::do_rsp_build",
-      "star/private/rsp_def.f90::copy_results",
-      "star/private/rsp_def.f90::finish_after_build_model",
-      "star/private/rsp_def.f90::set_star_vars",
       "star/private/rsp_lina.f90::do_LINA",
       "star/private/solve_omega_mix.f90::do_solve_omega_mix",
-      "star/private/turb_info.f90::set_mlt_vars",
       "star/private/winds.f90::do_set_mdot",
       "star/private/winds.f90::eval_rlo_wind",
       "star/private/winds.f90::eval_super_eddington_wind",
@@ -1408,11 +1403,11 @@
         "invariant_files": 84,
         "regression_files": 1,
         "total_files": 124,
-        "total_tests": 752,
+        "total_tests": 754,
         "mislabeled_files": 2,
         "mapped_routines": 924,
-        "listed_oracle_routines": 25,
-        "listed_oracle_routines_pct": 2.7
+        "listed_oracle_routines": 20,
+        "listed_oracle_routines_pct": 2.2
       },
       {
         "module": "binary",
@@ -1588,7 +1583,7 @@
         "invariant_files": 0,
         "regression_files": 0,
         "total_files": 4,
-        "total_tests": 18,
+        "total_tests": 21,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1648,7 +1643,7 @@
         "invariant_files": 7,
         "regression_files": 0,
         "total_files": 7,
-        "total_tests": 43,
+        "total_tests": 47,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1693,10 +1688,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 39,
+        "invariant_files": 40,
         "regression_files": 1,
-        "total_files": 42,
-        "total_tests": 371,
+        "total_files": 43,
+        "total_tests": 389,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2044,13 +2039,7 @@
         ]
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 687,
-        "title": "Train 17: num, mtx, net, utils and interp_1d parity fixes; per-routine oracle provenance (DECISIONS #80)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -4385,6 +4374,19 @@
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "89"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "da9ecf19",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.0",
       "cases_passing": "63",
       "rust_cov_pct": "77.0",
       "python_cov_pct": "87.8",

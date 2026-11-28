@@ -8,12 +8,12 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | Metric | Value | Source |
 | :--- | ---: | :--- |
 | `star` + `star_data` + `binary` + `astero` ported (unverified) | 45,127 / 144,952 (31.1%; `star`+`binary`+`astero`: 32.2%) | [`port_manifest.toml`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/port_manifest.toml) |
-| Upstream lines verified (all 26 modules) | 5,640 / 497,703 (1.1%) | [`port_manifest.toml`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/port_manifest.toml) |
+| Upstream lines verified (all 26 modules) | 4,919 / 497,703 (1.0%) | [`port_manifest.toml`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/port_manifest.toml) |
 | End-to-end MESA `26.4.1` cases passing (`90`/`8`/`8`) | 63 / 106 (36 declared gaps, 3 no reference yet, 0 undeclared failures) | [`case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md) |
 | Strict mode bit-identical across machines (`#165`) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 complete, 16 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 77.0% (110,497/143,539) / 87.8% (23,723/27,031) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
-| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 32 closed, 24 open; 1 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
+| Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 32 closed, 24 open; 0 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 | Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 89 open (83 upstream bugs, 6 enhancements, 11 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 
 ### 1. Port Coverage by Module (MESA `26.4.1`)
@@ -22,13 +22,13 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (unverified) | Kernel ref. vectors | Case-level evidence | Rust LOC | Python/JAX LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,101 | 6,378 | 54,084 | 37,306 | 5,640 | 0 | 115,124 | 3,985 | 35.6% | 4.7% |
+| `star` | 120,509 | 17,101 | 6,378 | 54,084 | 38,027 | 4,919 | 0 | 115,376 | 3,985 | 35.6% | 4.1% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 14,822 | 1,244 | 18.7% | 0.0% |
-| `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 12,230 | 1,295 | 0.0% | 0.0% |
-| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 16,028 | 9,911 | 0.0% | 0.0% |
+| `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 12,415 | 1,295 | 0.0% | 0.0% |
+| `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 16,040 | 9,911 | 0.0% | 0.0% |
 | `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0 | 7,328 | 3,359 | 0.0% | 0.0% |
-| `net` | 13,452 | 0 | 0 | 13,452 | 0 | 0 | 0 | 11,705 | 728 | 0.0% | 0.0% |
+| `net` | 13,452 | 0 | 0 | 13,452 | 0 | 0 | 0 | 12,924 | 728 | 0.0% | 0.0% |
 | `rates` | 17,217 | 192 | 0 | 17,025 | 0 | 0 | 0 | 4,851 | 1,478 | 0.0% | 0.0% |
 | `neu` | 2,184 | 352 | 0 | 0 | 1,832 | 0 | 0 | 1,972 | 2,673 | 83.9% | 0.0% |
 | `atm` | 6,853 | 2,468 | 0 | 4,385 | 0 | 0 | 0 | 2,876 | 984 | 0.0% | 0.0% |
@@ -36,22 +36,22 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `chem` | 4,195 | 373 | 0 | 3,822 | 0 | 0 | 0 | 2,627 | 930 | 0.0% | 0.0% |
 | `ionization` | 3,859 | 2,226 | 0 | 1,633 | 0 | 0 | 0 | 4,600 | 1,033 | 0.0% | 0.0% |
 | `colors` | 3,823 | 428 | 0 | 3,395 | 0 | 0 | 0 | 4,318 | 1,521 | 0.0% | 0.0% |
-| `num` | 20,045 | 845 | 0 | 19,200 | 0 | 0 | 0 | 5,330 | 3,608 | 0.0% | 0.0% |
-| `mtx` | 5,802 | 430 | 0 | 5,372 | 0 | 0 | 0 | 8,420 | 1,775 | 0.0% | 0.0% |
-| `interp_1d` | 4,969 | 1,624 | 0 | 3,345 | 0 | 0 | 0 | 1,190 | 1,311 | 0.0% | 0.0% |
+| `num` | 20,045 | 845 | 0 | 19,200 | 0 | 0 | 0 | 5,551 | 3,608 | 0.0% | 0.0% |
+| `mtx` | 5,802 | 430 | 0 | 5,372 | 0 | 0 | 0 | 8,522 | 1,775 | 0.0% | 0.0% |
+| `interp_1d` | 4,969 | 1,624 | 0 | 3,345 | 0 | 0 | 0 | 1,181 | 1,311 | 0.0% | 0.0% |
 | `interp_2d` | 13,565 | 6,661 | 0 | 6,784 | 120 | 0 | 0 | 2,697 | 2,288 | 0.9% | 0.0% |
 | `auto_diff` | 14,353 | 1,715 | 0 | 12,638 | 0 | 0 | 0 | 5,834 | 1,234 | 0.0% | 0.0% |
 | `math` | 936 | 368 | 0 | 568 | 0 | 0 | 0 | 2,745 | 577 | 0.0% | 0.0% |
 | `const` | 256 | 0 | 0 | 0 | 256 | 0 | 0 | 368 | 329 | 100.0% | 0.0% |
-| `utils` | 3,633 | 1,555 | 0 | 2,078 | 0 | 0 | 0 | 5,189 | 2,780 | 0.0% | 0.0% |
+| `utils` | 3,633 | 1,555 | 0 | 2,078 | 0 | 0 | 0 | 5,343 | 2,789 | 0.0% | 0.0% |
 | `gyre` | 55,708 | 29,427 | 0 | 26,281 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `adipls` | 30,923 | 20,829 | 0 | 10,094 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 12,095 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,205 | 6,378 | 71,242 | 39,487 | 5,640 | 0 | 142,176 | 6,524 | 31.1% | 3.9% |
-| **Total (all 26 modules)** | 497,703 | 210,855 | 6,378 | 231,783 | 43,047 | 5,640 | 0 | 233,490 | 58,254 | 9.8% | 1.1% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 22,205 | 6,378 | 71,242 | 40,208 | 4,919 | 0 | 142,613 | 6,524 | 31.1% | 3.4% |
+| **Total (all 26 modules)** | 497,703 | 210,855 | 6,378 | 231,783 | 43,768 | 4,919 | 0 | 235,626 | 58,263 | 9.8% | 1.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `23,233` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `25,477` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `23,307` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `26,448` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -121,13 +121,13 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 - **Python package statement coverage (`pytest --cov`)**: **87.8%** (`23,723` / `27,031` statements across `27` subpackages).
 - **Ignored / skipped tests**: `15` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#162](https://github.com/joshspeagle/FlexMESA/issues/162), [#518](https://github.com/joshspeagle/FlexMESA/issues/518), [#530](https://github.com/joshspeagle/FlexMESA/issues/530)) and `22` Python `xfail`/`skip` ([#43](https://github.com/joshspeagle/FlexMESA/issues/43), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295), [#340](https://github.com/joshspeagle/FlexMESA/issues/340), [#349](https://github.com/joshspeagle/FlexMESA/issues/349), [#358](https://github.com/joshspeagle/FlexMESA/issues/358), [#402](https://github.com/joshspeagle/FlexMESA/issues/402), [#413](https://github.com/joshspeagle/FlexMESA/issues/413), [#420](https://github.com/joshspeagle/FlexMESA/issues/420), [#433](https://github.com/joshspeagle/FlexMESA/issues/433); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
-- **Test classification & listed routine oracles (`W4`, `#563`)**: `133` oracle files, `194` invariant files, `2` regression files (out of `329` test files totaling `1,915` test functions); `2` tracked mislabeled files; `69` / `1623` mapped MESA routines (`4.3%`) have a listed oracle test.
+- **Test classification & listed routine oracles (`W4`, `#563`)**: `133` oracle files, `195` invariant files, `2` regression files (out of `330` test files totaling `1,942` test functions); `2` tracked mislabeled files; `64` / `1623` mapped MESA routines (`3.9%`) have a listed oracle test.
 
 #### Test Classification & Routines with a Listed Oracle Test (W4)
 
 | Module | Oracle Files | Invariant Files | Regression Files | Tracked Mislabeled | Routines with Listed Oracle Test |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `star` | `39` | `84` | `1` | `2` | `25/924` (`2.7%`) |
+| `star` | `39` | `84` | `1` | `2` | `20/924` (`2.2%`) |
 | `binary` | `5` | `15` | `0` | `0` | `0/116` (`0.0%`) |
 | `astero` | `1` | `9` | `0` | `0` | `0/93` (`0.0%`) |
 | `eos` | `15` | `6` | `0` | `0` | `30/108` (`27.8%`) |
@@ -151,7 +151,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `gyre` | `8` | `3` | `0` | `0` | `0/283` (`0.0%`) |
 | `adipls` | `3` | `4` | `0` | `0` | `0/46` (`0.0%`) |
 | `plotting` | `0` | `3` | `0` | `0` | `-` |
-| `tooling` | `2` | `39` | `1` | `0` | `-` |
+| `tooling` | `2` | `40` | `1` | `0` | `-` |
 
 #### Rust Line Coverage by Crate (`cargo llvm-cov`)
 
@@ -230,7 +230,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 1 | [#477](https://github.com/joshspeagle/FlexMESA/issues/477) |
 
-- **Open pull requests (1)**: [#687](https://github.com/joshspeagle/FlexMESA/pull/687).
+- **Open pull requests (0)**: none.
 - **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `89` open issues (`83` `upstream-bug`, `6` `enhancement`; `11` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
@@ -362,4 +362,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-27` | `6197a69` | main merge | 30.7% | 1.1% | 62/106 | 77.0% | 87.8% | 32/56 | 79 |
 | `2026-11-28` | `dc390490` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 32/56 | 89 |
 | `2026-11-28` | `b56fcb64` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 32/56 | 89 |
+| `2026-11-28` | `da9ecf19` | main merge | 31.1% | 1.0% | 63/106 | 77.0% | 87.8% | 32/56 | 89 |
 <!-- END GENERATED DASHBOARD -->

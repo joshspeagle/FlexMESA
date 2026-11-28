@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""GitHub `#140`, `#169`, and pull-request snapshot collector (`#174`)."""
+"""GitHub tracker and pull-request snapshot collector (`#174`).
+
+Reads `#140` for the work phases, the deferred register tables of every
+child tracker of the Deferred super-tracker `#727`, and the open pull
+requests.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +14,18 @@ import pathlib
 import re
 import subprocess
 import urllib.request
+from collections.abc import Sequence
 from typing import Any
+
+#: GitHub caps a parent issue at 100 sub-issues, so the trackers sit under
+#: super-trackers: `#725` Work (holds `#140`), `#726` Parity (`#546`, `#722`)
+#: and `#727` Deferred (`#169`, `#728`). The collector reads the deferred
+#: register from every child tracker of `#727`, so a new continuation tracker
+#: needs no code change. `#725` and `#726` are named for reference: `#140`'s
+#: phases are parsed as before, and this collector counts no `[Parity]` issue.
+WORK_SUPER_TRACKER = 725
+PARITY_SUPER_TRACKER = 726
+DEFERRED_SUPER_TRACKER = 727
 
 _PHASE_ORDER: tuple[str, ...] = (
     "Phase 0",
@@ -106,13 +122,24 @@ def _parse_140_phases(
     return phases_payload
 
 
-def _parse_169_backlog(
-    body_169: str, issues_by_num: dict[int, dict[str, Any]]
+def _parse_deferred_backlog(
+    bodies: Sequence[str], issues_by_num: dict[int, dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Extract open `#169` post-parity deferred backlog issues."""
+    """Extract open deferred backlog issues from the register tables.
+
+    Args:
+        bodies: Bodies of the child trackers of `#727`; a table row that
+            starts with ``| #<n>`` registers issue ``n``. Rows are unioned.
+        issues_by_num: All repository issues by number.
+
+    Returns:
+        Open backlog issues: those a register row names, plus those labelled
+        ``deferred`` with ``upstream-bug`` or ``enhancement``.
+    """
     nums_in_169 = {
         int(m.group(1))
-        for line in body_169.splitlines()
+        for body in bodies
+        for line in body.splitlines()
         if line.startswith("| #") and (m := re.match(r"^\|\s*#(\d+)\b", line))
     }
     deferred_items: list[dict[str, Any]] = []
@@ -140,12 +167,40 @@ def _parse_169_backlog(
     return deferred_items
 
 
+def _parse_169_backlog(
+    body_169: str, issues_by_num: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Extract open deferred backlog issues from one register body."""
+    return _parse_deferred_backlog([body_169], issues_by_num)
+
+
+def _sub_issues(repo: str, parent: int) -> list[dict[str, Any]]:
+    """List the sub-issues of ``parent`` (GitHub's sub-issues API, paged)."""
+    out: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        batch = _gh_api_json(
+            f"repos/{repo}/issues/{parent}/sub_issues?per_page=100&page={page}"
+        )
+        if not isinstance(batch, list) or not batch:
+            break
+        out.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    return out
+
+
 def sync_github_snapshot(
     snapshot_path: pathlib.Path, repo: str = "joshspeagle/FlexMESA"
 ) -> dict[str, Any]:
-    """Query GitHub API for `#140`, `#169`, and open PRs into JSON."""
+    """Query GitHub API for `#140`, the deferred registers and open PRs.
+
+    The deferred register is the union of the tables in the bodies of every
+    child tracker of `#727` (`#169`, `#728`, and later continuations).
+    """
     issue_140 = _gh_api_json(f"repos/{repo}/issues/140")
-    issue_169 = _gh_api_json(f"repos/{repo}/issues/169")
+    deferred_trackers = _sub_issues(repo, DEFERRED_SUPER_TRACKER)
 
     all_items: list[dict[str, Any]] = []
     page = 1
@@ -184,8 +239,9 @@ def sync_github_snapshot(
             str(issue_140.get("body", "")), issues_by_num
         ),
         "open_pull_requests": sorted(open_prs, key=lambda x: int(x["number"])),
-        "deferred_169": _parse_169_backlog(
-            str(issue_169.get("body", "")), issues_by_num
+        "deferred_169": _parse_deferred_backlog(
+            [str(t.get("body") or "") for t in deferred_trackers],
+            issues_by_num,
         ),
     }
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)

@@ -121,14 +121,11 @@ const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_evolve_step", 8.843_428_194_210_911e2),
 ];
 
-/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
-/// Wave 5 workloads (internal self-consistency check, not an upstream MESA
-/// output; `w5_diff_rot` shifted from `3.082380424983001e5` to
-/// `2.551374595308515e3` in `642da54`, and to `2.551511752772096e3` under
-/// `#156` when `eval_caplan_ocp_dstar` was aligned to MESA `26.4.1`
-/// `diffusion_support.f90:get_Dstar_OCP`; tracked in #146).
-const WAVE5_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
-    ("w5_diff_rot", 2.551_511_752_772_096e3),
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all
+/// three Wave 5 workloads (internal self-consistency check, not an upstream
+/// MESA output; tracked in #146). The `w5_diff_rot` workload was removed with
+/// the non-upstream rotation stubs (#633).
+const WAVE5_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 3] = [
     ("w5_riemann_rsp2", -2.543_418_211_346_364e5),
     ("w5_binary_rlof", 6.234_702_123_446_103),
     ("w5_astero_seism", 7.563_537_818_023_943e1),
@@ -223,7 +220,7 @@ fn test_wave4_four_stage_benchmarks_match_snapshots() {
     );
 }
 
-/// Checks that all four Wave 5 benchmark workloads execute across Stages 0..3
+/// Checks that all three Wave 5 benchmark workloads execute across Stages 0..3
 /// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave5_four_stage_benchmarks_match_snapshots() {

@@ -254,7 +254,9 @@ fn test_147_xa_bounds_and_slice_rejection() {
 
 /// Verifies `predictive_*` and `diffusion_isolve_solver` `trim_end` semantics
 /// (trailing blanks accepted; leading blanks and wrong case rejected) and
-/// `num_accretion_species > 250` rejection (`DECISIONS #43`, deferred `#566`).
+/// `num_accretion_species > 250` loading (upstream reads it as a scalar,
+/// `ctrls_io.f90:1408`; the error is deferred to `get_xa_for_accretion`,
+/// `DECISIONS #43`, `#566`).
 #[test]
 fn test_147_trim_end_and_num_accretion_species_bound() {
     let tmp = TempCaseGuard::new("trim_acc");
@@ -301,7 +303,6 @@ fn test_147_trim_end_and_num_accretion_species_bound() {
         "&controls\n  predictive_mix(1) = .true.\n  predictive_zone_type(1) = ' burn_H'\n/\n",
         "&controls\n  predictive_mix(1) = .true.\n  predictive_zone_loc(1) = ' core'\n/\n",
         "&controls\n  predictive_mix(1) = .true.\n  predictive_bdy_loc(1) = ' top'\n/\n",
-        "&controls\n  num_accretion_species = 251\n/\n",
     ]
     .into_iter()
     .enumerate()
@@ -312,6 +313,14 @@ fn test_147_trim_end_and_num_accretion_species_bound() {
             .expect_err("leading blank, wrong case, or >250 must fail");
         assert!(matches!(err, StarError::InvalidInput(_)));
     }
+
+    // `num_accretion_species = 251` loads (upstream scalar read,
+    // `ctrls_io.f90:1408`); only the `get_xa_for_accretion` loop errors.
+    let big_p = tmp.root.join("inlist_251");
+    fs::write(&big_p, "&controls\n  num_accretion_species = 251\n/\n")
+        .expect("write 251 inlist");
+    let b = InlistBundle::from_file(&big_p).expect("251 species must load");
+    assert_eq!(b.controls.mix_wind.num_accretion_species, 251);
 }
 
 /// Verifies that slice subscripts on `x_*_ctrl`, `&eos`/`&kap` arrays, and

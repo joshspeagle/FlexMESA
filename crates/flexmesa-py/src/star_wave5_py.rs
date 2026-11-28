@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! `PyO3` bindings for Wave 5 `flexmesa-star` extensions: multi-species Burgers
-//! element diffusion, shellular rotation distortion and Spruit-Tayler magnetic
-//! dynamo, convective premixing, predictive mixing, and white-dwarf
-//! crystallization phase separation.
+//! element diffusion, rotational mixing info, convective premixing,
+//! predictive mixing, and white-dwarf crystallization phase separation.
 
 use flexmesa_star::{
     add_predictive_mixing, do_conv_premix, do_element_diffusion,
     do_phase_separation, eval_burgers_velocities, eval_caplan_ocp_dstar,
-    eval_omega_crit, eval_phase_separation_shift,
-    eval_radiative_levitation_accel, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_wd_sedimentation_heating,
-    set_rotation_mixing_info, DiffusionScheme,
+    eval_phase_separation_shift, eval_radiative_levitation_accel,
+    eval_wd_sedimentation_heating, set_rotation_mixing_info, DiffusionScheme,
 };
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -148,88 +145,6 @@ pub fn star_do_element_diffusion<'py>(
     Ok((v_arr, PyArray1::from_vec(py, eps_wd)))
 }
 
-/// Evaluates the Fabry et al. (2022) / Paxton et al. (2019) Roche rotational
-/// distortion polynomials $(f_P, f_T, i_{\mathrm{rot}}/r^2)$.
-#[pyfunction]
-#[pyo3(signature = (w_div_w_crit, fp_min=0.75, ft_min=0.95))]
-pub fn star_eval_rotation_fp_ft(
-    w_div_w_crit: f64,
-    fp_min: f64,
-    ft_min: f64,
-) -> (f64, f64, f64) {
-    eval_rotation_fp_ft(w_div_w_crit, fp_min, ft_min)
-}
-
-/// Evaluates the local critical Roche angular velocity $\Omega_{\mathrm{crit}}$
-/// in $\mathrm{rad\,s^{-1}}$.
-#[pyfunction]
-#[pyo3(signature = (cgrav, m_grav, r_polar, lum, opacity, max_gamma_edd=0.99))]
-pub fn star_eval_omega_crit(
-    cgrav: f64,
-    m_grav: f64,
-    r_polar: f64,
-    lum: f64,
-    opacity: f64,
-    max_gamma_edd: f64,
-) -> f64 {
-    eval_omega_crit(cgrav, m_grav, r_polar, lum, opacity, max_gamma_edd)
-}
-
-/// Evaluates all five rotational instabilities and the Spruit-Tayler dynamo at
-/// a single spherical shell face, returning
-/// `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r)`.
-#[pyfunction]
-#[pyo3(signature = (
-    r, hp, grav, rho, t, cp, opacity, chi_t, chi_rho, grada, gradt,
-    brunt_n2_t, brunt_n2_mu, omega, dln_omega_dln_r, abar, zbar, d_visc=0.0
-))]
-#[allow(clippy::too_many_arguments)]
-pub fn star_eval_rotational_mixing_zone(
-    r: f64,
-    hp: f64,
-    grav: f64,
-    rho: f64,
-    t: f64,
-    cp: f64,
-    opacity: f64,
-    chi_t: f64,
-    chi_rho: f64,
-    grada: f64,
-    gradt: f64,
-    brunt_n2_t: f64,
-    brunt_n2_mu: f64,
-    omega: f64,
-    dln_omega_dln_r: f64,
-    abar: f64,
-    zbar: f64,
-    d_visc: f64,
-) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64) {
-    let z = eval_rotational_mixing_zone(
-        r,
-        hp,
-        grav,
-        rho,
-        t,
-        cp,
-        opacity,
-        chi_t,
-        chi_rho,
-        grada,
-        gradt,
-        brunt_n2_t,
-        brunt_n2_mu,
-        omega,
-        dln_omega_dln_r,
-        abar,
-        zbar,
-        d_visc,
-    );
-    (
-        z.d_dsi, z.d_sh, z.d_ssi, z.d_es, z.d_gsf, z.d_st, z.nu_st, z.b_phi,
-        z.b_r,
-    )
-}
-
 /// Runs `set_rotation_mixing_info`
 /// (`star/private/rotation_mix_info.f90:47-1123`) on `model` and returns a
 /// `(nz, 9)` array of face values `(D_DSI, D_SH, D_SSI, D_ES, D_GSF, D_ST,
@@ -339,9 +254,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_eval_radiative_levitation_accel, m)?)?;
     m.add_function(wrap_pyfunction!(star_eval_wd_sedimentation_heating, m)?)?;
     m.add_function(wrap_pyfunction!(star_do_element_diffusion, m)?)?;
-    m.add_function(wrap_pyfunction!(star_eval_rotation_fp_ft, m)?)?;
-    m.add_function(wrap_pyfunction!(star_eval_omega_crit, m)?)?;
-    m.add_function(wrap_pyfunction!(star_eval_rotational_mixing_zone, m)?)?;
     m.add_function(wrap_pyfunction!(star_set_rotation_mixing_info, m)?)?;
     m.add_function(wrap_pyfunction!(star_eval_phase_separation_shift, m)?)?;
     m.add_function(wrap_pyfunction!(star_do_conv_premix, m)?)?;

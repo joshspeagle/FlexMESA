@@ -332,9 +332,10 @@ pub fn binary_eval_kolb_mdot_thick(
             "r_profile, p_profile, t_profile, mu_profile, and gamma1_profile must have equal length",
         ));
     }
-    Ok(eval_kolb_mdot_thick(
+    eval_kolb_mdot_thick(
         m_donor, m_accretor, rl_donor, r_s, p_s, t_s, mu_s, g1_s,
-    ))
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Evaluates the Arras optically thin RLOF mass transfer rate ($\mathrm{g\,s^{-1}}$).

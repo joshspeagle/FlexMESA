@@ -1276,6 +1276,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/inlist_include_slots_705_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/io_controls_299_test.rs"
 language = "rust"
 module = "star"
@@ -1412,6 +1418,12 @@ language = "rust"
 module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/hydro_vars.f90:225,541 & star/private/hydro_rotation.f90:501-543 MLT IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/mlt_vc_final_vars_flags_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/model_load_burn_powers_test.rs"

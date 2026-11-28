@@ -14,11 +14,12 @@ use flexmesa_star::{
     do_adjust_mass_step, do_adjust_mesh, do_conv_premix, do_element_diffusion,
     do_kap, do_set_mdot, eval_bjorklund_wind, eval_de_jager_wind,
     eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
-    eval_omega_crit, eval_van_loon_wind, eval_vink_wind, find_mass_flux,
-    load_zams_model, locate_convection_boundaries, set_basic_vars,
-    set_hydro_vars, star_evolve, star_evolve_step, timestep_controller,
-    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
-    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
+    eval_upstream_omega_crit, eval_van_loon_wind, eval_vink_wind,
+    find_mass_flux, load_zams_model, locate_convection_boundaries,
+    set_basic_vars, set_hydro_vars, star_evolve, star_evolve_step,
+    timestep_controller, DiffusionScheme, DutchLowTScheme, EnergyEqnOption,
+    MeshFunctionConfig, StarControls, StarError, StarJobControls, StarModel,
+    TimestepAction,
 };
 
 fn rel_err(a: f64, b: f64) -> f64 {
@@ -200,15 +201,8 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
     assert_eq!(m_gated.mstar_dot, 0.0);
     assert_eq!(m_gated.mstar, model.mstar);
 
-    let omega_crit = eval_omega_crit(
-        model.cgrav[0],
-        model.m_grav[0],
-        model.r[0],
-        model.lum[0],
-        model.opacity[0],
-        0.999_999,
-    );
     model.controls.rotation_flag = true;
+    let omega_crit = eval_upstream_omega_crit(&model, 0);
     model.controls.mix_wind.mdot_omega_power = 0.43;
     model.omega.fill(0.5 * omega_crit);
     let surf_rot =

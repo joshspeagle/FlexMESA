@@ -11,8 +11,10 @@ Reads the crate-to-page and subpackage-to-page mapping table in
    grouped by the ``crates/flexmesa-py/src/*.rs`` PyO3 module that exports it.
 
 For each collected symbol, checks that its mapped ``docs/api/*.md`` page either
-includes a ``::: flexmesa...`` directive that renders that symbol or names it
-explicitly in the page text. Symbols undocumented at the P1.4 baseline are
+includes a ``::: flexmesa...`` directive that renders that symbol or has an API
+bullet for it (a list item that starts ``- **`name`**``), or, for a submodule
+name in a package ``__all__``, has a ``::: <package>.<name>`` directive. A
+whole-word mention in prose, a table or a code snippet does not count. Symbols undocumented at the P1.4 baseline are
 tracked in ``docs/api_coverage_allowlist.toml``; ``--check`` fails on any
 undocumented symbol outside the allowlist and on any stale allowlist entry.
 """
@@ -468,6 +470,7 @@ def inspect_repo(repo_root: pathlib.Path) -> CoverageSnapshot:
 
     errors: list[str] = [*py_errs, *rust_errs]
     rendered_by_page: dict[str, set[str]] = {}
+    modules_by_page: dict[str, set[str]] = {}
     text_by_page: dict[str, str] = {}
 
     for page in pages:
@@ -475,6 +478,7 @@ def inspect_repo(repo_root: pathlib.Path) -> CoverageSnapshot:
         if not page_path.is_file():
             errors.append(f"Mapped API docs page missing: {page}")
             rendered_by_page[page] = set()
+            modules_by_page[page] = set()
             text_by_page[page] = ""
             continue
         raw_text = page_path.read_text(encoding="utf-8")
@@ -489,12 +493,24 @@ def inspect_repo(repo_root: pathlib.Path) -> CoverageSnapshot:
                 errors.append(f"{page}: {dir_err}")
             rendered |= names
         rendered_by_page[page] = rendered
+        modules_by_page[page] = {
+            m.group(1) for m in DIRECTIVE_RE.finditer(cleaned)
+        }
 
     missing: list[ApiSymbol] = []
     for sym in all_syms:
         if sym.name in rendered_by_page.get(sym.page, ()):
             continue
-        if re.search(rf"\b{re.escape(sym.name)}\b", text_by_page[sym.page]):
+        if (
+            sym.source == "python"
+            and f"{sym.group}.{sym.name}" in modules_by_page[sym.page]
+        ):
+            continue  # submodule name documented by its own directive
+        if re.search(
+            rf"^[ \t]*[-*][ \t]+\*\*`{re.escape(sym.name)}`\*\*",
+            text_by_page[sym.page],
+            flags=re.MULTILINE,
+        ):
             continue
         missing.append(sym)
 

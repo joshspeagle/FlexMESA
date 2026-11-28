@@ -586,14 +586,18 @@ fn surf_pt_from_atm(o: &AtmEvalOutput) -> SurfPt {
 /// `s% opacity_start(1)`, saved by `save_start_values` before the solve.
 ///
 /// # Errors
-/// Returns [`StarError::InvalidInput`] if it was never saved (DECISIONS #43).
+/// Returns [`StarError::InvalidInput`] if it was never saved. Upstream saves
+/// `opacity_start(k) = opacity(k)` at `struct_burn_mix.f90:328` before the
+/// solver iterates (the `-1d99` sentinel from `star_utils.f90:1579` is only
+/// the pre-save value), so a nonpositive or non-finite value here means
+/// FlexMESA's step-start bookkeeping did not run.
 fn opacity_start_1(model: &StarModel) -> Result<f64, StarError> {
     let kap = model.aux.opacity_start_surf;
     if kap > 0.0 && kap.is_finite() {
         Ok(kap)
     } else {
         Err(StarError::InvalidInput(format!(
-            "atmosphere kap guess: opacity_start(1) = {kap} is unset during solver iterations (star/private/atm_support.f90:301-306, 769-773; DECISIONS #43)"
+            "atmosphere kap guess: opacity_start(1) = {kap} was not saved before solver iterations (upstream saves it at struct_burn_mix.f90:328; read at atm_support.f90:301-306, 769-773)"
         )))
     }
 }

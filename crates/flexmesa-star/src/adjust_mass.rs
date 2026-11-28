@@ -467,9 +467,10 @@ fn do_adjust_mass_core(
             )));
         }
         if model.energy[..nz].iter().all(|&v| v == 0.0) {
-            // `s% energy` is always set by `set_vars` before this point
-            // upstream (`star/private/micro.f90:469`); an all-zero array here
-            // means it was never evaluated (DECISIONS #43).
+            // Upstream always sets `s% energy(k) = exp(s% lnE(k))` before this
+            // point (`star/private/micro.f90:469`), and `exp` is positive; an
+            // all-zero array here means FlexMESA never evaluated the cell
+            // energies, a state upstream cannot be in.
             return Err(StarError::InvalidInput(String::from(
                 "do_adjust_mass: cell energies are unset before save_for_eps_mdot (star/private/adjust_mass.f90:75-95, 204)",
             )));

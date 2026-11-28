@@ -101,3 +101,8 @@ Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for interacting b
 - **`binary_separation_from_j_orb`** (`(m1: float, m2: float, j_orb: float, eccentricity: float) -> float`): Computes orbital separation $a$ ($\mathrm{cm}$) from $J_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-1}}$).
 - **`binary_separation_from_period`** (`(m1: float, m2: float, period: float) -> float`): Computes orbital separation $a$ ($\mathrm{cm}$) from period $P$ ($\mathrm{s}$) and masses $m_1, m_2$ ($\mathrm{g}$).
 - **`binary_extras_snapshot`** (`(bin: RustBinarySystem, case_dir: str = "") -> dict[str, Any]`): Builds the MESA `binary_info` extras snapshot dictionary for a `RustBinarySystem` without running a full trace (`#148`, `#231`).
+
+
+## Frozen JAX Engine Status (`flexmesa.binary.JAX_ENGINE_STATUS`)
+
+- **`JAX_ENGINE_STATUS`** (`str`, `"frozen-unverified-until-#143"`): Marks the derived JAX `binary` engine twins as frozen and not an upstream parity oracle until the canonical Rust engine passes the upstream-history harness (`#143`, `#166`).

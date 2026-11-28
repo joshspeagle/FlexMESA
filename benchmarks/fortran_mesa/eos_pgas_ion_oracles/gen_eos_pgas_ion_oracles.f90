@@ -14,9 +14,10 @@ program gen_eos_pgas_ion_oracles
    use const_lib, only: const_init
    use chem_def, only: num_chem_isos
    use chem_lib, only: chem_init, chem_shutdown, chem_get_iso_id, basic_composition_info
-   use eos_def, only: num_eos_basic_results, num_eos_d_dxa_results, i_lnPgas, i_lnE
-   use eos_lib, only: eos_init, eos_shutdown, alloc_eos_handle, free_eos_handle, eosPT_get
+   use eos_def, only: EoS_General_Info, num_eos_basic_results, num_eos_d_dxa_results, num_helm_results, i_lnPgas, i_lnE
+   use eos_lib, only: eos_init, eos_shutdown, alloc_eos_handle, free_eos_handle, eos_ptr, eosPT_get, helmeos2_eval
    use eosPT_eval, only: get_Pgas
+   use eos_helm_eval, only: Get_HELMEOS_Results
    use ideal, only: get_ideal_for_eosdt
    use ion_offset, only: compute_ion_offset
    implicit none
@@ -61,6 +62,7 @@ program gen_eos_pgas_ion_oracles
    call emit_ion_offset_cases(u, rc)
    call emit_get_pgas_case(u, rc)
    call emit_ideal_case(u, rc)
+   call emit_helm_cases(u, rc)
    close(u)
    call eos_shutdown()
    call chem_shutdown()
@@ -272,5 +274,102 @@ contains
       call free_eos_handle(eh)
       deallocate(cid3, niso3)
    end subroutine emit_ideal_case
+
+   subroutine emit_helm_one(unit_no, rc, rq, label, t_in, rho_in, ab_in, zb_in, emit_raw)
+      use eos_def
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      character(len=*), intent(in) :: label
+      real(dp), intent(in) :: t_in, rho_in, ab_in, zb_in
+      logical, intent(in) :: emit_raw
+
+      real(dp) :: lt_in, lr_in
+      real(dp) :: res(num_eos_basic_results), dlnd(num_eos_basic_results), dlnt(num_eos_basic_results)
+      real(dp) :: dabar(num_eos_basic_results), dzbar(num_eos_basic_results)
+      real(dp) :: helm_res(num_helm_results)
+      logical :: skip, off_table
+      integer :: ierr_loc, k
+      character(len=16) :: fld
+
+      integer, parameter :: helm_slots(93) = [ &
+         h_ptot, h_dpt, h_dpd, h_dpa, h_dpz, &
+         h_etot, h_det, h_ded, h_dea, h_dez, h_dedd, h_dedt, h_deda, h_dedz, &
+         h_stot, h_dst, h_dsd, h_dsa, h_dsz, h_dsdd, h_dsdt, h_dsda, h_dsdz, h_dstt, h_dsta, h_dstz, &
+         h_prad, h_dpradt, h_dpradd, h_erad, h_srad, &
+         h_pgas, h_dpgast, h_dpgasd, h_dpgasa, h_dpgasz, h_dpgasdd, h_dpgasdt, h_egas, h_sgas, &
+         h_xni, h_etaele, h_detat, h_detad, h_detaa, h_detaz, &
+         h_xne, h_dxnet, h_dxned, h_dxnea, h_dxnez, &
+         h_plasg, &
+         h_cp, h_dcpdd, h_dcpdt, h_dcpda, h_dcpdz, &
+         h_cv, h_dcvdd, h_dcvdt, h_dcvda, h_dcvdz, &
+         h_gam1, h_dgam1dd, h_dgam1dt, h_dgam1da, h_dgam1dz, &
+         h_gam2, h_dgam2dd, h_dgam2dt, h_dgam2da, h_dgam2dz, &
+         h_gam3, h_dgam3dd, h_dgam3dt, h_dgam3da, h_dgam3dz, &
+         h_nabad, h_dnabdd, h_dnabdt, h_dnabda, h_dnabdz, &
+         h_cs, &
+         h_chit, h_dchitdd, h_dchitdt, h_dchitda, h_dchitdz, &
+         h_chid, h_dchiddd, h_dchiddt, h_dchidda, h_dchiddz ]
+
+      lt_in = log10(t_in)
+      lr_in = log10(rho_in)
+      res = 0.0_dp; dlnd = 0.0_dp; dlnt = 0.0_dp; dabar = 0.0_dp; dzbar = 0.0_dp
+      helm_res = 0.0_dp
+
+      call Get_HELMEOS_Results(rq, 0.0_dp, ab_in, zb_in, rho_in, lr_in, t_in, lt_in, &
+         res, dlnd, dlnt, dabar, dzbar, helm_res, skip, ierr_loc)
+      if (ierr_loc /= 0 .or. skip) stop 'Get_HELMEOS_Results failed'
+
+      call emit(unit_no, rc, trim(label), 'in', 'T', 'val', t_in)
+      call emit(unit_no, rc, trim(label), 'in', 'logT', 'val', lt_in)
+      call emit(unit_no, rc, trim(label), 'in', 'Rho', 'val', rho_in)
+      call emit(unit_no, rc, trim(label), 'in', 'logRho', 'val', lr_in)
+      call emit(unit_no, rc, trim(label), 'in', 'abar', 'val', ab_in)
+      call emit(unit_no, rc, trim(label), 'in', 'zbar', 'val', zb_in)
+
+      do k = 1, 16
+         write(fld, '(A,I0)') 'res_', k - 1
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'val', res(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnd', dlnd(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnT', dlnt(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dabar', dabar(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dzbar', dzbar(k))
+      end do
+
+      if (emit_raw) then
+         helm_res = 0.0_dp
+         call helmeos2_eval(t_in, lt_in, rho_in, lr_in, ab_in, zb_in, &
+            rq% coulomb_temp_cut_HELM, rq% coulomb_den_cut_HELM, &
+            helm_res, .false., .true., .true., off_table, ierr_loc)
+         if (ierr_loc /= 0 .or. off_table) stop 'helmeos2_eval failed'
+         do k = 1, 93
+            write(fld, '(A,I0)') 'helm_', helm_slots(k)
+            call emit(unit_no, rc, trim(label), 'out', trim(fld), 'val', helm_res(helm_slots(k)))
+         end do
+      end if
+   end subroutine emit_helm_one
+
+   subroutine emit_helm_cases(unit_no, rc)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      integer :: eh, ierr_loc
+
+      eh = alloc_eos_handle(ierr_loc)
+      if (ierr_loc /= 0) stop 'helm alloc_eos_handle failed'
+      call eos_ptr(eh, rq, ierr_loc)
+      if (ierr_loc /= 0) stop 'helm eos_ptr failed'
+
+      call emit_helm_one(unit_no, rc, rq, 'helm_test_components', &
+         1.0e6_dp, exp10(3.5_dp), 2.990964711670598_dp, 1.6749402385355348_dp, .false.)
+      call emit_helm_one(unit_no, rc, rq, 'helm_sample_eos_c12', &
+         1.0e9_dp, 1.0e4_dp, 12.0_dp, 6.0_dp, .false.)
+      call emit_helm_one(unit_no, rc, rq, 'helm_pure_he_2e8_100', &
+         2.0e8_dp, 100.0_dp, 4.0_dp, 2.0_dp, .true.)
+      call emit_helm_one(unit_no, rc, rq, 'helm_pure_h_2e8_100', &
+         2.0e8_dp, 100.0_dp, 1.0_dp, 1.0_dp, .false.)
+
+      call free_eos_handle(eh)
+   end subroutine emit_helm_cases
 
 end program gen_eos_pgas_ion_oracles

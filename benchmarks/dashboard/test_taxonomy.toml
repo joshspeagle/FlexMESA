@@ -489,6 +489,16 @@ routines = [
   "eos/public/eos_lib.f90::helmeos2_eval",
 ]
 
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = [
+  "eos/private/eos_helm_eval.f90::get_helm_for_eosdt",
+  "eos/private/helm.f90::helmeos2",
+  "eos/public/eos_lib.f90::helmeos2_eval",
+]
+
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_tests.rs"
 language = "rust"

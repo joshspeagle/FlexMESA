@@ -49,7 +49,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 / 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 / 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% / 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 / 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% / 0.0% | 0.0% |
-| `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 14 / 16 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 2.7% / 3.4% | 0.0% |
+| `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 17 / 13 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 3.1% / 3.0% | 0.0% |
 | `kap` | 38 | 311 | 0 | 0 | 0 | 311 | 0 / 0 | 22,430 | 0 | 0 | 0 | 19,985 | 2,445 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `net` | 16 | 195 | 3 | 9 | 0 | 183 | 0 / 0 | 13,452 | 90 | 688 | 0 | 11,441 | 1,233 | 0.7% | 5.1% | 0.7% | 0.0% / 0.0% | 0.0% |
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 / 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
@@ -224,7 +224,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `const/public/const_lib.f90` | `const` | ported_unverified | - | 38 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 6 | 32 |
 | `eos/private/eos_blend.f90` | `eos` | partial | partial | 208 | 5 | 2 | 0 | 0 | 2 / 0 | 48 | 0 | 0 | 92 | 68 |
 | `eos/private/eos_ctrls_io.f90` | `eos` | partial | - | 697 | 8 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 414 | 283 |
-| `eos/private/eos_helm_eval.f90` | `eos` | partial | partial | 361 | 4 | 2 | 0 | 0 | 0 / 1 | 214 | 0 | 0 | 105 | 42 |
+| `eos/private/eos_helm_eval.f90` | `eos` | partial | partial | 361 | 4 | 2 | 0 | 0 | 1 / 0 | 214 | 0 | 0 | 105 | 42 |
 | `eos/private/eos_initialize.f90` | `eos` | partial | - | 75 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 48 | 27 |
 | `eos/private/eoscms_eval.f90` | `eos` | partial | partial | 703 | 8 | 4 | 0 | 0 | 0 / 1 | 432 | 0 | 0 | 197 | 74 |
 | `eos/private/eosde_eval.f90` | `eos` | partial | ported_unverified | 113 | 1 | 1 | 0 | 0 | 0 / 1 | 82 | 0 | 0 | 0 | 31 |
@@ -234,7 +234,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `eos/private/eospc_eval.f90` | `eos` | partial | partial | 365 | 4 | 3 | 0 | 0 | 0 / 2 | 164 | 0 | 0 | 165 | 36 |
 | `eos/private/eospt_eval.f90` | `eos` | partial | partial | 606 | 8 | 4 | 0 | 0 | 2 / 1 | 365 | 0 | 0 | 197 | 44 |
 | `eos/private/gauss_fermi.f90` | `eos` | partial | partial | 1,199 | 11 | 1 | 0 | 0 | 0 / 1 | 105 | 0 | 0 | 1,036 | 58 |
-| `eos/private/helm.f90` | `eos` | partial | partial | 350 | 3 | 1 | 0 | 0 | 0 / 1 | 33 | 0 | 0 | 276 | 41 |
+| `eos/private/helm.f90` | `eos` | partial | partial | 350 | 3 | 1 | 0 | 0 | 1 / 0 | 33 | 0 | 0 | 276 | 41 |
 | `eos/private/helm_alloc.f90` | `eos` | partial | - | 468 | 8 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 432 | 36 |
 | `eos/private/helm_coulomb2.dek` | `eos` | partial | - | 420 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 420 |
 | `eos/private/helm_declare_local_variables.dek` | `eos` | partial | - | 341 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 341 |
@@ -258,7 +258,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `eos/private/skye_ideal.f90` | `eos` | partial | partial | 708 | 4 | 3 | 0 | 0 | 0 / 0 | 42 | 0 | 0 | 622 | 44 |
 | `eos/private/skye_thermodynamics.f90` | `eos` | partial | ported_unverified | 241 | 3 | 3 | 0 | 0 | 0 / 0 | 158 | 0 | 0 | 0 | 83 |
 | `eos/public/eos_def.f90` | `eos` | partial | - | 642 | 8 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 210 | 432 |
-| `eos/public/eos_lib.f90` | `eos` | partial | partial | 910 | 29 | 9 | 0 | 0 | 4 / 4 | 468 | 0 | 0 | 335 | 107 |
+| `eos/public/eos_lib.f90` | `eos` | partial | partial | 910 | 29 | 9 | 0 | 0 | 5 / 3 | 468 | 0 | 0 | 335 | 107 |
 | `eos/public/helm_def.dek` | `eos` | partial | - | 646 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 646 |
 | `gyre/gyre/src/ad/ad_bound_m.fypp` | `gyre` | partial | partial | 903 | 14 | 6 | 3 | 0 | 0 / 0 | 272 | 202 | 0 | 282 | 147 |
 | `gyre/gyre/src/ad/ad_bvp_m.fypp` | `gyre` | partial | partial | 262 | 4 | 2 | 1 | 0 | 0 / 0 | 74 | 56 | 0 | 38 | 94 |

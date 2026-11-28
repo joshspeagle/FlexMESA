@@ -422,6 +422,43 @@ pub fn eval_r02_model_with_indices(
     (r02, r02_freqs)
 }
 
+/// Computes model $r_{02}$ ratios positionally aligned with the observed
+/// `ratios_r02` / `sigmas_r02` (`model_ratios_r02(i)`, `init = .false.` in
+/// `get_r02_frequency_ratios`, `astero_support.f90:466-475`).
+///
+/// Unlike [`eval_r02_model_with_indices`], which compacts the output, entry
+/// `k` always corresponds to observed ratio `k` (`i = k + 1`). Unpaired
+/// entries (`sigmas_r02 == 0` or no fixed `l = 2` partner) stay `NaN`,
+/// matching `fill_with_NaNs(r02)` upstream, and are never read by
+/// [`interpolate_ratio_r02_masked`].
+#[must_use]
+pub fn eval_r02_model_aligned(
+    l0_freqs: &[f64],
+    l1_freqs: &[f64],
+    l2_freqs: &[f64],
+    l0_first: usize,
+    l1_first: usize,
+    obs: &FrequencyRatiosR02Obs,
+) -> Vec<f64> {
+    let mut r02 = vec![f64::NAN; obs.i2_for_r02.len()];
+    for (k, &j_opt) in obs.i2_for_r02.iter().enumerate() {
+        let (i0, i1) = (l0_first + k + 1, l1_first + k + 1);
+        if obs.sigmas_r02[k] == 0.0 {
+            continue;
+        }
+        let Some(j) = j_opt else {
+            continue;
+        };
+        if i0 >= l0_freqs.len() || i1 >= l1_freqs.len() || j >= l2_freqs.len() {
+            continue;
+        }
+        let d02 = l0_freqs[i0] - l2_freqs[j];
+        let dnu = l1_freqs[i1] - l1_freqs[i1 - 1];
+        r02[k] = d02 / dnu;
+    }
+    r02
+}
+
 /// Evaluates $r_{02}(i)$ and $\sigma_{r_{02}}(i)$ with `0.25 * dnu` mode pairing
 /// (`get_r02_frequency_ratios`, `astero_support.f90:421-486`).
 #[allow(clippy::too_many_arguments)]
@@ -529,25 +566,79 @@ pub fn interpolate_ratio_r010(
     0.0
 }
 
-/// Linearly interpolates a model $r_{02}$ frequency separation ratio at target
-/// frequency `freq` using radial frequencies `l0_freqs` corresponding to
-/// `r02_vals` (`interpolate_ratio_r02` in `astero_support.f90:523-550`).
+/// Linearly interpolates a model $r_{02}$ ratio at target frequency `freq`
+/// (`interpolate_ratio_r02`, `astero_support.f90:520-550`), skipping every
+/// entry with `sigmas_r02(i) == 0` and treating all entries as active.
+///
+/// Convenience wrapper over [`interpolate_ratio_r02_masked`] with
+/// `nl0 = min(model_freqs.len(), model_ratios.len())`; `model_freqs[k]` and
+/// `model_ratios[k]` must be positionally aligned.
 #[must_use]
 pub fn interpolate_ratio_r02(
     freq: f64,
-    l0_freqs: &[f64],
-    r02_vals: &[f64],
+    model_freqs: &[f64],
+    model_ratios: &[f64],
 ) -> f64 {
-    if l0_freqs.is_empty() || r02_vals.is_empty() {
+    let n = model_freqs.len().min(model_ratios.len());
+    interpolate_ratio_r02_masked(
+        freq,
+        model_freqs,
+        model_ratios,
+        &vec![1.0; n],
+        n,
+    )
+}
+
+/// Bit-faithful port of MESA `interpolate_ratio_r02`
+/// (`astero_support.f90:520-550`; called per active `i` from
+/// `get_chi2_seismo`, `astero_support.f90:1451-1458`).
+///
+/// All slices are the 0-based view of upstream's 1-based callee arrays, so
+/// `model_freqs[k]` is `model_freq(0, k + 1)`, **unshifted** by
+/// `ratios_l0_first`; `model_ratios[k]` is `model_ratios_r02(k + 1)` and
+/// `sigmas_r02[k]` is `sigmas_r02(k + 1)`. Loops run over `i = 1..=nl0`
+/// (here `0..min(nl0, slice lengths)`) and skip `sigmas_r02(i) == 0`.
+///
+/// Upstream quirks kept on purpose: `i_lo` is fixed at the first active
+/// entry and is never advanced inside the scan, so the bracket is
+/// `[i_lo, i_hi]` (not neighbouring modes); the low end clamps to
+/// `model_ratios(i_lo)`, and `freq` above every active entry returns
+/// `model_ratios(i_hi)` of the last active entry. Returns `0` when no entry
+/// is active. `alfa = (freq - f_lo) / (f_hi - f_lo)`, `beta = 1 - alfa`, and
+/// `ratio = alfa * r_hi + beta * r_lo` use upstream's operand order.
+#[must_use]
+pub fn interpolate_ratio_r02_masked(
+    freq: f64,
+    model_freqs: &[f64],
+    model_ratios: &[f64],
+    sigmas_r02: &[f64],
+    nl0: usize,
+) -> f64 {
+    let n = nl0
+        .min(sigmas_r02.len())
+        .min(model_freqs.len())
+        .min(model_ratios.len());
+    let Some(i_lo) = (0..n).find(|&i| sigmas_r02[i] != 0.0) else {
         return 0.0;
+    };
+    if freq <= model_freqs[i_lo] {
+        return model_ratios[i_lo];
     }
-    if l0_freqs.len() > r02_vals.len() {
-        let n = r02_vals.len().min(l0_freqs.len() - 1);
-        interpolate_ratio_r010(freq, &l0_freqs[1..=n], &r02_vals[..n])
-    } else {
-        let n = r02_vals.len().min(l0_freqs.len());
-        interpolate_ratio_r010(freq, &l0_freqs[..n], &r02_vals[..n])
+    let mut i_hi = i_lo;
+    for i in (i_lo + 1)..n {
+        if sigmas_r02[i] == 0.0 {
+            continue;
+        }
+        i_hi = i;
+        if freq > model_freqs[i] {
+            continue;
+        }
+        let alfa = (freq - model_freqs[i_lo])
+            / (model_freqs[i_hi] - model_freqs[i_lo]);
+        let beta = 1.0 - alfa;
+        return alfa * model_ratios[i_hi] + beta * model_ratios[i_lo];
     }
+    model_ratios[i_hi]
 }
 
 /// Weights and normalization controls for `eval_astero_chi2`
@@ -861,5 +952,129 @@ mod tests {
             interpolate_ratio_r010(160.0, &nm_f2, &dup_v).to_bits(),
             0x4044_0000_0000_0000
         );
+    }
+
+    #[test]
+    fn interpolate_ratio_r02_masked_keeps_stale_i_lo_bracket() {
+        let f = [100.0, 200.0, 300.0, 400.0];
+        let r = [1.0, 4.0, 9.0, 16.0];
+        let s = [1.0; 4];
+        // `i_lo` stays at entry 0 (`astero_support.f90:529-531`): bracket
+        // is [100, 300], so 0.75 * 9 + 0.25 * 1 = 7 (neighbours give 6.5).
+        let got = interpolate_ratio_r02_masked(250.0, &f, &r, &s, 4);
+        assert_eq!(got.to_bits(), 7.0_f64.to_bits());
+        // Low clamp (`freq <= model_freqs(i_lo)`), including equality.
+        assert_eq!(interpolate_ratio_r02_masked(50.0, &f, &r, &s, 4), 1.0);
+        assert_eq!(interpolate_ratio_r02_masked(100.0, &f, &r, &s, 4), 1.0);
+        // `freq == model_freqs(i)` takes alfa = 1 against `i_lo`.
+        assert_eq!(interpolate_ratio_r02_masked(400.0, &f, &r, &s, 4), 16.0);
+        // Above all active entries returns the last active ratio.
+        assert_eq!(interpolate_ratio_r02_masked(500.0, &f, &r, &s, 4), 16.0);
+        // `nl0` bounds the scan (`do i = i_lo + 1, nl(0)`).
+        assert_eq!(interpolate_ratio_r02_masked(250.0, &f, &r, &s, 2), 4.0);
+    }
+
+    #[test]
+    fn interpolate_ratio_r02_masked_skips_zero_sigma_entries() {
+        let f = [100.0, 200.0, 300.0, 400.0];
+        let r = [1.0, 4.0, 9.0, 16.0];
+        let s = [0.0, 1.0, 0.0, 1.0];
+        // `i_lo` is the first entry with `sigmas_r02 /= 0` (index 1).
+        assert_eq!(interpolate_ratio_r02_masked(150.0, &f, &r, &s, 4), 4.0);
+        // Entry 2 is skipped; bracket is [200, 400]: 0.5 * 16 + 0.5 * 4.
+        assert_eq!(interpolate_ratio_r02_masked(300.0, &f, &r, &s, 4), 10.0);
+        assert_eq!(interpolate_ratio_r02_masked(450.0, &f, &r, &s, 4), 16.0);
+        // A single active entry returns its own ratio for any frequency.
+        let one = [0.0, 0.0, 1.0, 0.0];
+        assert_eq!(interpolate_ratio_r02_masked(10.0, &f, &r, &one, 4), 9.0);
+        assert_eq!(interpolate_ratio_r02_masked(999.0, &f, &r, &one, 4), 9.0);
+        // No active entry returns zero (`if (i_lo == 0) return`).
+        assert_eq!(
+            interpolate_ratio_r02_masked(250.0, &f, &r, &[0.0; 4], 4),
+            0.0
+        );
+        // `sigmas_r02` entries past `ratios_n` are zero upstream.
+        assert_eq!(
+            interpolate_ratio_r02_masked(250.0, &f, &r, &[0.0, 0.0, 1.0], 4),
+            9.0
+        );
+    }
+
+    #[test]
+    fn interpolate_ratio_r02_unmasked_wrapper_matches_all_active_mask() {
+        let f = [100.0, 200.0, 300.0];
+        let r = [1.0, 4.0, 9.0];
+        let want = interpolate_ratio_r02_masked(150.0, &f, &r, &[1.0; 3], 3);
+        assert_eq!(
+            interpolate_ratio_r02(150.0, &f, &r).to_bits(),
+            want.to_bits()
+        );
+        assert_eq!(interpolate_ratio_r02(150.0, &[], &[]), 0.0);
+    }
+
+    #[test]
+    fn r02_pipeline_uses_unshifted_model_axis_with_nonzero_l0_first() {
+        // `ratios_l0_first = 1`, `ratios_n = 2`: observed ratios sit at
+        // `l0[2], l0[3]` but upstream passes `model_freq(0, 1:)` unshifted.
+        let l0 = [900.0, 1000.0, 1100.0, 1200.0, 1300.0];
+        let l1 = [950.0, 1050.0, 1150.0, 1250.0, 1350.0];
+        let sg = [0.1; 5];
+        let l2 = [1090.0, 1195.0];
+        let obs = eval_r02_obs_with_indices(
+            &l0, &sg, &l1, &sg, &l2, &[0.1; 2], 2, 1, 1,
+        );
+        assert_eq!(obs.i2_for_r02, vec![Some(0), Some(1)]);
+        assert_eq!(obs.r02_freqs, vec![1100.0, 1200.0]);
+
+        let m0 = [905.0, 1005.0, 1105.0, 1205.0, 1305.0];
+        let m1 = [955.0, 1055.0, 1155.0, 1255.0, 1355.0];
+        let m2 = [1095.0, 1198.0];
+        let mr = eval_r02_model_aligned(&m0, &m1, &m2, 1, 1, &obs);
+        assert_eq!(mr.len(), 2);
+        assert_eq!(mr[0].to_bits(), ((1105.0_f64 - 1095.0) / 100.0).to_bits());
+        assert_eq!(mr[1].to_bits(), ((1205.0_f64 - 1198.0) / 100.0).to_bits());
+
+        // Sigmas padded with zeros to `nl(0)` (`sigmas_r02 = 0d0`).
+        let mut sig = obs.sigmas_r02.clone();
+        sig.resize(m0.len(), 0.0);
+        // freq 950 lies between model_freq(0,1) = 905 and (0,2) = 1005.
+        let alfa = (950.0_f64 - 905.0) / (1005.0 - 905.0);
+        let beta = 1.0 - alfa;
+        let want = alfa * mr[1] + beta * mr[0];
+        let got = interpolate_ratio_r02_masked(950.0, &m0, &mr, &sig, 5);
+        assert_eq!(got.to_bits(), want.to_bits());
+        // Target 1100 exceeds model_freq(0,2): last active ratio (index 1).
+        let got = interpolate_ratio_r02_masked(1100.0, &m0, &mr, &sig, 5);
+        assert_eq!(got.to_bits(), mr[1].to_bits());
+        // The previous shifted axis `l0[l0_first + i]` clamped to `mr[0]`.
+        let shifted = [1105.0, 1205.0];
+        let old = interpolate_ratio_r02(1100.0, &shifted, &mr);
+        assert_eq!(old.to_bits(), mr[0].to_bits());
+        assert_ne!(old.to_bits(), got.to_bits());
+    }
+
+    #[test]
+    fn r02_model_aligned_keeps_nan_at_zero_sigma_positions() {
+        let l0 = [900.0, 1000.0, 1100.0, 1200.0, 1300.0];
+        let l1 = [950.0, 1050.0, 1150.0, 1250.0, 1350.0];
+        let obs = FrequencyRatiosR02Obs {
+            ratios_r02: vec![f64::NAN, 0.05],
+            sigmas_r02: vec![0.0, 0.1],
+            r02_freqs: vec![1100.0, 1200.0],
+            i2_for_r02: vec![None, Some(1)],
+        };
+        let l2 = [1090.0, 1195.0];
+        let mr = eval_r02_model_aligned(&l0, &l1, &l2, 1, 1, &obs);
+        assert!(mr[0].is_nan());
+        assert_eq!(mr[1].to_bits(), ((1200.0_f64 - 1195.0) / 100.0).to_bits());
+        // Compacted legacy output drops position 0, aligned output does not.
+        let (compact, _) =
+            eval_r02_model_with_indices(&l0, &l1, &l2, 1, 1, &obs);
+        assert_eq!(compact, vec![mr[1]]);
+        // Interpolation never reads the skipped entry.
+        let mut sig = obs.sigmas_r02.clone();
+        sig.resize(l0.len(), 0.0);
+        let got = interpolate_ratio_r02_masked(1100.0, &l0, &mr, &sig, 5);
+        assert_eq!(got.to_bits(), mr[1].to_bits());
     }
 }

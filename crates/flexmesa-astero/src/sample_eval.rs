@@ -20,8 +20,8 @@ use crate::inlist_astero::{
 };
 use crate::ratios_chi2::{
     eval_astero_chi2, eval_frequency_ratios_with_trimming,
-    eval_r02_model_with_indices, eval_r02_obs_with_indices,
-    interpolate_ratio_r010, interpolate_ratio_r02,
+    eval_r02_model_aligned, eval_r02_obs_with_indices, interpolate_ratio_r010,
+    interpolate_ratio_r02_masked,
 };
 use crate::scaling::{
     eval_acoustic_profile, eval_delta_nu_asymptotic,
@@ -673,58 +673,21 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
         }
     }
 
-    let (mut r02_obs_vec, mut r02_sig_vec, mut r02_mod_vec) =
-        (Vec::new(), Vec::new(), Vec::new());
-    let mut obs_r02 = vec![0.0_f64; ctrl.nl[0]];
-    let mut obs_r02_sigmas = vec![0.0_f64; ctrl.nl[0]];
-    let mut model_r02 = vec![0.0_f64; ctrl.nl[0]];
-    if ctrl.weights.chi2_seismo_r_02_fraction > 0.0
-        && ctrl.nl[0] > 0
-        && ctrl.nl[1] > 0
-        && ctrl.nl[2] > 0
-        && ratios_n > 0
-    {
-        let obs_r2 = eval_r02_obs_with_indices(
-            &ctrl.freq_target[0],
-            &ctrl.freq_sigma[0],
-            &ctrl.freq_target[1],
-            &ctrl.freq_sigma[1],
-            &ctrl.freq_target[2],
-            &ctrl.freq_sigma[2],
-            ratios_n,
-            ratios_l0_first,
-            ratios_l1_first,
-        );
-        let (rm, fm) = eval_r02_model_with_indices(
-            &model_freqs_corr[0],
-            &model_freqs_corr[1],
-            &model_freqs_corr[2],
-            ratios_l0_first,
-            ratios_l1_first,
-            &obs_r2,
-        );
-        for k in 0..obs_r2.ratios_r02.len() {
-            let s = obs_r2.sigmas_r02[k];
-            if s > 0.0 && !rm.is_empty() {
-                let val_m =
-                    interpolate_ratio_r02(obs_r2.r02_freqs[k], &fm, &rm);
-                if ctrl.trace_chi2_seismo_ratios_info {
-                    println!(
-                        "r02_obs={:.6} r02_mod={:.6} sigma={:.6}",
-                        obs_r2.ratios_r02[k], val_m, s
-                    );
-                }
-                r02_obs_vec.push(obs_r2.ratios_r02[k]);
-                r02_sig_vec.push(s);
-                r02_mod_vec.push(val_m);
-                if k < ctrl.nl[0] {
-                    obs_r02[k] = obs_r2.ratios_r02[k];
-                    obs_r02_sigmas[k] = s;
-                    model_r02[k] = val_m;
-                }
-            }
-        }
-    }
+    let (
+        r02_obs_vec,
+        r02_sig_vec,
+        r02_mod_vec,
+        obs_r02,
+        obs_r02_sigmas,
+        model_r02,
+    ) = eval_r02_chi2_terms(
+        ctrl,
+        &model_freqs,
+        &model_freqs_corr,
+        ratios_n,
+        ratios_l0_first,
+        ratios_l1_first,
+    );
 
     let (chi2, chi2_seismo, chi2_spectro, mut chi2_radial, chi2_r010, chi2_r02) =
         eval_astero_chi2(
@@ -1102,6 +1065,98 @@ fn match_osc_results_with_alt(
     Some(out)
 }
 
+/// Evaluates observed and interpolated model $r_{02}$ terms for
+/// `get_chi2_seismo` (`extras_support.f90:423-424`,
+/// `astero_support.f90:466-475, 1451-1458`): `model_ratios_r02` uses
+/// surface-corrected `model_freqs_corr`, whereas `interpolate_ratio_r02_masked`
+/// uses raw uncorrected `model_freqs[0]`.
+#[allow(clippy::type_complexity)]
+fn eval_r02_chi2_terms(
+    ctrl: &AsteroSearchControls,
+    model_freqs: &[Vec<f64>; 4],
+    model_freqs_corr: &[Vec<f64>; 4],
+    ratios_n: usize,
+    ratios_l0_first: usize,
+    ratios_l1_first: usize,
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    let (mut r02_obs_vec, mut r02_sig_vec, mut r02_mod_vec) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let mut obs_r02 = vec![0.0_f64; ctrl.nl[0]];
+    let mut obs_r02_sigmas = vec![0.0_f64; ctrl.nl[0]];
+    let mut model_r02 = vec![0.0_f64; ctrl.nl[0]];
+    if ctrl.weights.chi2_seismo_r_02_fraction > 0.0
+        && ctrl.nl[0] > 0
+        && ctrl.nl[1] > 0
+        && ctrl.nl[2] > 0
+        && ratios_n > 0
+    {
+        let obs_r2 = eval_r02_obs_with_indices(
+            &ctrl.freq_target[0],
+            &ctrl.freq_sigma[0],
+            &ctrl.freq_target[1],
+            &ctrl.freq_sigma[1],
+            &ctrl.freq_target[2],
+            &ctrl.freq_sigma[2],
+            ratios_n,
+            ratios_l0_first,
+            ratios_l1_first,
+        );
+        // `model_ratios_r02(i)` stays position-aligned with `sigmas_r02(i)`
+        // (`astero_support.f90:466-475`).
+        let rm = eval_r02_model_aligned(
+            &model_freqs_corr[0],
+            &model_freqs_corr[1],
+            &model_freqs_corr[2],
+            ratios_l0_first,
+            ratios_l1_first,
+            &obs_r2,
+        );
+        // `sigmas_r02(1:nl(0))`, zero beyond `ratios_n`
+        // (`astero_support.f90:607`).
+        let mut sig_mask = vec![0.0_f64; ctrl.nl[0]];
+        for (m, &s) in sig_mask.iter_mut().zip(&obs_r2.sigmas_r02) {
+            *m = s;
+        }
+        for k in 0..obs_r2.ratios_r02.len() {
+            let s = obs_r2.sigmas_r02[k];
+            if s > 0.0 && !model_freqs[0].is_empty() {
+                // Upstream passes raw uncorrected `model_freq(0,:)` with
+                // the observed target frequency
+                // (`astero_support.f90:1456-1458`).
+                let val_m = interpolate_ratio_r02_masked(
+                    obs_r2.r02_freqs[k],
+                    &model_freqs[0],
+                    &rm,
+                    &sig_mask,
+                    ctrl.nl[0],
+                );
+                if ctrl.trace_chi2_seismo_ratios_info {
+                    println!(
+                        "r02_obs={:.6} r02_mod={:.6} sigma={:.6}",
+                        obs_r2.ratios_r02[k], val_m, s
+                    );
+                }
+                r02_obs_vec.push(obs_r2.ratios_r02[k]);
+                r02_sig_vec.push(s);
+                r02_mod_vec.push(val_m);
+                if k < ctrl.nl[0] {
+                    obs_r02[k] = obs_r2.ratios_r02[k];
+                    obs_r02_sigmas[k] = s;
+                    model_r02[k] = val_m;
+                }
+            }
+        }
+    }
+    (
+        r02_obs_vec,
+        r02_sig_vec,
+        r02_mod_vec,
+        obs_r02,
+        obs_r02_sigmas,
+        model_r02,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -1116,8 +1171,8 @@ mod tests {
     use flexmesa_star::{load_zams_model, set_hydro_vars};
 
     use super::{
-        eval_model_astero_sample, eval_spectro_and_delta_nu_chi2,
-        scan_and_save_mode_at_number,
+        eval_model_astero_sample, eval_r02_chi2_terms,
+        eval_spectro_and_delta_nu_chi2, scan_and_save_mode_at_number,
     };
     use crate::inlist_astero::{AsteroSearchControls, MAX_CONSTRAINTS};
 
@@ -1495,5 +1550,60 @@ mod tests {
             &[5800.0],
         );
         assert_eq!(chi2_get_chi2.to_bits(), 0.0_f64.to_bits());
+    }
+
+    #[test]
+    fn eval_r02_chi2_terms_uses_uncorrected_l0_axis_with_surface_correction() {
+        let mut ctrl = AsteroSearchControls::default();
+        ctrl.weights.chi2_seismo_r_02_fraction = 1.0;
+        ctrl.nl = [4, 4, 2, 0];
+        ctrl.freq_target[0] = vec![900.0, 1000.0, 1100.0, 1200.0];
+        ctrl.freq_sigma[0] = vec![0.1; 4];
+        ctrl.freq_target[1] = vec![950.0, 1050.0, 1150.0, 1250.0];
+        ctrl.freq_sigma[1] = vec![0.1; 4];
+        ctrl.freq_target[2] = vec![990.0, 1090.0];
+        ctrl.freq_sigma[2] = vec![0.1; 2];
+
+        // Nonzero surface correction (`model_freqs_corr != model_freqs`):
+        // ratios use `model_freqs_corr`, while `interpolate_ratio_r02`
+        // uses uncorrected `model_freqs[0]` (`astero_support.f90:1458`).
+        let model_freqs = [
+            vec![950.0, 1050.0, 1150.0, 1250.0],
+            vec![1000.0, 1100.0, 1200.0, 1300.0],
+            vec![1040.0, 1140.0],
+            Vec::new(),
+        ];
+        let model_freqs_corr = [
+            vec![930.0, 1025.0, 1120.0, 1215.0],
+            vec![980.0, 1075.0, 1170.0, 1265.0],
+            vec![1018.0, 1110.0],
+            Vec::new(),
+        ];
+
+        let (obs_v, sig_v, mod_v, _, _, _) = eval_r02_chi2_terms(
+            &ctrl,
+            &model_freqs,
+            &model_freqs_corr,
+            2,
+            0,
+            0,
+        );
+        assert_eq!(obs_v.len(), 2);
+        assert_eq!(sig_v.len(), 2);
+        // `rm` from surface-corrected frequencies (`l1` dnu = 95 uHz).
+        let rm0 = (1025.0_f64 - 1018.0) / (1075.0 - 980.0);
+        let rm1 = (1120.0_f64 - 1110.0) / (1170.0 - 1075.0);
+        // `obs_r2.r02_freqs[0] = 1000` sits in `[950, 1050]` of uncorrected
+        // `model_freqs[0]`, giving `alfa = 0.5`.
+        let alfa0 = (1000.0_f64 - 950.0) / (1050.0 - 950.0);
+        let want0 = alfa0 * rm1 + (1.0 - alfa0) * rm0;
+        assert_eq!(mod_v[0].to_bits(), want0.to_bits());
+        // `obs_r2.r02_freqs[1] = 1100 > 1050` returns last active `rm1`.
+        assert_eq!(mod_v[1].to_bits(), rm1.to_bits());
+
+        // Passing `model_freqs_corr[0]` shifts `alfa0` to `(1000-930)/95`.
+        let alfa_corr = (1000.0_f64 - 930.0) / (1025.0 - 930.0);
+        let wrong0 = alfa_corr * rm1 + (1.0 - alfa_corr) * rm0;
+        assert_ne!(mod_v[0].to_bits(), wrong0.to_bits());
     }
 }

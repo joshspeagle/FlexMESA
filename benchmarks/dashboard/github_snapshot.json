@@ -340,8 +340,28 @@
   ],
   "open_pull_requests": [
     {
-      "number": 724,
-      "title": "Train 18: near-miss fixes, hydro and momentum departures, band LAPACK, exact diffusion oracles, Python mirrors, docs API checker",
+      "number": 747,
+      "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
+      "draft": false
+    },
+    {
+      "number": 751,
+      "title": "dashboard: read the deferred register from the children of #727",
+      "draft": false
+    },
+    {
+      "number": 753,
+      "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
+      "draft": false
+    },
+    {
+      "number": 756,
+      "title": "audit: Python and JAX port inventory (P1.5)",
+      "draft": false
+    },
+    {
+      "number": 757,
+      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
       "draft": false
     }
   ],
@@ -1133,6 +1153,38 @@
     {
       "number": 723,
       "title": "[Deferred bug] write_pulse_data dispatches 'gr1d' to write_saio_data, which reads unset point_data rows (pulse.f90:174-175)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 750,
+      "title": "[Deferred bug] astero: adipls_irotkr is overwritten by the ADIPLS parameter-file value (res_adipar reset)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 752,
+      "title": "[Deferred bug] mtx: DGBSVX_tridiagonal_wrapper reads x_flat unset when the matrix is exactly singular",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 754,
+      "title": "[Deferred bug] astero: the NEWUOA workspace is BOBYQA's length, shorter than NEWUOA documents (BIGDEN writes past it)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 755,
+      "title": "[Deferred bug] num: NEWUOA returns X from an unset XOPT when MAXFUN < NPT",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

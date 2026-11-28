@@ -13,8 +13,10 @@
 //!   `use_mass_corrections` is active (`0.5 * dm[0] * mc[0]` at $k = 0$).
 //! - **Non-HSE hydrodynamic terms (`expected_non_HSE_term`,
 //!   `hydro_momentum.f90:374-461`)**:
-//!   - `extra_grav[k]` extra face gravitational acceleration,
-//!   - Lagrangian acceleration $-(v_k - v_{\mathrm{start},k})/\Delta t$,
+//!   - `extra_grav[k]` extra face gravitational acceleration when
+//!     `use_other_momentum || use_other_momentum_implicit`,
+//!   - Lagrangian acceleration $-\mathrm{dxh\_v}_k/\Delta t$ (or
+//!     $-2\,v_k/\Delta t$ below `velocity_logT_lower_bound`),
 //!   - Velocity drag $-c_{\mathrm{drag}} v_k / \Delta t$ for $q_k > q_{\mathrm{drag,min}}$,
 //!   - Turbulent viscosity $U_{q,k}$ (`uq_ad[k]`),
 //!   - Artificial viscosity gradient $-(A_k / \Delta m_{\mathrm{face},k})(P_{\mathrm{vsc},k-1} - P_{\mathrm{vsc},k})$,
@@ -30,6 +32,7 @@
 
 use flexmesa_const::{FOUR_PI, LN10, SECYER};
 
+use crate::controls::StarError;
 use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
@@ -286,7 +289,7 @@ pub fn expected_hse_grav_term(
     -(model.cgrav[k] * model.m_grav[k] * fp) / r2
 }
 
-/// `setup_RTI_terms` (`star/private/hydro_momentum.f90:250-277`): `RTI`
+/// `setup_RTI_terms` (`star/private/hydro_momentum.f90:247-281`): `RTI`
 /// momentum diffusion and density-kick terms at face `k`, in $\mathrm{cm\,s^{-2}}$.
 #[must_use]
 fn setup_rti_momentum_terms(
@@ -294,33 +297,34 @@ fn setup_rti_momentum_terms(
     k: usize,
     dm_div_a: StarAdOrder1,
 ) -> StarAdOrder1 {
-    if !model.controls.rti_flag
-        || k == 0
-        || k + 1 >= model.nz
-        || !(model.controls.v_flag || model.controls.u_flag)
-    {
+    // `hydro_momentum.f90:255-256`: runs whenever `RTI_flag` and interior face.
+    if !model.controls.rti_flag || k == 0 || k + 1 >= model.nz {
         return StarAdOrder1::ZERO;
     }
     let dvdt_diffusion = if model.controls.dudt_rti_diffusion_factor > 0.0 {
         let fac = model.controls.dudt_rti_diffusion_factor;
-        let sigm1 =
-            fac * model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0);
-        let sig00 = fac * model.aux.sigmid_rti.get(k).copied().unwrap_or(0.0);
-        let v_val = |idx: usize| {
-            if model.controls.v_flag {
-                model.v[idx]
-            } else {
-                model.u[idx]
-            }
+        let sigm1 = fac * model.aux.sigmid_rti[k - 1];
+        let sig00 = fac * model.aux.sigmid_rti[k];
+        // `wrap_v_{m1,00,p1}` (`star/private/auto_diff_support.f90:1052-1119`):
+        // delegates to `wrap_u_face_{m1,00,p1}` when `u_flag` is set.
+        let (v_m1, v_00, v_p1) = if model.controls.u_flag {
+            (
+                model.aux.u_face_ad[k - 1].shift_m1(),
+                model.aux.u_face_ad[k],
+                model.aux.u_face_ad[k + 1].shift_p1(),
+            )
+        } else {
+            (
+                StarAdOrder1::variable(model.v[k - 1], I_V_M1),
+                StarAdOrder1::variable(model.v[k], I_V_00),
+                StarAdOrder1::variable(model.v[k + 1], I_V_P1),
+            )
         };
-        let v_00 = StarAdOrder1::variable(v_val(k), I_V_00);
-        let v_m1 = StarAdOrder1::variable(v_val(k - 1), I_V_M1);
-        let v_p1 = StarAdOrder1::variable(v_val(k + 1), I_V_P1);
         (sig00 * (v_p1 - v_00) - sigm1 * (v_00 - v_m1)) / model.dm_bar[k]
     } else {
         StarAdOrder1::ZERO
     };
-    let eta_k = model.aux.eta_rti.get(k).copied().unwrap_or(0.0);
+    let eta_k = model.aux.eta_rti[k];
     let dvdt_kick = if eta_k > 0.0
         && model.controls.dlnddt_rti_diffusion_factor > 0.0
         && model.dt > 0.0
@@ -360,12 +364,15 @@ pub fn wrap_d_m1(model: &StarModel, k: usize) -> StarAdOrder1 {
 /// separate terms of the residual (`hydro_momentum.f90:110-111`).
 #[must_use]
 pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
-    let mut non_hse = model
-        .aux
-        .extra_grav
-        .get(k)
-        .copied()
-        .unwrap_or(StarAdOrder1::ZERO);
+    // Upstream reads `extra_grav` only when `use_other_momentum` or
+    // `use_other_momentum_implicit` is set (`hydro_momentum.f90:392-395`).
+    let mut non_hse = if model.controls.use_other_momentum
+        || model.controls.use_other_momentum_implicit
+    {
+        model.aux.extra_grav[k]
+    } else {
+        StarAdOrder1::ZERO
+    };
 
     let dt = model.dt;
     // Upstream applies Lagrangian acceleration, drag, and `Uq_ad` only when
@@ -375,21 +382,24 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
             model.ln_t_old.get(k).copied().unwrap_or(model.ln_t[k]);
         let local_v_flag =
             ln_t_old_k / LN10 >= model.controls.velocity_logt_lower_bound;
-        let v_00 = StarAdOrder1::variable(model.v[k], I_V_00);
-        let dv_dt = if local_v_flag {
-            let v_st = model.v_start.get(k).copied().unwrap_or(model.v[k]);
-            (v_00 - v_st) / dt
+        let (accel, d_accel_dv) = if local_v_flag {
+            // `hydro_momentum.f90:410-412`.
+            (model.aux.dxh_v[k] / dt, 1.0 / dt)
         } else {
-            // `hydro_momentum.f90:413-422`: assume `v_start = 0` and
+            // `hydro_momentum.f90:413-420`: assume `v_start = 0` and
             // constant acceleration over `dt`.
-            2.0 * v_00 / dt
+            (2.0 * model.v[k] / dt, 2.0 / dt)
         };
-        non_hse = non_hse - dv_dt;
+        let mut accel_ad = StarAdOrder1::ZERO;
+        accel_ad.val = accel;
+        accel_ad.d1[I_V_00] = d_accel_dv;
+        non_hse = non_hse - accel_ad;
 
         if model.q[k] > model.controls.min_q_for_drag
             && model.controls.drag_coefficient > 0.0
         {
             // `drag = -s% drag_coefficient*v_00/s% dt` (`hydro_momentum.f90:424-428`).
+            let v_00 = StarAdOrder1::variable(model.v[k], I_V_00);
             non_hse = non_hse - model.controls.drag_coefficient * v_00 / dt;
         }
 
@@ -547,12 +557,27 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 
 /// Optional kinematic radius-velocity equation for face `k` (`do1_radius_eqn`
 /// in `star/private/hydro_momentum.f90:545-601`).
-pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    let Some(i_dlnr_dt) = model.layout.i_dlnr_dt else {
-        return;
-    };
-    let ln_t_ref = model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]);
-    let logt = ln_t_ref / LN10;
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if neither `u_flag` nor `v_flag` is
+/// set (`star/private/hydro_momentum.f90:559`) or if `layout.i_dlnr_dt` is
+/// absent.
+pub fn do1_radius_eqn(
+    model: &StarModel,
+    k: usize,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
+    if !(model.controls.u_flag || model.controls.v_flag) {
+        return Err(StarError::InvalidInput(String::from(
+            "must have either v or u for do1_radius_eqn",
+        )));
+    }
+    let i_dlnr_dt = model.layout.i_dlnr_dt.ok_or_else(|| {
+        StarError::InvalidInput(String::from(
+            "do1_radius_eqn requires layout.i_dlnr_dt",
+        ))
+    })?;
+    let logt = model.ln_t_start[k] / LN10;
     // `star/private/hydro_momentum.f90:561-564`.
     let force_zero_v = model.q[k] > model.controls.velocity_q_upper_bound
         || model.tau[k] < model.controls.velocity_tau_lower_bound
@@ -573,27 +598,23 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         v00 / model.aux.csound_start[k]
     } else {
         let vel_tc = model.controls.using_velocity_time_centering;
+        // `wrap_opt_time_center_v_00` (`star/private/auto_diff_support.f90:1090-1101,1171-1185`).
         let v_ad = if model.controls.v_flag {
-            let v_var = StarAdOrder1::variable(model.v[k], I_V_00);
-            if vel_tc {
-                let v_st = model.v_start.get(k).copied().unwrap_or(model.v[k]);
-                (v_var + v_st) * 0.5
+            let mut v_tc = if model.controls.u_flag {
+                model.aux.u_face_ad[k]
             } else {
-                v_var
-            }
-        } else if model.controls.u_flag {
-            let u_var = StarAdOrder1::variable(model.u[k], I_V_00);
-            let uf_ad = model.aux.u_face_ad.get(k).copied().unwrap_or(u_var);
+                StarAdOrder1::variable(model.v[k], I_V_00)
+            };
             if vel_tc {
-                let u_st = model.u_start.get(k).copied().unwrap_or(model.u[k]);
-                let uf_s =
-                    model.aux.u_face_start.get(k).copied().unwrap_or(u_st);
-                (uf_ad + uf_s) * 0.5
-            } else {
-                uf_ad
+                v_tc = 0.5 * (v_tc + model.v_start[k]);
             }
+            v_tc
         } else {
-            StarAdOrder1::ZERO
+            let mut v_tc = model.aux.u_face_ad[k];
+            if vel_tc {
+                v_tc = 0.5 * (v_tc + model.aux.u_face_start[k]);
+            }
+            v_tc
         };
         // `dxh_lnR = wrap_dxh_lnR(s,k)` carries the Newton change of `lnR`
         // before `edit_lnR` (`auto_diff_support.f90:977-984`), and
@@ -608,4 +629,312 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         dr_div_r0_expected - dr_div_r0_actual
     };
     sys.save_eqn_residual(&model.layout, k, i_dlnr_dt, &resid);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use flexmesa_const::LN10;
+
+    use super::{
+        do1_radius_eqn, expected_non_hse_term, setup_rti_momentum_terms,
+        wrap_d_00, wrap_d_m1, StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1,
+        I_LNR_00, I_V_00,
+    };
+    use crate::controls::{StarControls, StarError, StarJobControls};
+    use crate::hydro_eqns::HenyeySystem;
+    use crate::hydro_vars::set_hydro_vars;
+    use crate::inlist::{InlistBundle, InlistLoadOptions};
+    use crate::model::StarModel;
+    use crate::solver_support::set_vars_for_solver;
+    use crate::zams::load_zams_model;
+
+    struct TempInlistDir(PathBuf);
+
+    impl Drop for TempInlistDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn test_expected_non_hse_term_uses_dxh_v_above_logt_bound() {
+        let ctrl = StarControls {
+            v_flag: true,
+            velocity_logt_lower_bound: 4.0,
+            ..StarControls::default()
+        };
+        let mut model =
+            StarModel::new(3, vec![1], StarJobControls::default(), ctrl);
+        model.dt = 10.0;
+        model.ln_t = vec![5.0 * LN10; 3];
+        model.ln_t_old = vec![5.0 * LN10, 5.0 * LN10, 3.0 * LN10];
+        model.v = vec![3.0e5, 4.0e5, 5.0e5];
+        model.v_start = vec![1.0e5, 2.0e5, 3.0e5];
+        // Intentionally distinct from `v - v_start = 2.0e5` so any fallback is caught.
+        model.aux.dxh_v = vec![0.5e5, 0.5e5, 0.5e5];
+
+        let term_above = expected_non_hse_term(&model, 1);
+        assert!((term_above.val - (-0.5e5 / 10.0)).abs() < 1.0e-12);
+        assert!((term_above.d1[I_V_00] - (-1.0 / 10.0)).abs() < 1.0e-12);
+
+        let term_below = expected_non_hse_term(&model, 2);
+        assert!((term_below.val - (-2.0 * 5.0e5 / 10.0)).abs() < 1.0e-12);
+        assert!((term_below.d1[I_V_00] - (-2.0 / 10.0)).abs() < 1.0e-12);
+    }
+
+    #[test]
+    fn test_expected_non_hse_term_gates_extra_grav_on_use_other_momentum() {
+        let ctrl = StarControls::default();
+        let mut model =
+            StarModel::new(3, vec![1], StarJobControls::default(), ctrl);
+        model.aux.extra_grav = vec![StarAdOrder1::constant(-125.0); 3];
+
+        assert!(expected_non_hse_term(&model, 1).val.abs() < 1.0e-15);
+
+        model.controls.use_other_momentum = true;
+        assert!(
+            (expected_non_hse_term(&model, 1).val - (-125.0)).abs() < 1.0e-12
+        );
+
+        model.controls.use_other_momentum = false;
+        model.controls.use_other_momentum_implicit = true;
+        assert!(
+            (expected_non_hse_term(&model, 1).val - (-125.0)).abs() < 1.0e-12
+        );
+    }
+
+    #[test]
+    fn test_unpack_xh_clears_and_set_vars_for_solver_stores_dxh_v() {
+        let ctrl = StarControls {
+            v_flag: true,
+            zbase: 0.02,
+            initial_mass: 1.0,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("load zams");
+        model.pack_xh();
+        model.aux.dxh_v = vec![123.0; model.nz];
+        model.unpack_xh();
+        assert!(model.aux.dxh_v.iter().all(|&x| x == 0.0));
+
+        let xh_start = model.xh.clone();
+        let nvar = model.layout.nvar(true);
+        let iv = model.layout.i_v.expect("i_v with v_flag");
+        let mut solver_dx = vec![0.0; model.nz * nvar];
+        for k in 0..model.nz {
+            let k_f64 = f64::from(u32::try_from(k).expect("nz fits u32"));
+            solver_dx[k * nvar + iv] = 42.5 + k_f64;
+        }
+        set_vars_for_solver(&mut model, true, &xh_start, &mut solver_dx)
+            .expect("set_vars_for_solver");
+        for k in 0..model.nz {
+            let expected =
+                42.5 + f64::from(u32::try_from(k).expect("nz fits u32"));
+            assert!((model.aux.dxh_v[k] - expected).abs() < 1.0e-12);
+        }
+    }
+
+    #[test]
+    fn test_use_other_momentum_inlist_and_set_hydro_vars_error() {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_other_mom_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let _guard = TempInlistDir(dir.clone());
+        let inlist_path = dir.join("inlist_project");
+        fs::write(
+            &inlist_path,
+            "&controls\n  use_other_momentum = .true.\n/\n",
+        )
+        .expect("write inlist");
+
+        assert!(matches!(
+            InlistBundle::from_file(&inlist_path),
+            Err(StarError::InvalidInput(_))
+        ));
+
+        let bundle = InlistBundle::from_file_with_options(
+            &inlist_path,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .expect("parse with allow_unsupported_controls");
+        assert!(bundle.controls.use_other_momentum);
+
+        let ctrl = StarControls {
+            zbase: 0.02,
+            initial_mass: 1.0,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("load zams");
+        model.controls.use_other_momentum = true;
+        let res = set_hydro_vars(&mut model, false, false);
+        assert!(matches!(
+            res,
+            Err(StarError::InvalidInput(ref msg)) if msg.contains("other_momentum")
+        ));
+    }
+
+    #[test]
+    fn test_setup_rti_momentum_terms_runs_without_vel_flags_and_uses_u_face_ad()
+    {
+        let ctrl = StarControls {
+            rti_flag: true,
+            dlnddt_rti_diffusion_factor: 0.75,
+            dudt_rti_diffusion_factor: 0.0,
+            ..StarControls::default()
+        };
+        let mut model =
+            StarModel::new(4, vec![1], StarJobControls::default(), ctrl);
+        model.dt = 5.0;
+        model.aux.eta_rti[1] = 2.0e14;
+        model.rho = vec![1.0e-3, 2.5e-3, 3.0e-3, 4.0e-3];
+        let dm_div_a = StarAdOrder1::constant(1.0e4);
+
+        let kick = setup_rti_momentum_terms(&model, 1, dm_div_a);
+        let exp_kick = 0.75 * 2.0e14 / dm_div_a
+            * (wrap_d_00(&model, 1) - wrap_d_m1(&model, 1))
+            / 5.0;
+        assert!(kick.val.abs() > 0.0);
+        assert!((kick.val - exp_kick.val).abs() < 1.0e-12);
+        assert!((kick.d1[I_LND_00] - exp_kick.d1[I_LND_00]).abs() < 1.0e-12);
+        assert!((kick.d1[I_LND_M1] - exp_kick.d1[I_LND_M1]).abs() < 1.0e-12);
+
+        model.controls.u_flag = true;
+        model.controls.dlnddt_rti_diffusion_factor = 0.0;
+        model.controls.dudt_rti_diffusion_factor = 1.2;
+        model.dm_bar[1] = 1.0e28;
+        model.aux.sigmid_rti[0] = 1.5e22;
+        model.aux.sigmid_rti[1] = 2.5e22;
+        model.u = vec![1.0e4, 2.0e4, 3.0e4, 4.0e4];
+        model.aux.u_face_ad[0] =
+            StarAdOrder1::from_dlnd_dlnt_00(1.0e5, 3.0e2, 0.0);
+        model.aux.u_face_ad[1] = StarAdOrder1::variable(3.0e5, I_V_00);
+        model.aux.u_face_ad[2] = StarAdOrder1::variable(7.0e5, I_V_00);
+
+        let diff = setup_rti_momentum_terms(&model, 1, dm_div_a);
+        let exp_diff = (1.2
+            * 2.5e22
+            * (model.aux.u_face_ad[2].shift_p1() - model.aux.u_face_ad[1])
+            - 1.2
+                * 1.5e22
+                * (model.aux.u_face_ad[1] - model.aux.u_face_ad[0].shift_m1()))
+            / model.dm_bar[1];
+        assert!((diff.val - exp_diff.val).abs() < 1.0e-12);
+        for (a, b) in diff.d1.iter().zip(exp_diff.d1.iter()) {
+            assert!((a - b).abs() < 1.0e-15);
+        }
+    }
+
+    #[test]
+    fn test_do1_radius_eqn_errors_without_vel_flag_and_uses_start_arrays() {
+        let ctrl_none = StarControls::default();
+        let m_none =
+            StarModel::new(3, vec![1], StarJobControls::default(), ctrl_none);
+        let nvar_none = m_none.layout.nvar(false);
+        let mut sys_none =
+            HenyeySystem::new(3, nvar_none, vec![1.0; 3 * nvar_none]);
+        let res = do1_radius_eqn(&m_none, 0, &mut sys_none);
+        assert!(matches!(
+            res,
+            Err(StarError::InvalidInput(ref msg))
+                if msg.contains("must have either v or u")
+        ));
+
+        let ctrl_u = StarControls {
+            u_flag: true,
+            using_velocity_time_centering: true,
+            velocity_q_upper_bound: 2.0,
+            velocity_tau_lower_bound: -1.0,
+            velocity_logt_lower_bound: 4.0,
+            ..StarControls::default()
+        };
+        let mut mu =
+            StarModel::new(3, vec![1], StarJobControls::default(), ctrl_u);
+        mu.dt = 10.0;
+        mu.q = vec![1.0, 0.5, 0.1];
+        mu.tau = vec![1.0e5; 3];
+        mu.ln_t = vec![15.0; 3];
+        mu.ln_t_start = vec![15.0; 3];
+        mu.ln_r_start = vec![25.0; 3];
+        mu.aux.dxh_lnr = vec![1.0e-3; 3];
+        mu.u = vec![1.0e5; 3];
+        mu.u_start = vec![9.0e5; 3];
+        let mut uf = StarAdOrder1::variable(4.0e5, I_V_00);
+        uf.d1[I_LND_00] = 7.0;
+        mu.aux.u_face_ad[1] = uf;
+        mu.aux.u_face_start[1] = 2.0e5;
+
+        let nvar_u = mu.layout.nvar(false);
+        let mut sys_u = HenyeySystem::new(3, nvar_u, vec![1.0; 3 * nvar_u]);
+        do1_radius_eqn(&mu, 1, &mut sys_u).expect("do1_radius_eqn u_flag");
+        let i_equ_u = mu.layout.i_dlnr_dt.expect("i_dlnr_dt");
+        let iu = mu.layout.i_u.expect("i_u");
+        let r_start = flexmesa_math::exp(25.0);
+        let exp_u = 0.5 * (uf + 2.0e5) * 10.0 / r_start
+            - StarAdOrder1::variable(1.0e-3, I_LNR_00).expm1();
+        assert!((sys_u.equ[nvar_u + i_equ_u] - exp_u.val).abs() < 1.0e-12);
+        assert!(
+            (sys_u.dblk[nvar_u * nvar_u + i_equ_u * nvar_u + iu]
+                - exp_u.d1[I_V_00])
+                .abs()
+                < 1.0e-15
+        );
+        assert!(
+            (sys_u.dblk[nvar_u * nvar_u + i_equ_u * nvar_u + mu.layout.i_lnd]
+                - exp_u.d1[I_LND_00])
+                .abs()
+                < 1.0e-15
+        );
+        assert!(
+            (sys_u.dblk[nvar_u * nvar_u + i_equ_u * nvar_u + mu.layout.i_lnr]
+                - exp_u.d1[I_LNR_00])
+                .abs()
+                < 1.0e-15
+        );
+
+        let ctrl_v = StarControls {
+            v_flag: true,
+            using_velocity_time_centering: true,
+            velocity_q_upper_bound: 2.0,
+            velocity_tau_lower_bound: -1.0,
+            velocity_logt_lower_bound: 4.0,
+            ..StarControls::default()
+        };
+        let mut mv =
+            StarModel::new(3, vec![1], StarJobControls::default(), ctrl_v);
+        mv.dt = 10.0;
+        mv.q = vec![1.0, 0.5, 0.1];
+        mv.tau = vec![1.0e5; 3];
+        mv.ln_t = vec![15.0; 3];
+        mv.ln_t_start = vec![15.0; 3];
+        mv.ln_r_start = vec![25.0; 3];
+        mv.aux.dxh_lnr = vec![1.0e-3; 3];
+        mv.v = vec![6.0e5; 3];
+        mv.v_start = vec![2.0e5; 3];
+
+        let nvar_v = mv.layout.nvar(false);
+        let mut sys_v = HenyeySystem::new(3, nvar_v, vec![1.0; 3 * nvar_v]);
+        do1_radius_eqn(&mv, 1, &mut sys_v).expect("do1_radius_eqn v_flag");
+        let i_equ_v = mv.layout.i_dlnr_dt.expect("i_dlnr_dt");
+        let iv = mv.layout.i_v.expect("i_v");
+        let exp_v =
+            0.5 * (StarAdOrder1::variable(6.0e5, I_V_00) + 2.0e5) * 10.0
+                / r_start
+                - StarAdOrder1::variable(1.0e-3, I_LNR_00).expm1();
+        assert!((sys_v.equ[nvar_v + i_equ_v] - exp_v.val).abs() < 1.0e-12);
+        assert!(
+            (sys_v.dblk[nvar_v * nvar_v + i_equ_v * nvar_v + iv]
+                - exp_v.d1[I_V_00])
+                .abs()
+                < 1.0e-15
+        );
+    }
 }

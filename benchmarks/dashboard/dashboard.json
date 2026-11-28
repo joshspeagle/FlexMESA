@@ -14,14 +14,14 @@
         "absent": 17101,
         "stub": 6378,
         "partial": 54084,
-        "ported_unverified": 38027,
-        "kernel_reference_vectors": 4919,
+        "ported_unverified": 37306,
+        "kernel_reference_vectors": 5640,
         "case_level_evidence": 0,
         "ported_total": 42946,
-        "verified_total": 4919,
+        "verified_total": 5640,
         "pct_ported": 35.6,
-        "pct_verified": 4.1,
-        "rust_lines": 115376,
+        "pct_verified": 4.7,
+        "rust_lines": 116115,
         "python_jax_lines": 3985
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 14822,
+        "rust_lines": 14868,
         "python_jax_lines": 1244
       },
       {
@@ -259,8 +259,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5551,
-        "python_jax_lines": 3608
+        "rust_lines": 5552,
+        "python_jax_lines": 3744
       },
       {
         "module": "mtx",
@@ -276,8 +276,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 8522,
-        "python_jax_lines": 1775
+        "rust_lines": 9549,
+        "python_jax_lines": 1851
       },
       {
         "module": "interp_1d",
@@ -664,12 +664,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1189,
-      "defaults_agree": 1189,
+      "matched_in_flexmesa": 1190,
+      "defaults_agree": 1190,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 238
+      "unimplemented": 237
     },
     {
       "namelist": "star &star_job",
@@ -1289,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 330,
-    "total_tests": 1942,
+    "total_files": 332,
+    "total_tests": 1968,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 195
+        "files": 197
       },
       "regression": {
         "files": 2
@@ -1304,12 +1304,12 @@
     },
     "by_language": {
       "rust": {
-        "files": 231,
-        "tests": 1150
+        "files": 232,
+        "tests": 1170
       },
       "python": {
-        "files": 99,
-        "tests": 792
+        "files": 100,
+        "tests": 798
       }
     },
     "mislabeled_count": 2,
@@ -1559,7 +1559,7 @@
         "invariant_files": 1,
         "regression_files": 0,
         "total_files": 6,
-        "total_tests": 45,
+        "total_tests": 47,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1568,10 +1568,10 @@
       {
         "module": "mtx",
         "oracle_files": 5,
-        "invariant_files": 1,
+        "invariant_files": 2,
         "regression_files": 0,
-        "total_files": 6,
-        "total_tests": 34,
+        "total_files": 7,
+        "total_tests": 54,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1688,10 +1688,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 40,
+        "invariant_files": 41,
         "regression_files": 1,
-        "total_files": 43,
-        "total_tests": 389,
+        "total_files": 44,
+        "total_tests": 393,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# GENERATED VIA python scripts/docs/check_api_coverage.py --write-allowlist (P1.4).
+# API symbols undocumented as of 2026-11-28 (P1.4). The gate fails on
+# any missing symbol outside this file and on any stale entry here,
+# so this file only shrinks.
+
+[counts]
+python = 0
+rust_pyi = 0
+total = 0

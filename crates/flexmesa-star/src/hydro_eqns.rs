@@ -480,7 +480,7 @@ fn set_compression_bc(
     sys: &mut HenyeySystem,
 ) -> Result<(), StarError> {
     // Upstream reads `dxh_lnd(2)` and `lnd(2)` unconditionally, which is
-    // outside the arrays for a one-cell model (DECISIONS #43).
+    // outside the arrays for a one-cell model (DECISIONS #43, deferred #697).
     if model.nz < 2 {
         return Err(StarError::InvalidInput(String::from(
             "use_compression_outer_BC needs at least two cells: upstream reads cell 2 (star/private/hydro_eqns.f90:1093-1095; DECISIONS #43)",
@@ -540,7 +540,7 @@ fn set_fixed_vsurf_outer_bc(
 /// without `u_flag` or `v_flag` (`:1113-1115`), for
 /// `use_compression_outer_BC` with fewer than two cells, and for `RSP2_flag`
 /// without `RSP2_use_L_eqn_at_surface` (upstream then never sets
-/// `equ(i_equL, 1)`; DECISIONS #43). Returns
+/// `equ(i_equL, 1)`; DECISIONS #43, deferred #698). Returns
 /// [`StarError::MicrophysicsError`] for non-finite boundary values, where
 /// upstream calls `mesa_error` (`:870-887`, `:1026-1031`).
 pub fn do_surf_bc_eqns(
@@ -907,7 +907,9 @@ pub fn assemble_henyey_system(
         )?;
         model.aux.ergs_error[k] = ergs_k;
         tot_e_equ_err += ergs_k;
-        do1_radius_eqn(model, k, sys);
+        if model.layout.i_dlnr_dt.is_some() {
+            do1_radius_eqn(model, k, sys)?;
+        }
         if model.controls.rti_flag {
             crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);
         }

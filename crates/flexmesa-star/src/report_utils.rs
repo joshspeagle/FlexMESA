@@ -569,37 +569,39 @@ pub fn eval_conv_time_scales(model: &StarModel) -> (f64, f64) {
 }
 
 /// Optical-depth-weighted Eddington luminosity `eval_Ledd` in $\mathrm{erg\,s^{-1}}$
-/// (`star/private/star_utils.f90:1771-1796`).
+/// (`star/private/star_utils.f90:1771-1796`), transcribed in upstream's
+/// operation order: `dtau1 = get_dtau1` (`:855`), and for each cell
+/// `dq(k)*pi4*clight*cgrav(1)*m_grav(1)/opacity(k)` evaluated left to right
+/// (`:1786, 1792-1793`), with no guards on `opacity`, `rmid` or `dqsum`
+/// beyond upstream's `cgrav(1) <= 0` return (`:1780`).
 #[must_use]
 pub fn eval_ledd_erg_s(model: &StarModel) -> f64 {
     let nz = model.nz;
-    if nz == 0 || model.cgrav[0] <= 0.0 || model.opacity[0] <= 0.0 {
+    if nz == 0 || model.cgrav[0] <= 0.0 {
         return 0.0;
     }
-    let surf_avg_tau = model.controls.output.surf_avg_tau;
-    let mut dtau = model.dm[0] * model.opacity[0]
-        / (FOUR_PI * model.rmid[0] * model.rmid[0]).max(1.0e-99);
+    // `get_dtau1 = s% dm(1)*kap/(pi4*s% rmid(1)*s% rmid(1))` (`:855`).
+    let dtau1 = model.dm[0] * model.opacity[0]
+        / (FOUR_PI * model.rmid[0] * model.rmid[0]);
+    let mut dtau = dtau1;
     let mut tau = model.controls.tau_factor * model.tau_base;
+    let surf_avg_tau = model.controls.output.surf_avg_tau;
+    let (cgrav1, m_grav1) = (model.cgrav[0], model.m_grav[0]);
     let mut dqsum = model.dq[0];
-    let num0 = FOUR_PI * CLIGHT * model.cgrav[0] * model.m_grav[0];
-    let mut ledd_sum = model.dq[0] * num0 / model.opacity[0];
+    let mut ledd_sum =
+        model.dq[0] * FOUR_PI * CLIGHT * cgrav1 * m_grav1 / model.opacity[0];
     for k in 1..nz {
         tau += dtau;
         if tau > surf_avg_tau {
             break;
         }
         dtau = model.dm[k] * model.opacity[k]
-            / (FOUR_PI * model.rmid[k] * model.rmid[k]).max(1.0e-99);
-        if model.opacity[k] > 0.0 {
-            dqsum += model.dq[k];
-            ledd_sum += model.dq[k] * num0 / model.opacity[k];
-        }
+            / (FOUR_PI * model.rmid[k] * model.rmid[k]);
+        dqsum += model.dq[k];
+        ledd_sum += model.dq[k] * FOUR_PI * CLIGHT * cgrav1 * m_grav1
+            / model.opacity[k];
     }
-    if dqsum > 0.0 {
-        ledd_sum / dqsum
-    } else {
-        0.0
-    }
+    ledd_sum / dqsum
 }
 
 /// Photosphere summary matching `get_phot_info` + `set_phot_info`

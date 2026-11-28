@@ -21,6 +21,37 @@ To keep each reference page fast to load and easy to navigate, the Python and JA
 | **[Foundational Numerics & Convection](numerics.md)** | `flexmesa.constants`, `flexmesa.math`, `flexmesa.utils`, `flexmesa.auto_diff`, `flexmesa.interp_1d`, `flexmesa.interp_2d`, `flexmesa.mtx`, `flexmesa.num`, `flexmesa.turb` | Physical constants; IEEE-754 elementary intrinsics; dual and hyperdual automatic differentiation; 1D/2D monotonic and bicubic splines; dense, banded, `bcyclic`, and `PCR` block-tridiagonal solvers; root finders and Rosenbrock/RK integrators; `MLT`, `TDC`, semiconvection, and thermohaline mixing |
 | **[I/O, Schemas, Plotting & Benchmarks](io-plotting-bench.md)** | `flexmesa.schema`, `flexmesa.data`, `flexmesa.testing`, `flexmesa.plotting`, `flexmesa.bench` | `.defaults` and `&namelist` parsers; `.safetensors` memory-mapped loaders and `SHA-256` manifest verification; upstream `test_output` reference comparators (`flexmesa.testing.golden`) and MESA `26.4.1` history harness (`flexmesa.testing.history_compare`); HR, Kippenhahn, échelle, and binary RLOF plotting; 4-stage benchmark harnesses |
 
+
+## Python Subpackage Index
+
+- **`_rust`**: Compiled Safe Rust PyO3 extension (`flexmesa._rust`), the canonical engine behind every Python wrapper.
+- **`astero`**: Asteroseismology and optimization ([page](astero.md)).
+- **`atm`**: Model atmospheres and T-tau relations ([page](opacity-atm-colors.md)).
+- **`auto_diff`**: Forward-mode dual and hyperdual numbers ([page](numerics.md)).
+- **`bench`**: Benchmark harnesses ([page](io-plotting-bench.md)).
+- **`binary`**: Interacting binaries and accretors ([page](binary.md)).
+- **`chem`**: Nuclide catalog, solar abundances and composition moments ([page](nuclear.md)).
+- **`colors`**: Synthetic photometry and SED synthesis ([page](opacity-atm-colors.md)).
+- **`constants`**: Physical constants ([page](numerics.md)).
+- **`data`**: Safetensors loaders and manifest verification ([page](io-plotting-bench.md)).
+- **`eos`**: Equations of state ([page](eos.md)).
+- **`interp_1d`**: 1D monotonic and piecewise-cubic interpolation ([page](numerics.md)).
+- **`interp_2d`**: 2D bicubic and Akima interpolation ([page](numerics.md)).
+- **`ionization`**: Partial ionization and effective ionic charges ([page](nuclear.md)).
+- **`kap`**: Radiative, conductive and Compton opacities ([page](opacity-atm-colors.md)).
+- **`math`**: Run-level numerics modes and elementary intrinsics ([page](numerics.md)).
+- **`mtx`**: Dense, banded and block-tridiagonal linear solvers ([page](numerics.md)).
+- **`net`**: Nuclear reaction networks and 1-zone burners ([page](nuclear.md)).
+- **`neu`**: Thermal neutrino loss rates ([page](nuclear.md)).
+- **`num`**: Root finders, quadrature and stiff ODE integrators ([page](numerics.md)).
+- **`plotting`**: Stellar and binary plotting ([page](io-plotting-bench.md)).
+- **`rates`**: Thermonuclear rates and plasma screening ([page](nuclear.md)).
+- **`schema`**: `.defaults` and `&namelist` parsers ([page](io-plotting-bench.md)).
+- **`star`**: 1D stellar structure and evolution ([page](star.md)).
+- **`testing`**: Reference comparators and the history harness ([page](io-plotting-bench.md)).
+- **`turb`**: Turbulent convection and mixing ([page](numerics.md)).
+- **`utils`**: Array helpers, finiteness guards and checkpoint codec ([page](numerics.md)).
+
 ---
 
 ## Top-Level Package Exports (`flexmesa`)

@@ -11,6 +11,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
+import numpy as np
+
 
 def brent_safe_zero(
     a: float,
@@ -130,6 +132,108 @@ def brent_safe_zero(
             d = e
 
     raise RuntimeError("brent_safe_zero exceeded max_iter")
+
+
+def eval_brent_safe_zero(
+    a: float,
+    b: float,
+    machep: float,
+    t: float,
+    epsy: float,
+    func: Callable[[float], float],
+    fa_in: float,
+    fb_in: float,
+) -> tuple[float, float]:
+    """Finds a root of $f(x) = 0$ matching upstream ``eval_brent_safe_zero``.
+
+    Ports ``num/private/mod_brent.f90:513-705`` directly: unbounded loop
+    (no iteration cap), no finiteness guards, and no opposite-sign check on
+    ``fa_in`` and ``fb_in``. Keeps upstream's ``a`` in place of ``q`` at
+    ``mod_brent.f90:653`` (``#194``).
+
+    Args:
+        a: First bracket endpoint (arbitrary units).
+        b: Second bracket endpoint (arbitrary units).
+        machep: Relative abscissa tolerance factor.
+        t: Absolute abscissa convergence tolerance.
+        epsy: Residual stopping tolerance on ``|f(x)|``.
+        func: Scalar callable ``func(x)`` returning ``f(x)``.
+        fa_in: Caller-supplied value ``f(a)``.
+        fb_in: Caller-supplied value ``f(b)``.
+
+    Returns:
+        Tuple ``(sb, fb)`` in ``float64``.
+    """
+    a_f = float(a)
+    machep_f = float(machep)
+    t_f = float(t)
+    epsy_f = float(epsy)
+    sa = a_f
+    sb = float(b)
+    fa = float(fa_in)
+    fb = float(fb_in)
+    c = sa
+    fc = fa
+    e = sb - sa
+    d = e
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        while True:
+            if abs(fc) < abs(fb):
+                sa = sb
+                sb = c
+                c = sa
+                fa = fb
+                fb = fc
+                fc = fa
+            tol = 2.0 * machep_f * abs(sb) + t_f
+            m = 0.5 * (c - sb)
+            if abs(m) <= tol or fb == 0.0:
+                break
+            if abs(e) < tol or abs(fa) <= abs(fb):
+                e = m
+                d = e
+            else:
+                s = float(np.float64(fb) / np.float64(fa))
+                if sa == c:
+                    p = 2.0 * m * s
+                    q = 1.0 - s
+                else:
+                    q = float(np.float64(fa) / np.float64(fc))
+                    r = float(np.float64(fb) / np.float64(fc))
+                    # Keeps upstream's `a` in place of `q`
+                    # (`num/private/mod_brent.f90:653`, #194).
+                    p = s * (2.0 * m * a_f * (q - r) - (sb - sa) * (r - 1.0))
+                    q = (q - 1.0) * (r - 1.0) * (s - 1.0)
+                if 0.0 < p:
+                    q = -q
+                else:
+                    p = -p
+                s = e
+                e = d
+                if 2.0 * p < 3.0 * m * q - abs(tol * q) and p < abs(
+                    0.5 * s * q
+                ):
+                    d = float(np.float64(p) / np.float64(q))
+                else:
+                    e = m
+                    d = e
+            sa = sb
+            fa = fb
+            if tol < abs(d):
+                sb += d
+            elif 0.0 < m:
+                sb += tol
+            else:
+                sb -= tol
+            fb = float(func(sb))
+            if abs(fb) < epsy_f:
+                break
+            if (0.0 < fb and 0.0 < fc) or (fb <= 0.0 and fc <= 0.0):
+                c = sa
+                fc = fa
+                e = sb - sa
+                d = e
+    return sb, fb
 
 
 def brent_local_min(

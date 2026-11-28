@@ -358,7 +358,7 @@ fn gamma1_derivatives(
     t: f64,
 ) -> Result<[f64; 3], GyreDataError> {
     let (Some(h1), Some(he4)) = (s.iso.h1, s.iso.he4) else {
-        // `xa(h1)` with `h1 = 0` reads outside the array (DECISIONS #43).
+        // `xa(h1)` with `h1 = 0` reads outside the array (DECISIONS #43, deferred #699).
         return Err(GyreDataError::Upstream(
             "get_fgong_data: the net has no h1 or he4 (xa(0) is undefined)",
         ));
@@ -850,7 +850,7 @@ pub fn get_fgong_data(
     g[14] = STANDARD_CGRAV;
 
     // `s%dxdt_nuc(h1,:)` with `h1 = 0` reads outside the array
-    // (DECISIONS #43).
+    // (DECISIONS #43, deferred #699).
     let dxdt_h1 = s.dxdt_nuc_h1.as_deref().ok_or(GyreDataError::Upstream(
         "get_fgong_data: the net has no h1 (dxdt_nuc(0,:) is undefined)",
     ))?;

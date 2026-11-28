@@ -297,7 +297,9 @@ pub(crate) fn get_atm_tau_base(
 /// `star/private/atm_support.f90:37-147`).
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if `eval_t_tau_uniform` fails.
+/// Returns [`StarError::InvalidInput`] if `use_other_surface_pt` is set
+/// without an `other_surface_PT` hook (`hydro_vars.f90:435-440`), or
+/// [`StarError::MicrophysicsError`] if atmosphere evaluation fails.
 pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     if model.nz == 0 {
         return Ok(());
@@ -321,6 +323,12 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         model.ln_peos_surf_ad = StarAdOrder1::constant(model.ln_peos[0]);
         model.ln_t_surf_ad = StarAdOrder1::constant(model.ln_t[0]);
         return Ok(());
+    }
+    if model.controls.use_other_surface_pt {
+        return Err(StarError::InvalidInput(String::from(concat!(
+            "use_other_surface_PT is not supported ",
+            "(star/private/hydro_vars.f90:435-440)",
+        ))));
     }
     if model.controls.do_starspots {
         // `starspot_tweak_PT` before `get_surf_PT` and `starspot_restore_PT`
@@ -634,6 +642,14 @@ fn atm_eos_proc(
     })
 }
 
+fn other_kap_error() -> StarError {
+    StarError::InvalidInput(String::from(concat!(
+        "use_other_kap = .true. requires an other_kap hook ",
+        "(star/private/atm_support.f90:1263, ",
+        "star/private/kap_support.f90:481-487)",
+    )))
+}
+
 fn atm_kap_proc(
     controls: &StarControls,
     kap_config: &KapConfig,
@@ -648,6 +664,15 @@ fn atm_kap_proc(
     let (kap_raw, mut dlnkap_dln_rho, mut dlnkap_dln_t) =
         if controls.use_simple_es_for_kap {
             (0.2 * (1.0 + chem.x), 0.0, 0.0)
+        } else if controls.use_other_kap {
+            return Err(AtmError::CallbackError {
+                context,
+                detail: String::from(concat!(
+                    "use_other_kap = .true. requires an other_kap hook ",
+                    "(star/private/atm_support.f90:1263, ",
+                    "star/private/kap_support.f90:481-487)",
+                )),
+            });
         } else {
             let ko = get_kap_results(
                 kap_config,
@@ -825,9 +850,10 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
                     "eval_irradiated_surf::eos_proc",
                 )
             };
+            let other_kap_rejected = std::cell::Cell::new(false);
             let kap_cb =
                 |ln_rho: f64, ln_t: f64, eos_res: &AtmEosCallbackResult| {
-                    atm_kap_proc(
+                    let res = atm_kap_proc(
                         &model.controls,
                         &model.kap_config,
                         &chem,
@@ -835,7 +861,14 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
                         ln_t,
                         eos_res,
                         "eval_irradiated_surf::kap_proc",
-                    )
+                    );
+                    if res.is_err()
+                        && !model.controls.use_simple_es_for_kap
+                        && model.controls.use_other_kap
+                    {
+                        other_kap_rejected.set(true);
+                    }
+                    res
                 };
             let out = eval_irradiated(
                 l_surf,
@@ -854,9 +887,13 @@ fn eval_irradiated_surf(model: &mut StarModel) -> Result<SurfPt, StarError> {
                 false,
             )
             .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "eval_irradiated (iterated) failed: {e}"
-                ))
+                if other_kap_rejected.get() {
+                    other_kap_error()
+                } else {
+                    StarError::MicrophysicsError(format!(
+                        "eval_irradiated (iterated) failed: {e}"
+                    ))
+                }
             })?;
             out
         }
@@ -940,11 +977,12 @@ pub(crate) fn eval_grey_t_tau_surf(
                 "eval_grey_t_tau_surf::eos_proc",
             )
         };
+    let other_kap_rejected = std::cell::Cell::new(false);
     let kap_cb = |ln_rho: f64,
                   ln_t: f64,
                   eos_res: &AtmEosCallbackResult|
      -> Result<AtmKapCallbackResult, AtmError> {
-        atm_kap_proc(
+        let res = atm_kap_proc(
             &model.controls,
             &model.kap_config,
             &chem,
@@ -952,7 +990,14 @@ pub(crate) fn eval_grey_t_tau_surf(
             ln_t,
             eos_res,
             "eval_grey_t_tau_surf::kap_proc",
-        )
+        );
+        if res.is_err()
+            && !model.controls.use_simple_es_for_kap
+            && model.controls.use_other_kap
+        {
+            other_kap_rejected.set(true);
+        }
+        res
     };
 
     let atm_out = match model.controls.atm_t_tau_opacity {
@@ -982,9 +1027,13 @@ pub(crate) fn eval_grey_t_tau_surf(
                 teff,
             )
             .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "eval_t_tau_uniform (iterated) failed: {e}"
-                ))
+                if other_kap_rejected.get() {
+                    other_kap_error()
+                } else {
+                    StarError::MicrophysicsError(format!(
+                        "eval_t_tau_uniform (iterated) failed: {e}"
+                    ))
+                }
             })?
         }
         AtmTTauOpacity::Varying => eval_t_tau_varying(
@@ -1002,9 +1051,13 @@ pub(crate) fn eval_grey_t_tau_surf(
             teff,
         )
         .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "eval_t_tau_varying failed: {e}"
-            ))
+            if other_kap_rejected.get() {
+                other_kap_error()
+            } else {
+                StarError::MicrophysicsError(format!(
+                    "eval_t_tau_varying failed: {e}"
+                ))
+            }
         })?,
     };
 
@@ -1012,4 +1065,100 @@ pub(crate) fn eval_grey_t_tau_surf(
     // `dlnP_dlnkap` (`atm/private/atm_t_tau_uniform.f90:231-232`,
     // `atm/private/atm_t_tau_varying.f90:180, 186`).
     Ok(surf_pt_from_atm(&atm_out))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::eval_surf_bc;
+    use crate::controls::{
+        AtmIrradiatedOpacity, AtmOption, AtmTTauOpacity, StarControls,
+        StarError, StarJobControls,
+    };
+    use crate::hydro_vars::set_hydro_vars;
+    use crate::zams::load_zams_model;
+
+    fn load_1m_zams_with_hydro() -> crate::model::StarModel {
+        let mut model = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                initial_z: 0.02,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+        model
+    }
+
+    #[test]
+    fn test_eval_surf_bc_errors_loudly_on_use_other_surface_pt() {
+        let mut model = load_1m_zams_with_hydro();
+        model.controls.use_other_surface_pt = true;
+        let err = eval_surf_bc(&mut model)
+            .expect_err("use_other_surface_pt must error loudly");
+        assert!(matches!(err, StarError::InvalidInput(_)), "got {err}");
+        assert!(err.to_string().contains("use_other_surface_PT"), "{err}");
+
+        // `RSP_flag` returns before `use_other_surface_PT`
+        // (`hydro_vars.f90:421-435`).
+        model.controls.rsp_flag = true;
+        eval_surf_bc(&mut model)
+            .expect("RSP_flag precedes use_other_surface_pt");
+    }
+
+    #[test]
+    fn test_atm_kap_proc_errors_loudly_on_use_other_kap_across_atm_paths() {
+        let mut model = load_1m_zams_with_hydro();
+        model.controls.use_other_kap = true;
+
+        model.controls.atm_option = AtmOption::TTau;
+        model.controls.atm_t_tau_opacity = AtmTTauOpacity::Iterated;
+        let err_iter = eval_surf_bc(&mut model)
+            .expect_err("T_tau iterated must reject use_other_kap");
+        assert!(
+            matches!(err_iter, StarError::InvalidInput(_)),
+            "got {err_iter}"
+        );
+        assert!(err_iter.to_string().contains("use_other_kap"), "{err_iter}");
+
+        model.controls.atm_t_tau_opacity = AtmTTauOpacity::Varying;
+        let err_vary = eval_surf_bc(&mut model)
+            .expect_err("T_tau varying must reject use_other_kap");
+        assert!(
+            matches!(err_vary, StarError::InvalidInput(_)),
+            "got {err_vary}"
+        );
+        assert!(err_vary.to_string().contains("use_other_kap"), "{err_vary}");
+
+        model.controls.atm_option = AtmOption::IrradiatedGrey;
+        model.controls.atm_irradiated_opacity = AtmIrradiatedOpacity::Iterated;
+        model.controls.atm_irradiated_p_surf = 1.0e6;
+        model.controls.atm_irradiated_t_eq = 1000.0;
+        model.controls.atm_irradiated_kap_v = 1.0e-2;
+        model.controls.atm_irradiated_kap_v_div_kap_th = 0.0;
+        model.controls.atm_irradiated_max_iters = 50;
+        model.controls.atm_irradiated_errtol = 1.0e-4;
+        let err_irr = eval_surf_bc(&mut model)
+            .expect_err("irradiated_grey iterated must reject use_other_kap");
+        assert!(
+            matches!(err_irr, StarError::InvalidInput(_)),
+            "got {err_irr}"
+        );
+        assert!(err_irr.to_string().contains("use_other_kap"), "{err_irr}");
+
+        // `use_simple_es_for_kap` precedes `use_other_kap`
+        // (`star/private/kap_support.f90:302-307`).
+        model.controls.atm_option = AtmOption::TTau;
+        model.controls.atm_t_tau_opacity = AtmTTauOpacity::Iterated;
+        model.controls.use_simple_es_for_kap = true;
+        eval_surf_bc(&mut model)
+            .expect("use_simple_es_for_kap precedes use_other_kap");
+
+        // `fixed` never invokes `atm_kap_proc`.
+        model.controls.use_simple_es_for_kap = false;
+        model.controls.atm_t_tau_opacity = AtmTTauOpacity::Fixed;
+        eval_surf_bc(&mut model).expect("T_tau fixed skips atm_kap_proc");
+    }
 }

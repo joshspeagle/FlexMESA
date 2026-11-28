@@ -6,11 +6,11 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 
 | Measure | Value |
 | :--- | ---: |
-| Claims (test, reference, routine) | 94 |
-| Claims verified | 80 |
+| Claims (test, reference, routine) | 95 |
+| Claims verified | 81 |
 | Routines claimed | 64 |
-| Routines verified exact (0 ULP) | 31 |
-| Routines verified at print precision only | 29 |
+| Routines verified exact (0 ULP) | 36 |
+| Routines verified at print precision only | 24 |
 | Routines not counted | 4 |
 | Not counted only because of `scope` or `precision` | 3 |
 
@@ -41,13 +41,18 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/public/eos_lib.f90::eosPT_get` | exact |
 | `interp_2d/private/bipm_db.f90::do_evbipm_db` | exact |
 | `interp_2d/private/bipm_db.f90::do_mkbipm_db` | exact |
+| `neu/private/mod_neu.f90::neutrinos` | exact |
 | `neu/public/neu_lib.f90::neu_get` | exact |
+| `star/private/diffusion_support.f90::get_matrix_coeffs` | exact |
 | `star/private/eps_mdot.f90::calculate_eps_mdot` | exact |
 | `star/private/init_model.f90::get_zams_model` | exact |
 | `star/private/mix_info.f90::update_rotation_mixing_info` | exact |
 | `star/private/neu.f90::do_neu_for_cell` | exact |
 | `star/private/overshoot_utils.f90::eval_conv_bdy_Hp` | exact |
 | `star/private/overshoot_utils.f90::eval_conv_bdy_r` | exact |
+| `star/private/paquette_coeffs.f90::free_collision_integrals` | exact |
+| `star/private/paquette_coeffs.f90::initialise_collision_integrals` | exact |
+| `star/private/paquette_coeffs.f90::paquette_coefficients` | exact |
 | `star/private/solve_omega_mix.f90::do_solve_omega_mix` | exact |
 | `star/private/winds.f90::do_set_mdot` | exact |
 | `star/private/winds.f90::eval_rlo_wind` | exact |
@@ -78,12 +83,7 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/public/eos_lib.f90::eos_fermi_dirac_integral` | print |
 | `eos/public/eos_lib.f90::eos_gamma_DE_get` | print |
 | `eos/public/eos_lib.f90::helmeos2_eval` | print |
-| `neu/private/mod_neu.f90::neutrinos` | print |
 | `star/private/diffusion.f90::do_solve_diffusion` | print |
-| `star/private/diffusion_support.f90::get_matrix_coeffs` | print |
-| `star/private/paquette_coeffs.f90::free_collision_integrals` | print |
-| `star/private/paquette_coeffs.f90::initialise_collision_integrals` | print |
-| `star/private/paquette_coeffs.f90::paquette_coefficients` | print |
 | `star/private/phase_separation.f90::do_phase_separation` | print |
 | `star/private/rsp.f90::build_rsp_model` | print |
 | `star/private/rsp_build.f90::do_rsp_build` | print |

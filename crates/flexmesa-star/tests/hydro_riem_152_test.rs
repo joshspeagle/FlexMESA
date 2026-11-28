@@ -136,9 +136,10 @@ fn test_expected_non_hse_term_local_v_flag_and_u_flag_exclusion() {
     let mut m = build_synthetic_model(ctrl.clone());
     m.v = vec![3.0e5, 4.0e5, 5.0e5];
     m.v_start = vec![1.0e5, 2.0e5, 3.0e5];
+    m.aux.dxh_v = vec![2.0e5, 2.0e5, 2.0e5];
     m.ln_t_old = vec![5.0 * LN10, 5.0 * LN10, 3.0 * LN10];
 
-    // `local_v_flag == true` at zone 1 (`logT_old = 5 >= 4`): `-(v - v_start)/dt`.
+    // `local_v_flag == true` at zone 1 (`logT_old = 5 >= 4`): `-dxh_v/dt`.
     let res_local_true = expected_non_hse_term(&m, 1);
     let exp_val_true = -(m.v[1] - m.v_start[1]) / m.dt;
     assert_close(
@@ -221,7 +222,7 @@ fn test_do1_radius_eqn_force_zero_v_checks_u_flag_before_v_flag() {
     m.aux.csound_start = vec![1.0e6; m.nz];
 
     let mut sys = new_sys(&m);
-    do1_radius_eqn(&m, 0, &mut sys);
+    do1_radius_eqn(&m, 0, &mut sys).expect("do1_radius_eqn");
     let i_equ = m.layout.i_dlnr_dt.expect("i_dlnr_dt");
     assert_close(
         "force_zero_v checks u_flag before v_flag",

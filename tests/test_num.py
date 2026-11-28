@@ -119,10 +119,37 @@ def test_binary_search_qsort_and_quadratic_helpers() -> None:
 
     x0, y0 = num.find0_quadratic(0.0, -2.0, 1.0, -1.0, 2.0, 2.0)
     assert abs(x0 - math.sqrt(2.0)) < 1e-14 and abs(y0) < 1e-14
-    xmax, ymax = num.find_max_quadratic(0.0, 1.0, 2.0, 5.0, 4.0, -3.0)
+    xmax, ymax, ierr = num.find_max_quadratic(0.0, 1.0, 2.0, 5.0, 4.0, -3.0)
+    assert ierr == 0
     assert abs(xmax - 5.0 / 3.0) < 1e-14 and abs(ymax - 31.0 / 6.0) < 1e-14
-    with pytest.raises(ValueError, match="interior value y2"):
-        num.find_max_quadratic(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:195-221 (#670, #671):
+    # Deferred upstream bug #671 (`num_lib.f90:576` tests `y2 < max(y1, y2)`):
+    # concave parabola with y3 > y2 >= y1 keeps ierr == 0.
+    xm_y3, ym_y3, ierr_y3 = num.find_max_quadratic(0.0, 1.0, 1.0, 5.0, 2.0, 6.0)
+    assert ierr_y3 == 0
+    assert abs(xm_y3 - (11.0 / 6.0)) <= 1e-14
+    assert abs(ym_y3 - (145.0 / 24.0)) <= 1e-14
+    # Concave parabola with y2 < y1 and ymax > y2: (0, 6), (1, 5), (2, 1)
+    # has xmax = 1/6, ymax = 145/24 > y2; only y2 < max(y1, y2) sets -1.
+    xm_y1, ym_y1, ierr_y1 = num.find_max_quadratic(0.0, 6.0, 1.0, 5.0, 2.0, 1.0)
+    assert ierr_y1 == -1
+    assert abs(xm_y1 - (1.0 / 6.0)) <= 1e-14
+    assert abs(ym_y1 - (145.0 / 24.0)) <= 1e-14
+    # Non-monotonic abscissas (0, 1), (3, 10), (1, 8): only ordering sets -1.
+    xm_nm, ym_nm, ierr_nm = num.find_max_quadratic(
+        0.0, 1.0, 3.0, 10.0, 1.0, 8.0
+    )
+    assert ierr_nm == -1
+    assert abs(xm_nm - 2.25) <= 1e-14
+    assert abs(ym_nm - 11.125) <= 1e-14
+    # Collinear points (c = 0): upstream computes without c >= 0 or finiteness
+    # guard; dxmax = -inf, xmax = -inf, ymax = NaN, ierr = 0.
+    xm_lin, ym_lin, ierr_lin = num.find_max_quadratic(
+        0.0, 1.0, 1.0, 2.0, 2.0, 3.0
+    )
+    assert ierr_lin == 0
+    assert math.isinf(xm_lin) and xm_lin < 0.0
+    assert math.isnan(ym_lin)
 
 
 def test_dfridr_and_integrate_match_analytical_values() -> None:
@@ -192,15 +219,151 @@ def test_safe_root_matches_mesa_golden_sin_root() -> None:
         epsy=1e-6,
     )
     assert abs(r_mesa - 0.7480061088059349) < 1e-14
-    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, -10.0, 10.0, _fn_sin)
+    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, _fn_sin)
     r_exact, f_exact = num.safe_root_with_brackets(
         _fn_sin, x1, x3, y1, y3, epsx=1e-14, epsy=1e-14
     )
     assert abs(r_exact - 0.7480061107481244) < 1e-13 and abs(f_exact) < 1e-13
+    r_brent, _ = num.eval_brent_safe_zero(
+        0.0,
+        10.0,
+        1e-14,
+        1e-6,
+        1e-6,
+        lambda x: _fn_sin(x)[0],
+        _fn_sin(0.0)[0],
+        _fn_sin(10.0)[0],
+    )
+    assert abs(r_brent - 0.7480061088059349) <= 1e-14
     r_guess, _ = num.safe_root_without_brackets(
         _fn_sin, 0.1, 0.25, epsx=1e-13, epsy=1e-13
     )
     assert abs(r_guess - r_exact) < 1e-12
+
+
+def test_look_for_brackets_and_tanh_match_rust_667() -> None:
+    """Verifies #667 and #669 look_for_brackets and safe_root_with_brackets."""
+
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:312-335 (test_root2).
+    def fn_tanh(x: float) -> tuple[float, float]:
+        t = math.tanh(x)
+        c = math.cosh(x)
+        return t - 0.462_117_157_260_009_8, 1.0 / (c * c)
+
+    (r2_x1, r2_x3), (r2_y1, r2_y3) = num.look_for_brackets(
+        -1.0, 0.1, fn_tanh, 50
+    )
+    assert abs(r2_x1 - (-1.2)) <= 1e-15
+    assert abs(r2_x3 - 2.0) <= 1e-15
+    r2_root, _ = num.safe_root_with_brackets(
+        fn_tanh, r2_x1, r2_x3, r2_y1, r2_y3, 50, 1e-10, 1e-10
+    )
+    assert abs(r2_root - 5.000_000_000_000_001e-1) <= 1e-14
+
+    # Mirrors crates/flexmesa-num/src/root.rs::tests::
+    # look_for_brackets_errors_at_i_31_where_upstream_overflows (#669).
+    calls = 0
+
+    def fn_pos(x: float) -> tuple[float, float]:
+        nonlocal calls
+        calls += 1
+        return 1.0 + x * x, 0.0
+
+    with pytest.raises(ValueError, match="#669"):
+        num.look_for_brackets(0.0, 0.01, fn_pos, 100)
+    assert calls == 2 + 29
+
+    # Mirrors look_for_brackets_follows_upstream_steps.
+    (bx1, bx3), (by1, by3) = num.look_for_brackets(
+        0.0, 0.5, lambda x: (x - 2.5, 1.0), 10
+    )
+    assert (bx1, bx3) == (-1.0, 3.0)
+    assert by1 < 0.0 < by3
+
+
+def test_safe_root_with_guess_and_without_brackets_match_rust_663() -> None:
+    """Verifies #663 safe_root_with_guess and safe_root_without_brackets."""
+    # Mirrors crates/flexmesa-num/src/root.rs::tests::
+    # safe_root_with_guess_reevaluates_newton_brackets.
+    calls: list[float] = []
+
+    def fn_linear(x: float) -> tuple[float, float]:
+        calls.append(x)
+        return x - 0.3, 0.5
+
+    root, _ = num.safe_root_with_guess(
+        fn_linear, 0.0, 0.1, None, None, None, None, 3, 50, 1e-14, 1e-14
+    )
+    assert calls[:5] == [0.0, 0.6, 0.0, 0.0, 0.6]
+    assert abs(root - 0.3) < 1e-12
+
+    # Mirrors safe_root_with_guess_newton_is_unbounded.
+    root_huge, _ = num.safe_root_with_guess(
+        lambda x: (x - 1.0e40, 1.0),
+        0.0,
+        1.0,
+        None,
+        None,
+        None,
+        None,
+        5,
+        50,
+        1e-12,
+        1e-12,
+    )
+    assert root_huge == 1.0e40
+
+    # ValueError inside Newton breaks loop and falls back to bracketing.
+    def fn_domain(x: float) -> tuple[float, float]:
+        if x > 5.0:
+            raise ValueError("out of domain")
+        return x - 0.3, 0.05
+
+    root_fb, _ = num.safe_root_with_guess(
+        fn_domain, 0.0, 0.25, None, None, None, None, 5, 50, 1e-12, 1e-12
+    )
+    assert abs(root_fb - 0.3) < 1e-12
+
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:337-365 (test_root3).
+    def fn_tanh(x: float) -> tuple[float, float]:
+        t = math.tanh(x)
+        c = math.cosh(x)
+        return t - 0.462_117_157_260_009_8, 1.0 / (c * c)
+
+    root3_first, _ = num.safe_root_without_brackets(
+        fn_tanh, 0.1, 0.1, 10, 50, 1e-10, 1e-10
+    )
+    assert abs(root3_first - 4.999_999_999_999_936e-1) <= 1e-14
+    root3_second, _ = num.safe_root_without_brackets(
+        fn_tanh, -1.0, 0.1, 10, 50, 1e-10, 1e-10
+    )
+    assert abs(root3_second - 5.000_000_000_000_038e-1) <= 1e-14
+    root_explicit, _ = num.safe_root_with_guess(
+        fn_tanh,
+        0.1,
+        0.2,
+        -1.0,
+        2.0,
+        fn_tanh(-1.0)[0],
+        fn_tanh(2.0)[0],
+        5,
+        50,
+        1e-12,
+        1e-12,
+    )
+    assert abs(root_explicit - 0.5) <= 1e-10
+
+    # Verifies min(imax, newt_imax) cap in safe_root_without_brackets.
+    cap_calls: list[float] = []
+
+    def fn_quad(x: float) -> tuple[float, float]:
+        cap_calls.append(x)
+        return x * x - 2.0, 2.0 * x
+
+    with pytest.raises(ValueError, match="failed to bracket"):
+        num.safe_root_without_brackets(fn_quad, 10.0, 0.5, 10, 2, 1e-12, 1e-12)
+    assert cap_calls[:2] == [10.0, 5.1]
+    assert len(cap_calls) == 2 + 3
 
 
 def test_nm_simplex_all_six_upstream_benchmarks_and_newuoa_bobyqa() -> None:

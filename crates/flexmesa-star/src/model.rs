@@ -232,6 +232,11 @@ pub struct StarModel {
     pub ln_e_start: Vec<f64>,
     /// Start-of-step $\ln S$ (`lnS_start`).
     pub ln_s_start: Vec<f64>,
+    /// Start-of-step Coulomb coupling parameter $\Gamma_{\mathrm{Coul,start},k}$
+    /// (`gam_start`, `star_data/public/star_data_step_work.inc:845`,
+    /// saved in `star/private/struct_burn_mix.f90:320`).
+    #[serde(default)]
+    pub gam_start: Vec<f64>,
     /// Start-of-step specific internal energy $e$ (`energy_start`).
     pub energy_start: Vec<f64>,
     /// Start-of-step total pressure $P_{\mathrm{eos}}$ (`Peos_start`).
@@ -601,6 +606,7 @@ impl StarModel {
             ln_peos_start: vec![0.0; nz],
             ln_e_start: vec![0.0; nz],
             ln_s_start: vec![0.0; nz],
+            gam_start: vec![0.0; nz],
             energy_start: vec![0.0; nz],
             peos_start: vec![0.0; nz],
             non_nuc_neu_start: vec![0.0; nz],
@@ -787,6 +793,7 @@ impl StarModel {
             &self.gamma3,
             &self.eta,
             &self.gam,
+            &self.gam_start,
             &self.mu,
             &self.lnfree_e,
             &self.csound,

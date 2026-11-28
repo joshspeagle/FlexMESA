@@ -48,14 +48,19 @@ fn build_solar_test_model(v_flag: bool) -> StarModel {
     model
 }
 
-/// Sets `dxh_lnd` and `dxh_lnT` to `lnd - lnd_start` and `lnT - lnT_start`,
-/// standing in for the accumulated Newton corrections that
-/// `set_vars_for_solver` stores (`star/private/solver_support.f90:1142,
-/// 1328`) when a test moves `lnd` or `lnT` directly.
+/// Sets `dxh_lnd`, `dxh_lnT`, and `dxh_v` to `lnd - lnd_start`,
+/// `lnT - lnT_start`, and `v - v_start`, standing in for the accumulated
+/// Newton corrections that `set_vars_for_solver` stores
+/// (`star/private/solver_support.f90:1142, 1232, 1328`) when a test moves
+/// state vectors directly.
 fn sync_dxh_with_start(model: &mut StarModel) {
+    model.aux.dxh_v.resize(model.nz, 0.0);
     for k in 0..model.nz {
         model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
         model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+        if k < model.v.len() && k < model.v_start.len() {
+            model.aux.dxh_v[k] = model.v[k] - model.v_start[k];
+        }
     }
 }
 
@@ -137,8 +142,11 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     );
 
     // 3. PC blending across [gamma_ln_s_eps_grav_full_off, gamma_ln_s_eps_grav_full_on] = [120, 150]
-    model.gam[k] = 135.0; // midpoint of [120, 150] -> w_gam = 0.5
-    model.aux.eos_frac_pc[k] = 0.8; // alfa_lns = 0.4
+    // Upstream uses `using_PC = (eos_frac_PC(k) > 0)` and `gam_start(k)`, so
+    // `alfa = (135 - 120) / (150 - 120) = 0.5`, with `eps_grav_factor` applied
+    // once at the end (`star/private/eps_grav.f90:67,85-100`).
+    model.gam_start[k] = 135.0; // midpoint of [120, 150] -> alfa = 0.5
+    model.aux.eos_frac_pc[k] = 0.8; // using_PC = true
     model.controls.eps_grav_factor = 0.75;
     model.controls.include_composition_in_eps_grav = true;
     let base = k * model.species;
@@ -149,7 +157,8 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let eg_lns = eval_eps_grav_lns_cell(&model, k);
     let eg_std =
         eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
-    let blended_expected = eg_lns.val * 0.4 + eg_std.val * 0.6;
+    let blended_expected =
+        model.controls.eps_grav_factor * (0.5 * eg_lns.val + 0.5 * eg_std.val);
     assert!(
         (model.eps_grav_ad[k].val - blended_expected).abs()
             / blended_expected.abs().max(1.0)
@@ -330,6 +339,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     model.controls.use_mass_corrections = true;
     model.aux.mass_correction[k] = 1.002;
     model.aux.mass_correction[k - 1] = 1.001;
+    model.controls.use_other_momentum = true;
     model.aux.extra_grav[k] = StarAdOrder1::constant(-1.0e2);
     model.aux.uq_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(25.0, 2.0, -1.0);
     model.controls.drag_coefficient = 0.15;
@@ -348,7 +358,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     let x_scale = compute_x_scale(&model, false);
     let mut sys = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys);
-    do1_radius_eqn(&model, k, &mut sys);
+    do1_radius_eqn(&model, k, &mut sys).expect("do1_radius_eqn");
 
     // Finite-difference check on `do1_momentum_eqn` w.r.t. `v[k]`
     let i_dv = model.layout.i_dv_dt;
@@ -358,13 +368,17 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
 
     let eps = 1.0e-3;
     let v_orig = model.v[k];
+    let dxh_v_orig = model.aux.dxh_v[k];
     model.v[k] = v_orig + eps;
+    model.aux.dxh_v[k] = dxh_v_orig + eps;
     let mut sys_p = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys_p);
     model.v[k] = v_orig - eps;
+    model.aux.dxh_v[k] = dxh_v_orig - eps;
     let mut sys_m = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys_m);
     model.v[k] = v_orig;
+    model.aux.dxh_v[k] = dxh_v_orig;
     let fd_dv =
         (sys_p.equ[k * nvar + i_dv] - sys_m.equ[k * nvar + i_dv]) / (2.0 * eps);
     assert!((analytic_dv - fd_dv).abs() / fd_dv.abs().max(1.0e-12) < 1.0e-6);
@@ -372,7 +386,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     // Check `force_zero_v` bound in `do1_radius_eqn`
     model.controls.velocity_q_upper_bound = 0.5; // q[0] = 1.0 > 0.5 -> force_zero_v
     let mut sys_zero = HenyeySystem::new(model.nz, nvar, x_scale);
-    do1_radius_eqn(&model, 0, &mut sys_zero);
+    do1_radius_eqn(&model, 0, &mut sys_zero).expect("do1_radius_eqn");
     let i_dlnr = model.layout.i_dlnr_dt.unwrap();
     // `resid_ad = v00/s% csound_start(k)` (`star/private/hydro_momentum.f90:565-574`).
     let expected_zero = model.v[0] / model.aux.csound_start[0];
@@ -695,7 +709,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
     }
 
     model.aux.eos_frac_pc[k] = 1.0;
-    model.gam[k] = model.controls.gamma_ln_s_eps_grav_full_on + 10.0;
+    model.gam_start[k] = model.controls.gamma_ln_s_eps_grav_full_on + 10.0;
     eval_eps_grav(&mut model).expect("eval_eps_grav lns");
     assert!(
         model.aux.d_eps_grav_dx[base..base + sp]

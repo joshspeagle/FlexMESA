@@ -14,20 +14,21 @@
 //!   phase-transition latent heat $(\Lambda_{\rho,k}, \Lambda_{T,k}) =
 //!   (\mathrm{latent\_ddlnrho}_k, \mathrm{latent\_ddlnt}_k)$.
 //! - **Direct specific-entropy time derivative (`do_lnS_eps_grav`,
-//!   `eps_grav.f90:196-259`)**:
-//!   $$\epsilon_{\mathrm{grav},k} = -T_k\,\frac{\exp(\ln s_k) - \exp(\ln s_{\mathrm{start},k})}{\Delta t}.$$
+//!   `eps_grav.f90:212-259`)**:
+//!   $$\epsilon_{\mathrm{grav},k} = -T_k\,\frac{s_k - \exp(\ln s_{\mathrm{start},k})}{\Delta t}.$$
 //! - **Potekhin-Chabrier (`PC`) Coulomb coupling blend
 //!   (`eval1_eps_grav_and_partials`, `eps_grav.f90:85-103`)**:
-//!   Linearly blends `do_lnS_eps_grav` and `do_std_eps_grav` across
-//!   $\Gamma_{\mathrm{Coul},k} \in [\Gamma_{\ln S,\mathrm{off}}, \Gamma_{\ln S,\mathrm{on}}]$
-//!   weighted by `eos_frac_pc[k]`.
+//!   Uses boolean `using_PC = (eos_frac_PC[k] > 0.0)` and start-of-step
+//!   `gam_start[k]` (`struct_burn_mix.f90:320`) across
+//!   $[\Gamma_{\ln S,\mathrm{off}}, \Gamma_{\ln S,\mathrm{on}}]$ to select or
+//!   linearly blend `do_lnS_eps_grav` and `do_std_eps_grav`.
 //! - **Composition term (`include_composition_in_eps_grav`, `eps_grav.f90:262-399`)**
-//!   and multiplicative `eps_grav_factor` (`eps_grav.f90:67, 187-191`).
+//!   and multiplicative `eps_grav_factor` applied once at the end (`eps_grav.f90:67`).
 
 use flexmesa_const::LN10;
 use flexmesa_eos::{
     I_CHI_RHO, I_CHI_T, I_CP, I_GRAD_AD, I_LATENT_DDLNRHO, I_LATENT_DDLNT,
-    I_LN_E,
+    I_LN_E, I_LN_S,
 };
 use flexmesa_utils::is_bad;
 use rayon::prelude::*;
@@ -36,30 +37,6 @@ use crate::controls::StarError;
 use crate::micro::EosZoneContext;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1, I_LND_00, I_LNT_00};
-
-/// Computes the Potekhin-Chabrier `do_lnS_eps_grav` blend weight `alfa_lns`
-/// in `[0, 1]` for cell `k`.
-#[inline]
-fn pc_lns_blend_weight(
-    model: &StarModel,
-    k: usize,
-    gam_off: f64,
-    gam_span: f64,
-) -> f64 {
-    let f_pc = model
-        .aux
-        .eos_frac_pc
-        .get(k)
-        .copied()
-        .unwrap_or(0.0)
-        .clamp(0.0, 1.0);
-    if f_pc > 0.0 {
-        let w_gam = ((model.gam[k] - gam_off) / gam_span).clamp(0.0, 1.0);
-        f_pc * w_gam
-    } else {
-        0.0
-    }
-}
 
 /// Evaluates the finite-difference composition contribution
 /// `eps_grav_composition_term = -de/dt` and its `(\ln\rho, \ln T)` partials
@@ -153,18 +130,14 @@ fn eval_eps_grav_std_cell_with_ctx(
     ctx: Option<&EosZoneContext>,
 ) -> Result<StarAdOrder1, StarError> {
     let dt = model.dt;
-    if dt <= 0.0 || !dt.is_finite() {
-        return Ok(StarAdOrder1::ZERO);
-    }
-
-    let lnt_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00);
 
     // `wrap_dxh_lnd(s,k)/s% dt` and `wrap_dxh_lnT(s,k)/s% dt`
     // (`star/private/eps_grav.f90:152-153`): the accumulated Newton
     // corrections, which round differently from `lnd - lnd_start`.
     let dlnd_dt = StarAdOrder1::variable(model.aux.dxh_lnd[k], I_LND_00) / dt;
     let dlnt_dt = StarAdOrder1::variable(model.aux.dxh_lnt[k], I_LNT_00) / dt;
-    let t_ad = lnt_00.exp();
+    // `wrap_T_00(s, k)` (`star/private/auto_diff_support.f90:197-204`).
+    let t_ad = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
 
     let eos_ad = |val: f64, slot: usize| {
         StarAdOrder1::from_dlnd_dlnt_00(
@@ -194,48 +167,24 @@ fn eval_eps_grav_std_cell_with_ctx(
     let latent_ddlnt = eos_ad(model.aux.latent_ddlnt[k], I_LATENT_DDLNT);
     eps_grav = eps_grav - (dlnd_dt * latent_ddlnrho + dlnt_dt * latent_ddlnt);
 
-    // Optional time-centering (`eps_grav.f90:172-184`):
+    // Optional time-centering (`eps_grav.f90:145-149, 173-184`):
     // Evaluates start-of-step thermodynamic prefactors multiplying the live
     // `dlnt_dt` and `dlnd_dt` `StarAdOrder1` time derivatives.
     if model.controls.use_time_centered_eps_grav && !model.aux.doing_relax {
-        let cp_s = model
-            .aux
-            .cp_start
-            .get(k)
-            .copied()
-            .filter(|&v| v > 0.0)
-            .unwrap_or(model.cp[k]);
-        let grada_s = model
-            .aux
-            .grada_start
-            .get(k)
-            .copied()
-            .filter(|&v| v != 0.0)
-            .unwrap_or(model.grada[k]);
-        let chi_t_s = model
-            .aux
-            .chi_t_start
-            .get(k)
-            .copied()
-            .filter(|&v| v != 0.0)
-            .unwrap_or(model.chi_t[k]);
-        let chi_rho_s = model
-            .aux
-            .chi_rho_start
-            .get(k)
-            .copied()
-            .filter(|&v| v != 0.0)
-            .unwrap_or(model.chi_rho[k]);
+        let theta = 0.5;
+        let cp_s = model.aux.cp_start[k];
+        let grada_s = model.aux.grada_start[k];
+        let chi_t_s = model.aux.chi_t_start[k];
+        let chi_rho_s = model.aux.chi_rho_start[k];
         let t_s = flexmesa_math::exp(model.ln_t_start[k]);
-        let one_m_s = 1.0 - grada_s * chi_t_s;
-        let gc_s = grada_s * chi_rho_s;
-        let mut eps_grav_start =
-            (dlnt_dt * one_m_s - dlnd_dt * gc_s) * (-t_s * cp_s);
+        let mut eps_grav_start = (-t_s * cp_s)
+            * ((1.0 - grada_s * chi_t_s) * dlnt_dt
+                - (grada_s * chi_rho_s) * dlnd_dt);
         // Start-of-step latent heat (`eps_grav.f90:179-180`).
         eps_grav_start = eps_grav_start
             - (dlnd_dt * model.aux.latent_ddlnrho_start[k]
                 + dlnt_dt * model.aux.latent_ddlnt_start[k]);
-        eps_grav = eps_grav * 0.5 + eps_grav_start * 0.5;
+        eps_grav = theta * eps_grav + (1.0 - theta) * eps_grav_start;
     }
 
     // Finite-difference composition term (`eps_grav.f90:187-191, 262-399`):
@@ -260,7 +209,7 @@ fn eval_eps_grav_std_cell_with_ctx(
         )));
     }
 
-    Ok(eps_grav * model.controls.eps_grav_factor)
+    Ok(eps_grav)
 }
 
 /// Evaluates $\epsilon_{\mathrm{grav},k}$ for cell `k` using the standard
@@ -269,10 +218,13 @@ fn eval_eps_grav_std_cell_with_ctx(
 /// phase-transition latent heat, and finite-difference composition heating
 /// (`eval_eps_grav_composition` in `star/private/eps_grav.f90:262-399`).
 ///
+/// Returns the unscaled `do_std_eps_grav` quantity; `eps_grav_factor` is
+/// applied once at the end of [`eval_eps_grav`].
+///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `get_eos` fails inside
-/// `eval_eps_grav_composition` or if the resulting $\epsilon_{\mathrm{grav},k}$
-/// is non-finite.
+/// `eval_eps_grav_composition`, or if the resulting
+/// $\epsilon_{\mathrm{grav},k}$ is non-finite.
 pub fn eval_eps_grav_std_cell(
     model: &StarModel,
     k: usize,
@@ -282,18 +234,40 @@ pub fn eval_eps_grav_std_cell(
 
 /// Evaluates $\epsilon_{\mathrm{grav},k} = -T_k (s_k - s_{\mathrm{start},k})/\Delta t$
 /// for cell `k` directly from specific entropy (`do_lnS_eps_grav` in
-/// `star/private/eps_grav.f90:196-259`), scaled by `eps_grav_factor`.
+/// `star/private/eps_grav.f90:212-259`), unscaled by `eps_grav_factor`.
+///
+/// Uses upstream `wrap_T_00` (`star/private/auto_diff_support.f90:197-204`)
+/// and `wrap_s_00` (`auto_diff_support.f90:494-502`, with
+/// `dS_dRho_for_partials` and `dS_dT_for_partials` per `micro.f90:501-502`).
 #[must_use]
 pub fn eval_eps_grav_lns_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
     let dt = model.dt;
-    if dt <= 0.0 || !dt.is_finite() {
-        return StarAdOrder1::ZERO;
-    }
-
-    let t_ad = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
-    let s_ad = model.ln_s_ad[k].exp();
+    let t_ad = StarAdOrder1::from_dlnd_dlnt_00(model.t[k], 0.0, model.t[k]);
+    let entropy = model.entropy[k];
+    let ds_drho_for_partials =
+        model.eos_d_dlnd[k][I_LN_S] * entropy / model.rho[k];
+    let ds_dt_for_partials = model.eos_d_dlnt[k][I_LN_S] * entropy / model.t[k];
+    let s_ad = StarAdOrder1::from_dlnd_dlnt_00(
+        entropy,
+        ds_drho_for_partials * model.rho[k],
+        ds_dt_for_partials * model.t[k],
+    );
     let s_start = flexmesa_math::exp(model.ln_s_start[k]);
-    (-t_ad * (s_ad - s_start) / dt) * model.controls.eps_grav_factor
+    -t_ad * (s_ad - s_start) / dt
+}
+
+fn do_ln_s_eps_grav(
+    model: &StarModel,
+    k: usize,
+) -> Result<StarAdOrder1, StarError> {
+    let eps_grav = eval_eps_grav_lns_cell(model, k);
+    if is_bad(eps_grav.val) {
+        return Err(StarError::MicrophysicsError(format!(
+            "do_lnS_eps_grav: bad value for eps_grav ({}) at zone {k}",
+            eps_grav.val
+        )));
+    }
+    Ok(eps_grav)
 }
 
 /// Evaluates one cell of `eval1_eps_grav_and_partials` (`eps_grav.f90:72-119`),
@@ -301,19 +275,21 @@ pub fn eval_eps_grav_lns_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
 fn eval_eps_grav_cell(
     model: &StarModel,
     k: usize,
+    gam_on: f64,
     gam_off: f64,
-    gam_span: f64,
     ctx: Option<&EosZoneContext>,
 ) -> Result<(StarAdOrder1, bool), StarError> {
-    let alfa_lns = pc_lns_blend_weight(model, k, gam_off, gam_span);
-    let (ad, used_std) = if (alfa_lns - 1.0).abs() < 1.0e-15 {
-        (eval_eps_grav_lns_cell(model, k), false)
-    } else if alfa_lns <= 0.0 {
-        (eval_eps_grav_std_cell_with_ctx(model, k, ctx)?, true)
-    } else {
-        let eg_lns = eval_eps_grav_lns_cell(model, k);
+    let using_pc = model.aux.eos_frac_pc[k] > 0.0;
+    let gam_start = model.gam_start[k];
+    let (ad, used_std) = if using_pc && gam_start >= gam_on {
+        (do_ln_s_eps_grav(model, k)?, false)
+    } else if using_pc && gam_start > gam_off {
+        let alfa = (gam_start - gam_off) / (gam_on - gam_off);
+        let eg_lns = do_ln_s_eps_grav(model, k)?;
         let eg_std = eval_eps_grav_std_cell_with_ctx(model, k, ctx)?;
-        (eg_lns * alfa_lns + eg_std * (1.0 - alfa_lns), true)
+        (alfa * eg_lns + (1.0 - alfa) * eg_std, true)
+    } else {
+        (eval_eps_grav_std_cell_with_ctx(model, k, ctx)?, true)
     };
     if is_bad(ad.val) {
         return Err(StarError::MicrophysicsError(format!(
@@ -373,33 +349,35 @@ fn fill_d_eps_grav_dx_cell(
 /// `star/private/eps_grav.f90:35-119`).
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if `get_eos` fails inside
-/// `eval_eps_grav_composition` or if any cell produces a non-finite
-/// $\epsilon_{\mathrm{grav},k}$.
+/// Returns [`StarError::MicrophysicsError`] if `dt <= 0.0`, if
+/// `get_eos` fails inside `eval_eps_grav_composition`, or if any cell produces
+/// a non-finite $\epsilon_{\mathrm{grav},k}$; returns [`StarError::InvalidInput`]
+/// if `use_other_eps_grav` is enabled (unported hook).
 pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
     let dt = model.dt;
     let fac = model.controls.eps_grav_factor;
+    if dt <= 0.0 {
+        return Err(StarError::MicrophysicsError(format!(
+            "eval_eps_grav_and_partials: non-positive dt ({dt})"
+        )));
+    }
     if model.aux.d_eps_grav_dx.len() != nz * species {
         model.aux.d_eps_grav_dx.resize(nz * species, 0.0);
     }
-    if fac == 0.0 || dt <= 0.0 || !dt.is_finite() {
-        model.eps_grav_ad.fill(StarAdOrder1::ZERO);
-        model.aux.d_eps_grav_dx.fill(0.0);
-        return Ok(());
-    }
+    model.eps_grav_ad.fill(StarAdOrder1::ZERO);
+    model.aux.d_eps_grav_dx.fill(0.0);
 
     let gam_on = model.controls.gamma_ln_s_eps_grav_full_on;
     let gam_off = model.controls.gamma_ln_s_eps_grav_full_off;
-    let gam_span = (gam_on - gam_off).max(1.0e-12);
     let inc_comp =
         model.controls.include_composition_in_eps_grav && species > 0;
 
     let need_ctx = inc_comp
         && (0..nz).any(|k| {
-            let alfa_lns = pc_lns_blend_weight(model, k, gam_off, gam_span);
-            (alfa_lns - 1.0).abs() >= 1.0e-15
+            let using_pc = model.aux.eos_frac_pc[k] > 0.0;
+            !(using_pc && model.gam_start[k] >= gam_on)
         });
 
     if need_ctx {
@@ -407,9 +385,7 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
         let cell_results: Result<Vec<(StarAdOrder1, bool)>, StarError> = (0
             ..nz)
             .into_par_iter()
-            .map(|k| {
-                eval_eps_grav_cell(model, k, gam_off, gam_span, Some(&ctx))
-            })
+            .map(|k| eval_eps_grav_cell(model, k, gam_on, gam_off, Some(&ctx)))
             .collect();
         for (k, (ad, used_std)) in cell_results?.into_iter().enumerate() {
             model.eps_grav_ad[k] = ad;
@@ -418,10 +394,161 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
     } else {
         for k in 0..nz {
             let (ad, used_std) =
-                eval_eps_grav_cell(model, k, gam_off, gam_span, None)?;
+                eval_eps_grav_cell(model, k, gam_on, gam_off, None)?;
             model.eps_grav_ad[k] = ad;
             fill_d_eps_grav_dx_cell(model, k, used_std, inc_comp, dt);
         }
     }
+
+    if nz > 0 && model.controls.use_other_eps_grav {
+        return Err(StarError::InvalidInput(String::from(
+            "use_other_eps_grav = .true. requires an other_eps_grav hook (unported)",
+        )));
+    }
+
+    for k in 0..nz {
+        model.eps_grav_ad[k] = fac * model.eps_grav_ad[k];
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::zams::load_zams_model;
+
+    fn test_solar_model() -> StarModel {
+        let mut ctrl = StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        ctrl.initial_mass = 1.0;
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("valid 1 Msun ZAMS model");
+        model.dt = 1.0e10;
+        crate::micro::set_basic_vars(&mut model).expect("set_basic_vars init");
+        crate::micro::do_eos(&mut model).expect("do_eos init");
+        model.save_start_values().expect("save_start_values init");
+        let nz = model.nz;
+        for k in 0..nz {
+            model.lnd[k] += 1.0e-3;
+            model.ln_t[k] += 0.8e-3;
+        }
+        crate::micro::set_basic_vars(&mut model).expect("set_basic_vars");
+        crate::micro::do_eos(&mut model).expect("do_eos");
+        for k in 0..nz {
+            model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
+            model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+        }
+        model
+    }
+
+    #[test]
+    fn test_pc_blend_uses_boolean_eos_frac_pc_and_gam_start() {
+        let mut model = test_solar_model();
+        let k = model.nz / 2;
+        model.gam[k] = 175.0;
+        model.save_start_values().expect("save_start_values");
+        assert_eq!(model.gam_start[k], 175.0);
+        model.lnd[k] += 2.0e-3;
+        model.ln_t[k] += 1.5e-3;
+        crate::micro::set_basic_vars(&mut model).expect("set_basic_vars pert");
+        crate::micro::do_eos(&mut model).expect("do_eos pert");
+        model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
+        model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+
+        // Moving live `gam` below full_off does not alter blend when `gam_start >= gam_on`.
+        model.gam[k] = 50.0;
+        model.aux.eos_frac_pc[k] = 0.25;
+        model.controls.include_composition_in_eps_grav = true;
+        let base = k * model.species;
+        model.aux.dln_e_dxa_for_partials[base] = 0.5;
+        model.aux.dln_peos_dxa_for_partials[base] = -0.3;
+
+        eval_eps_grav(&mut model).expect("eval_eps_grav full lnS");
+        let expected_lns = eval_eps_grav_lns_cell(&model, k);
+        assert!(expected_lns.val.abs() > 0.0);
+        assert_eq!(
+            model.eps_grav_ad[k].val.to_bits(),
+            expected_lns.val.to_bits()
+        );
+        assert!(model.aux.d_eps_grav_dx[base..base + model.species]
+            .iter()
+            .all(|&v| v == 0.0));
+
+        // When `eos_frac_pc == 0.0`, high `gam_start` still takes `do_std_eps_grav`.
+        model.aux.eos_frac_pc[k] = 0.0;
+        model.gam_start[k] = 200.0;
+        eval_eps_grav(&mut model)
+            .expect("eval_eps_grav std when eos_frac_pc=0");
+        let expected_std =
+            eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
+        assert!(expected_std.val.abs() > 0.0);
+        assert_eq!(
+            model.eps_grav_ad[k].val.to_bits(),
+            expected_std.val.to_bits()
+        );
+        assert!(model.aux.d_eps_grav_dx[base].abs() > 0.0);
+
+        // Intermediate `gam_start` with `eos_frac_pc > 0` blends using `alfa`,
+        // then applies `eps_grav_factor` once at the end.
+        model.aux.eos_frac_pc[k] = 0.25;
+        model.gam_start[k] = 135.0;
+        model.gam[k] = 10.0;
+        model.controls.eps_grav_factor = 0.75;
+        eval_eps_grav(&mut model).expect("eval_eps_grav blended");
+        let eg_lns = eval_eps_grav_lns_cell(&model, k);
+        let eg_std =
+            eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
+        let expected_blend = 0.75 * (0.5 * eg_lns + 0.5 * eg_std);
+        assert_eq!(
+            model.eps_grav_ad[k].val.to_bits(),
+            expected_blend.val.to_bits()
+        );
+    }
+
+    #[test]
+    fn test_eps_grav_factor_zero_still_runs_d_eps_grav_dx_and_bad_checks() {
+        let mut model = test_solar_model();
+        let k = model.nz / 2;
+        model.controls.eps_grav_factor = 0.0;
+        model.controls.include_composition_in_eps_grav = true;
+        let base = k * model.species;
+        model.aux.dln_e_dxa_for_partials[base] = 0.5;
+        model.aux.dln_peos_dxa_for_partials[base] = -0.3;
+
+        eval_eps_grav(&mut model).expect("eval_eps_grav factor=0");
+        assert!(model.eps_grav_ad.iter().all(|a| a.val == 0.0));
+        assert!(model.eps_grav_ad.iter().all(|a| a.d1 == [0.0; 24]));
+        assert!(model.aux.d_eps_grav_dx[base].abs() > 0.0);
+
+        model.cp[k] = f64::NAN;
+        assert!(matches!(
+            eval_eps_grav(&mut model),
+            Err(StarError::MicrophysicsError(_))
+        ));
+    }
+
+    #[test]
+    fn test_eps_grav_nonpositive_dt_and_use_other_eps_grav_error() {
+        let mut model = test_solar_model();
+        model.dt = 0.0;
+        assert!(matches!(
+            eval_eps_grav(&mut model),
+            Err(StarError::MicrophysicsError(_))
+        ));
+        model.dt = -1.0;
+        assert!(matches!(
+            eval_eps_grav(&mut model),
+            Err(StarError::MicrophysicsError(_))
+        ));
+
+        let mut model = test_solar_model();
+        model.controls.use_other_eps_grav = true;
+        assert!(matches!(
+            eval_eps_grav(&mut model),
+            Err(StarError::InvalidInput(_))
+        ));
+    }
 }

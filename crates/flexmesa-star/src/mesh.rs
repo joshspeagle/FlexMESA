@@ -424,6 +424,9 @@ impl StarModel {
     pub fn unpack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         let w_fix = self.controls.rsp2.w_fix_if_neg;
+        if self.layout.i_v.is_some() && self.aux.dxh_v.len() != self.nz {
+            self.aux.dxh_v.resize(self.nz, 0.0);
+        }
         for k in 0..self.nz {
             let base = k * nvar;
             self.lnd[k] = self.xh[base + self.layout.i_lnd];
@@ -432,6 +435,7 @@ impl StarModel {
             self.lum[k] = self.xh[base + self.layout.i_lum];
             if let Some(iv) = self.layout.i_v {
                 self.v[k] = self.xh[base + iv];
+                self.aux.dxh_v[k] = 0.0;
             }
             if let Some(iu) = self.layout.i_u {
                 self.u[k] = self.xh[base + iu];
@@ -490,6 +494,8 @@ impl StarModel {
         self.ln_peos_start.clone_from(&self.ln_peos);
         self.ln_e_start.clone_from(&self.ln_e);
         self.ln_s_start.clone_from(&self.ln_s);
+        // `s% gam_start(k) = s% gam(k)` (`star/private/struct_burn_mix.f90:320`).
+        self.gam_start.clone_from(&self.gam);
         self.energy_start.clone_from(&self.energy);
         // `save_start_values` leaves `total_internal_energy_old` alone
         // (`star/private/struct_burn_mix.f90:268-356`): it is set once per
@@ -616,6 +622,7 @@ impl StarModel {
             &mut self.ln_peos_start,
             &mut self.ln_e_start,
             &mut self.ln_s_start,
+            &mut self.gam_start,
             &mut self.energy_start,
             &mut self.peos_start,
             &mut self.non_nuc_neu_start,

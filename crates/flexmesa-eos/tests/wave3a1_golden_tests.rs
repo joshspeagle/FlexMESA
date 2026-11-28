@@ -16,11 +16,12 @@ use flexmesa_const::{AMU, CLIGHT, CRAD, EV2ERG, KERG, LN10, ME};
 use flexmesa_eos::{
     blend_eos_results, compute_ion_offset, compute_ion_offset_from_za, dfermi,
     dfermi_order1, eval_ideal_eos, eval_ideal_eos_from_weights, is_contained,
-    min_distance_to_polygon, quintic_blend, EosEvalOutput, I_CHI_RHO, I_CHI_T,
-    I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT, I_FRAC_IDEAL, I_GAMMA1,
-    I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_PGAS, I_LN_S, I_MU,
-    NIST_IONIZATION_TABLE_EV, NUM_EOS_BASIC_RESULTS,
+    min_distance_to_polygon, quintic_blend, EosEvalOutput,
+    EOS_BASIC_RESULT_NAMES, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO,
+    I_DS_DRHO, I_DS_DT, I_FRAC_IDEAL, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E,
+    I_LN_PGAS, I_LN_S, I_MU, NIST_IONIZATION_TABLE_EV, NUM_EOS_BASIC_RESULTS,
 };
+use flexmesa_math::{with_numerics_mode, NumericsMode};
 
 /// Verifies `is_contained` and `min_distance_to_polygon` against all 5 outputs
 /// in `eos/test/test_output` (`do_test_eos_blend`, lines 465-474).
@@ -124,9 +125,7 @@ fn test_dfermi_matches_upstream_mesa_dirac_integral_golden() {
         let row =
             common::load_scalar_row::<6>("DFERMI", &format!("grid_{idx}"));
         let (fd, fdeta, fdtheta) = dfermi(row[0], row[1], row[2]);
-        for (got, exp) in
-            [(fd, row[3]), (fdeta, row[4]), (fdtheta, row[5])]
-        {
+        for (got, exp) in [(fd, row[3]), (fdeta, row[4]), (fdtheta, row[5])] {
             let scale = exp.abs().max(1.0);
             assert!(
                 (got - exp).abs() / scale < 1.0e-14,
@@ -173,8 +172,8 @@ const EOS_PGAS_ION_ORACLES: &str = include_str!(
     "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
 );
 
-/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
-fn mesa_ion_bits(case: &str, role: &str, field: &str) -> u64 {
+/// Return the MESA bit pattern of `(field, part)` in `case` (`role` is `in` or `out`).
+fn mesa_oracle_bits(case: &str, role: &str, field: &str, part: &str) -> u64 {
     for line in EOS_PGAS_ION_ORACLES.lines() {
         if line.starts_with('#') {
             continue;
@@ -184,13 +183,18 @@ fn mesa_ion_bits(case: &str, role: &str, field: &str) -> u64 {
             && cols[0] == case
             && cols[1] == role
             && cols[2] == field
-            && cols[3] == "val"
+            && cols[3] == part
         {
             let hex = cols[4].trim_start_matches("0x");
             return u64::from_str_radix(hex, 16).expect("hex column");
         }
     }
-    panic!("no MESA ion_offset oracle row for {case} {role} {field}");
+    panic!("no MESA eos_pgas_ion oracle row for {case} {role} {field} {part}");
+}
+
+/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
+fn mesa_ion_bits(case: &str, role: &str, field: &str) -> u64 {
+    mesa_oracle_bits(case, role, field, "val")
 }
 
 fn assert_ion_bits(label: &str, actual: f64, expected_bits: u64) {
@@ -270,10 +274,9 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     ];
     let weights = chem_ids.map(|id| catalog.get_by_id(id).unwrap().w);
     let a = [1.0, 4.0, 12.0];
-    let comp = flexmesa_chem::get_composition_info(
-        &catalog, &chem_ids, &xa, false,
-    )
-    .unwrap();
+    let comp =
+        flexmesa_chem::get_composition_info(&catalog, &chem_ids, &xa, false)
+            .unwrap();
     let abar = comp.abar;
     let zbar = comp.zbar;
 
@@ -418,6 +421,81 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
         &[("ideal_solar_1e5_1em2", I_DE_DRHO, 0, 5.0e-11)],
         true,
     );
+
+    with_numerics_mode(NumericsMode::Strict, || {
+        assert_ion_bits(
+            "ideal_solar_1e5_1em2.in.T",
+            temp,
+            mesa_oracle_bits("ideal_solar_1e5_1em2", "in", "T", "val"),
+        );
+        assert_ion_bits(
+            "ideal_solar_1e5_1em2.in.Rho",
+            rho,
+            mesa_oracle_bits("ideal_solar_1e5_1em2", "in", "Rho", "val"),
+        );
+        assert_ion_bits(
+            "ideal_solar_1e5_1em2.in.abar",
+            abar,
+            mesa_oracle_bits("ideal_solar_1e5_1em2", "in", "abar", "val"),
+        );
+        assert_ion_bits(
+            "ideal_solar_1e5_1em2.in.zbar",
+            zbar,
+            mesa_oracle_bits("ideal_solar_1e5_1em2", "in", "zbar", "val"),
+        );
+        for (idx, &x) in xa.iter().enumerate() {
+            assert_ion_bits(
+                &format!("ideal_solar_1e5_1em2.in.xa_{idx}"),
+                x,
+                mesa_oracle_bits(
+                    "ideal_solar_1e5_1em2",
+                    "in",
+                    &format!("xa_{idx}"),
+                    "val",
+                ),
+            );
+        }
+        let strict_weights = eval_ideal_eos_from_weights(
+            temp, rho, abar, zbar, &xa, &weights, &a,
+        )
+        .unwrap();
+        let strict_cat =
+            eval_ideal_eos(temp, rho, abar, zbar, &xa, &chem_ids).unwrap();
+        for idx in 0..NUM_EOS_BASIC_RESULTS {
+            let field = format!("res_{idx}");
+            let name = EOS_BASIC_RESULT_NAMES[idx];
+            for (part, got_w, got_c) in [
+                ("val", strict_weights.res[idx], strict_cat.res[idx]),
+                ("d_dlnd", strict_weights.d_dlnd[idx], strict_cat.d_dlnd[idx]),
+                (
+                    "d_dlnT",
+                    strict_weights.d_dln_t[idx],
+                    strict_cat.d_dln_t[idx],
+                ),
+            ] {
+                let exp_bits = mesa_oracle_bits(
+                    "ideal_solar_1e5_1em2",
+                    "out",
+                    &field,
+                    part,
+                );
+                assert_eq!(
+                    got_w.to_bits(),
+                    exp_bits,
+                    "ideal_solar_1e5_1em2.weights[{idx}:{name}].{part}: MESA {exp:.17e} ({exp_bits:016X}) vs Flex {got_w:.17e} ({:016X})",
+                    got_w.to_bits(),
+                    exp = f64::from_bits(exp_bits),
+                );
+                assert_eq!(
+                    got_c.to_bits(),
+                    exp_bits,
+                    "ideal_solar_1e5_1em2.catalog[{idx}:{name}].{part}: MESA {exp:.17e} ({exp_bits:016X}) vs Flex {got_c:.17e} ({:016X})",
+                    got_c.to_bits(),
+                    exp = f64::from_bits(exp_bits),
+                );
+            }
+        }
+    });
 }
 
 /// Verifies `quintic_blend` and `blend_eos_results` against `Do_Blend` in

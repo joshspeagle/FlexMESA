@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 23307,
-      "python_testing_bench": 26448
+      "python_testing_bench": 26504
     }
   },
   "numerics": {
@@ -1289,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 332,
-    "total_tests": 1968,
+    "total_files": 335,
+    "total_tests": 2022,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 197
+        "files": 200
       },
       "regression": {
         "files": 2
@@ -1308,8 +1308,8 @@
         "tests": 1170
       },
       "python": {
-        "files": 100,
-        "tests": 798
+        "files": 103,
+        "tests": 852
       }
     },
     "mislabeled_count": 2,
@@ -1327,9 +1327,9 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 1623,
+    "mapped_routines_total": 2290,
     "listed_oracle_routines_total": 64,
-    "listed_oracle_routines_pct": 3.9,
+    "listed_oracle_routines_pct": 2.8,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1405,9 +1405,9 @@
         "total_files": 124,
         "total_tests": 754,
         "mislabeled_files": 2,
-        "mapped_routines": 924,
+        "mapped_routines": 1197,
         "listed_oracle_routines": 20,
-        "listed_oracle_routines_pct": 2.2
+        "listed_oracle_routines_pct": 1.7
       },
       {
         "module": "binary",
@@ -1453,7 +1453,7 @@
         "total_files": 7,
         "total_tests": 34,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 91,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1465,7 +1465,7 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 12,
+        "mapped_routines": 119,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,7 +1477,7 @@
         "total_files": 6,
         "total_tests": 27,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 196,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1688,10 +1688,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 41,
+        "invariant_files": 44,
         "regression_files": 1,
-        "total_files": 44,
-        "total_tests": 393,
+        "total_files": 47,
+        "total_tests": 447,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1802,8 +1802,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 19,
-        "closed": 17,
+        "open": 16,
+        "closed": 20,
         "issues": [
           {
             "number": 152,
@@ -1888,7 +1888,7 @@
           {
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 365,
@@ -1973,12 +1973,12 @@
           {
             "number": 539,
             "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 541,
             "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 587,
@@ -2041,8 +2041,13 @@
     ],
     "open_pull_requests": [
       {
-        "number": 746,
-        "title": "ci: manual runs default to T0; the canary gate job stops on cancel",
+        "number": 757,
+        "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+        "draft": false
+      },
+      {
+        "number": 759,
+        "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
         "draft": false
       }
     ],
@@ -2628,7 +2633,7 @@
         "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2652,7 +2657,7 @@
         "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2700,7 +2705,7 @@
         "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2708,7 +2713,7 @@
         "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2716,7 +2721,7 @@
         "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2834,6 +2839,38 @@
       {
         "number": 723,
         "title": "[Deferred bug] write_pulse_data dispatches 'gr1d' to write_saio_data, which reads unset point_data rows (pulse.f90:174-175)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 750,
+        "title": "[Deferred bug] astero: adipls_irotkr is overwritten by the ADIPLS parameter-file value (res_adipar reset)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 752,
+        "title": "[Deferred bug] mtx: DGBSVX_tridiagonal_wrapper reads x_flat unset when the matrix is exactly singular",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 754,
+        "title": "[Deferred bug] astero: the NEWUOA workspace is BOBYQA's length, shorter than NEWUOA documents (BIGDEN writes past it)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 755,
+        "title": "[Deferred bug] num: NEWUOA returns X from an unset XOPT when MAXFUN < NPT",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -4505,6 +4542,84 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "99"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "7901ff6f",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "100"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "48385686",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "74c240af",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "770c14b7",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "af8e2a38",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "17464744",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
     }
   ]
 }

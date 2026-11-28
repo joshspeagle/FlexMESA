@@ -6,11 +6,11 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 
 | Measure | Value |
 | :--- | ---: |
-| Claims (test, reference, routine) | 95 |
-| Claims verified | 81 |
+| Claims (test, reference, routine) | 101 |
+| Claims verified | 87 |
 | Routines claimed | 64 |
-| Routines verified exact (0 ULP) | 36 |
-| Routines verified at print precision only | 24 |
+| Routines verified exact (0 ULP) | 42 |
+| Routines verified at print precision only | 18 |
 | Routines not counted | 4 |
 | Not counted only because of `scope` or `precision` | 3 |
 
@@ -32,13 +32,19 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/private/eosdt_eval.f90::Get_eosDT_Results` | exact |
 | `eos/private/eosdt_eval.f90::get_Rho` | exact |
 | `eos/private/eosdt_eval.f90::get_T` | exact |
+| `eos/private/eospc_eval.f90::Get_PC_alfa` | exact |
 | `eos/private/eospt_eval.f90::Get_PT_Results_using_DT` | exact |
 | `eos/private/eospt_eval.f90::get_Pgas` | exact |
+| `eos/private/helm.f90::helmeos2` | exact |
+| `eos/private/ideal.f90::get_ideal_eos_results` | exact |
+| `eos/private/ideal.f90::get_ideal_for_eosdt` | exact |
 | `eos/private/ion_offset.f90::compute_ion_offset` | exact |
+| `eos/private/skye.f90::Get_Skye_alfa_simple` | exact |
 | `eos/public/eos_lib.f90::eosDT_get` | exact |
 | `eos/public/eos_lib.f90::eosDT_get_Rho` | exact |
 | `eos/public/eos_lib.f90::eosDT_get_T` | exact |
 | `eos/public/eos_lib.f90::eosPT_get` | exact |
+| `eos/public/eos_lib.f90::helmeos2_eval` | exact |
 | `interp_2d/private/bipm_db.f90::do_evbipm_db` | exact |
 | `interp_2d/private/bipm_db.f90::do_mkbipm_db` | exact |
 | `neu/private/mod_neu.f90::neutrinos` | exact |
@@ -69,20 +75,14 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/private/eoscms_eval.f90::get_CMS_for_eosdt` | print |
 | `eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results` | print |
 | `eos/private/eosdt_eval.f90::get1_for_eosdt` | print |
-| `eos/private/eospc_eval.f90::Get_PC_alfa` | print |
 | `eos/private/eospc_eval.f90::get_PC_for_eosdt` | print |
 | `eos/private/eospt_eval.f90::get_T` | print |
 | `eos/private/gauss_fermi.f90::dfermi` | print |
-| `eos/private/helm.f90::helmeos2` | print |
-| `eos/private/ideal.f90::get_ideal_eos_results` | print |
-| `eos/private/ideal.f90::get_ideal_for_eosdt` | print |
 | `eos/private/skye.f90::Get_Skye_alfa` | print |
-| `eos/private/skye.f90::Get_Skye_alfa_simple` | print |
 | `eos/private/skye.f90::get_Skye_for_eosdt` | print |
 | `eos/public/eos_lib.f90::eosPT_get_T` | print |
 | `eos/public/eos_lib.f90::eos_fermi_dirac_integral` | print |
 | `eos/public/eos_lib.f90::eos_gamma_DE_get` | print |
-| `eos/public/eos_lib.f90::helmeos2_eval` | print |
 | `star/private/diffusion.f90::do_solve_diffusion` | print |
 | `star/private/phase_separation.f90::do_phase_separation` | print |
 | `star/private/rsp.f90::build_rsp_model` | print |

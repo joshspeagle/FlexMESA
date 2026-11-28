@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 19,
-      "closed": 17,
+      "open": 16,
+      "closed": 20,
       "issues": [
         {
           "number": 152,
@@ -187,7 +187,7 @@
         {
           "number": 299,
           "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 365,
@@ -272,12 +272,12 @@
         {
           "number": 539,
           "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 541,
           "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 587,
@@ -340,8 +340,13 @@
   ],
   "open_pull_requests": [
     {
-      "number": 746,
-      "title": "ci: manual runs default to T0; the canary gate job stops on cancel",
+      "number": 757,
+      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+      "draft": false
+    },
+    {
+      "number": 759,
+      "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
       "draft": false
     }
   ],
@@ -927,7 +932,7 @@
       "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -951,7 +956,7 @@
       "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -999,7 +1004,7 @@
       "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1007,7 +1012,7 @@
       "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1015,7 +1020,7 @@
       "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1133,6 +1138,38 @@
     {
       "number": 723,
       "title": "[Deferred bug] write_pulse_data dispatches 'gr1d' to write_saio_data, which reads unset point_data rows (pulse.f90:174-175)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 750,
+      "title": "[Deferred bug] astero: adipls_irotkr is overwritten by the ADIPLS parameter-file value (res_adipar reset)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 752,
+      "title": "[Deferred bug] mtx: DGBSVX_tridiagonal_wrapper reads x_flat unset when the matrix is exactly singular",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 754,
+      "title": "[Deferred bug] astero: the NEWUOA workspace is BOBYQA's length, shorter than NEWUOA documents (BIGDEN writes past it)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 755,
+      "title": "[Deferred bug] num: NEWUOA returns X from an unset XOPT when MAXFUN < NPT",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

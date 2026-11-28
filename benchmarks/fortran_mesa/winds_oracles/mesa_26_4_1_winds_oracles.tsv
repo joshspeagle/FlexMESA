@@ -258,8 +258,8 @@ prems_7m_reimers	in	cgrav1	val	0x3E71EA8B45EDF98C	6.67430000000000041E-008
 prems_7m_reimers	in	rho1	val	0x3E112E0BE826D695	1.00000000000000006E-009
 prems_7m_reimers	in	Peos1	val	0x408F400000000000	1.00000000000000000E+003
 prems_7m_reimers	out	ierr	val	0x0000000000000000	0.00000000000000000E+000
-prems_7m_reimers	out	mstar_dot	val	0xC38FFBFA00B1FC84	-2.88088814402900096E+017
-prems_7m_reimers	out	explicit_mstar_dot	val	0xC38FFBFA00B1FC84	-2.88088814402900096E+017
+prems_7m_reimers	out	mstar_dot	val	0xC38FFBFA00B1FC81	-2.88088814402900000E+017
+prems_7m_reimers	out	explicit_mstar_dot	val	0xC38FFBFA00B1FC81	-2.88088814402900000E+017
 prems_7m_reimers	out	super_eddington_wind_mdot	val	0x0000000000000000	0.00000000000000000E+000
 prems_7m_reimers	out	doing_rlo_wind	val	0x0000000000000000	0.00000000000000000E+000
 agb_7m_blocker	in	L_phot	val	0x47CCCC75B73AD1E7	7.65600000000000071E+037
@@ -1730,8 +1730,8 @@ rlo_overflow	in	cgrav1	val	0x3E71EA8B45EDF98C	6.67430000000000041E-008
 rlo_overflow	in	rho1	val	0x3E112E0BE826D695	1.00000000000000006E-009
 rlo_overflow	in	Peos1	val	0x408F400000000000	1.00000000000000000E+003
 rlo_overflow	out	ierr	val	0x0000000000000000	0.00000000000000000E+000
-rlo_overflow	out	mstar_dot	val	0xC400879EA79DD68B	-3.81150422146430648E+019
-rlo_overflow	out	explicit_mstar_dot	val	0xC400879EA79DD68B	-3.81150422146430648E+019
+rlo_overflow	out	mstar_dot	val	0xC400879EA79DD6C6	-3.81150422146435482E+019
+rlo_overflow	out	explicit_mstar_dot	val	0xC400879EA79DD6C6	-3.81150422146435482E+019
 rlo_overflow	out	super_eddington_wind_mdot	val	0x0000000000000000	0.00000000000000000E+000
 rlo_overflow	out	doing_rlo_wind	val	0x3FF0000000000000	1.00000000000000000E+000
 rlo_xfer_ratio	in	L_phot	val	0x4797FA5F6F4FEA26	7.96806344141438546E+036

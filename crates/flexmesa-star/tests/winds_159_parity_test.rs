@@ -277,10 +277,7 @@ fn test_mesa_26_4_1_target_cases_step1_and_blends_zero_ulp() {
         m4.controls.reimers_scaling_factor = 0.5;
         m4.controls.blocker_scaling_factor = 0.0003;
         let mdot4 = do_set_mdot(&mut m4).expect("7M prems Reimers");
-        // Departure: TSV case `prems_7m_reimers` (MESA 26.4.1) gives
-        // 0xC38FFBFA00B1FC84; the pinned FlexMESA value below differs by
-        // 3 ULP.
-        assert_zero_ulp("prems_7m_reimers", mdot4, 0xC38FFBFA00B1FC81);
+        assert_mesa("prems_7m_reimers", mdot4);
 
         // 5. `star/7M_prems_to_AGB` AGB Blocker switch (center_h1 < 0.01, center_he4 < 1e-4).
         let mut m5 = make_wind_model(
@@ -750,9 +747,7 @@ fn test_mesa_26_4_1_dutch_cool_sedd_and_rlo_zero_ulp() {
         mr.controls.mix_wind.rlo_wind_base_mdot = 1.0e-8;
         mr.r[0] = 105.0 * R_SUN;
         let mdot_rlo = do_set_mdot(&mut mr).expect("rlo_overflow");
-        // Departure: TSV case `rlo_overflow` (MESA 26.4.1) gives
-        // 0xC400879EA79DD68B; the pinned FlexMESA value below differs.
-        assert_zero_ulp("rlo_overflow", mdot_rlo, 0xC400879EA79DD6C6);
+        assert_mesa("rlo_overflow", mdot_rlo);
 
         let l_xfer = f64::from_bits(0x4797FA5F6F4FEA26);
         let mut mx = make_wind_model(

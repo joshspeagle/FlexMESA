@@ -250,6 +250,7 @@ contains
    subroutine run_case(cid, l_phot, m_phot, t_phot)
       character(len=*), intent(in) :: cid
       real(dp), intent(in) :: l_phot, m_phot, t_phot
+      real(dp) :: l_star
       integer :: ierr_c
       s%mstar_dot = 0d0
       s%explicit_mstar_dot = 0d0
@@ -314,8 +315,12 @@ contains
       call emit(cid, 'in', 'rho1', s%rho(1))
       call emit(cid, 'in', 'Peos1', s%Peos(1))
 
+      ! `star/private/evolve.f90:427` calls `set_mdot(s, s% L_phot*Lsun, ...)`
+      ! where `s% L_phot` is stored in Lsun units (`L_erg / Lsun`) (#679).
+      s%L_phot = l_phot / lsun
+      l_star = s%L_phot * lsun
       ierr_c = 0
-      call set_mdot(s, l_phot, m_phot, t_phot, ierr_c)
+      call set_mdot(s, l_star, m_phot, t_phot, ierr_c)
       call emit(cid, 'out', 'ierr', real(ierr_c, dp))
       call emit(cid, 'out', 'mstar_dot', s%mstar_dot)
       call emit(cid, 'out', 'explicit_mstar_dot', s%explicit_mstar_dot)

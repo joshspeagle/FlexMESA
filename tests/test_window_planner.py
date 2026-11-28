@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import re
 import sys
@@ -153,3 +154,118 @@ def test_parse_mod_header_extracts_prev_model_and_rule43_fields(
     assert abs(hdr.initial_z - 0.02) < 1e-15
     assert hdr.model_number == 42
     assert len(hdr.sha256) == 64
+
+
+def test_prune_case_snapshots_keeps_dedup_and_avoids_prefix_collisions(
+    tmp_path: pathlib.Path,
+) -> None:
+    clock_dir = tmp_path / "clocks"
+    snap_dir = tmp_path / "snaps"
+    clock_dir.mkdir()
+    snap_dir.mkdir()
+
+    # 120 fast steps (0.1s each -> W=300): point 1 keeps all others inside W,
+    # so only model 1 is retained after Rule-2 deduplication.
+    lines = [
+        "# case: star/make_zams",
+        *(f"STEP\t1\t1\t{m}\t0.1\t100\t100\t2\tT" for m in range(1, 121)),
+        "STAGE_END\t1\t1\t120\tmax_model_number\tok",
+    ]
+    clock_path = clock_dir / "make_zams.clock.tsv"
+    clock_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    cands = pw.candidate_points_for_stage("make_zams", 1, 1, 120)
+    assert len(cands) == 5
+    for cand in cands:
+        (snap_dir / f"make_zams_1_{cand.start_model}.mod").write_text("m")
+    sibling = snap_dir / "make_zams_low_mass_1_1.mod"
+    sibling.write_text("sibling")
+
+    kept, deleted = pw.prune_case_snapshots("make_zams", clock_path, snap_dir)
+    assert kept == ["make_zams_1_1.mod"]
+    assert len(deleted) == 4
+    assert (snap_dir / "make_zams_1_1.mod").is_file()
+    assert sibling.is_file()
+
+    # Missing kept file raises before deleting any extra snapshot.
+    (snap_dir / "make_zams_1_1.mod").unlink()
+    extra = snap_dir / "make_zams_1_99.mod"
+    extra.write_text("extra")
+    try:
+        pw.prune_case_snapshots("make_zams", clock_path, snap_dir)
+    except FileNotFoundError:
+        assert extra.is_file()
+    else:
+        raise AssertionError("expected FileNotFoundError when kept mod missing")
+
+
+def test_empty_stage_steps_recorded_with_v9_reason(
+    tmp_path: pathlib.Path,
+) -> None:
+    stage_steps_file = tmp_path / "stage_steps.json"
+    stage_steps_file.write_text(
+        json.dumps(
+            {
+                "cases": {
+                    "star/1.4M_ms_op_mono": {"stage_steps": []},
+                    "star/short_ok": {"stage_steps": [30]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    clock_dir = tmp_path / "clocks"
+    snap_dir = tmp_path / "snaps"
+    clock_dir.mkdir()
+    snap_dir.mkdir()
+    (clock_dir / "short_ok.clock.tsv").write_text(
+        "\n".join(
+            [
+                "# case: star/short_ok",
+                "# mesa_version: r26.4.1",
+                "# compiler: gfortran 15.2.0",
+                "# mesa_sdk_version: x86_64-linux-26.6.1",
+                *(
+                    f"STEP\t1\t1\t{m}\t0.2\t100\t100\t2\tT"
+                    for m in range(1, 31)
+                ),
+                "SNAP\t1\t1\tT\tshort_ok_1_1.mod",
+                "STAGE_END\t1\t1\t30\tmax_model_number\tok",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (snap_dir / "short_ok_1_1.mod").write_text(
+        "\n".join(
+            [
+                "! synthetic",
+                "            4 -- model for mesa/star",
+                "",
+                "   version_number   'r26.4.1'",
+                "           M/Msun     1.0000000000000000D+00",
+                "     model_number                          1",
+                "         star_age     0.0000000000000000D+00",
+                "        initial_z     2.0000000000000000D-02",
+                "         n_shells                        100",
+                "         net_name   'basic.net'",
+                "          species                          8",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    wins, skipped, hdr = pw.build_windows_from_clocks(
+        stage_steps_file, None, clock_dir, snap_dir
+    )
+    assert len(wins) == 1
+    assert skipped == [
+        ("1.4M_ms_op_mono", "window not built (no MESA stage steps)")
+    ]
+    out_toml = tmp_path / "windows_e2e.toml"
+    out_toml.write_text(
+        pw.render_windows_toml(wins, skipped, hdr), encoding="utf-8"
+    )
+    n_wins, n_skip = pw.check_committed_toml(out_toml)
+    assert (n_wins, n_skip) == (1, 1)

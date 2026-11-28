@@ -28,7 +28,15 @@ python benchmarks/fortran_mesa/stepdumps/run_stepdumps.py \
 ```
 
 Snapshots `<case>_<stage>_<model>.mod` remain in `<snapshot-dir>` on local
-scratch outside git (packed later in W3).
+scratch outside git (packed later in W3). After each case finishes, remove its
+unkept Pass-1 snapshots while keeping all post-deduplication ``.mod`` files:
+
+```bash
+python scripts/windows/plan_windows.py \
+    --prune-case <case> \
+    --clock-dir <clock-out>/star \
+    --snapshot-dir <snapshot-dir>
+```
 
 ## 3. Pass 2: Generate and verify `windows_e2e.toml`
 

@@ -52,6 +52,7 @@ SHORT_STAGE_MAX_MODELS = 60
 TARGET_WALL_SEC = 60.0
 MIN_WINDOW_STEPS = 20
 MAX_WINDOW_STEPS = 300
+EMPTY_STAGE_REASON = "window not built (no MESA stage steps)"
 FORBIDDEN_PATH_TOKENS = ("/home/", "/tmp/", "/mnt/", "/Users/")
 
 # MESA write_model.f90 / read_model.f90 file_type bit indices.
@@ -572,6 +573,64 @@ def deduplicate_stage_candidates(
     return kept
 
 
+def prune_case_snapshots(
+    case: str,
+    clock_path: pathlib.Path,
+    snapshot_dir: pathlib.Path,
+) -> tuple[list[str], list[str]]:
+    """Keep only post-deduplication ``.mod`` files for ``case``.
+
+    Raises before deleting any file if a kept snapshot is missing or the clock
+    contains no ``STEP`` records, and uses an exact ``<case>_<stage>_<model>``
+    pattern so prefix-sharing cases are never touched.
+    """
+    cdata = parse_clock_tsv(clock_path)
+    if not cdata.steps:
+        raise ValueError(f"{case}: no STEP records in {clock_path}")
+    kept_names: set[str] = set()
+    for stage, st_records in sorted(cdata.steps.items()):
+        emp_first = st_records[0].model_number
+        emp_last = st_records[-1].model_number
+        cands = candidate_points_for_stage(
+            case,
+            stage,
+            emp_first,
+            emp_last,
+            loads_prev_stage_cleanly=False,
+        )
+        with_w: list[tuple[CandidatePoint, int]] = []
+        for cand in cands:
+            w, _, _ = compute_window_w(st_records, cand.start_model)
+            with_w.append((cand, w))
+        kept = deduplicate_stage_candidates(with_w)
+        for cand, _ in kept:
+            kept_names.add(f"{case}_{stage}_{cand.start_model}.mod")
+
+    if not kept_names:
+        raise ValueError(f"{case}: zero kept snapshots computed")
+    missing = [
+        name
+        for name in sorted(kept_names)
+        if not (snapshot_dir / name).is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            f"{case}: missing kept snapshot(s): {', '.join(missing)}"
+        )
+
+    pat = re.compile(rf"^{re.escape(case)}_(\d+)_(\d+)\.mod$")
+    deleted: list[str] = []
+    for entry in sorted(snapshot_dir.iterdir()):
+        if (
+            entry.is_file()
+            and pat.match(entry.name) is not None
+            and entry.name not in kept_names
+        ):
+            entry.unlink()
+            deleted.append(entry.name)
+    return sorted(kept_names), deleted
+
+
 def parse_clock_tsv(path: pathlib.Path) -> ClockData:
     """Parse a ``<case>.clock.tsv`` file emitted by ``run_stepdumps.py``."""
     header: dict[str, str] = {}
@@ -757,9 +816,7 @@ def build_windows_from_clocks(
             continue
         st_steps = [int(n) for n in row.get("stage_steps", ())]
         if not st_steps:
-            skipped.append(
-                (case, str(row.get("stage_steps_source", "no reference steps")))
-            )
+            skipped.append((case, EMPTY_STAGE_REASON))
             continue
         clock_path = clock_dir / f"{case}.clock.tsv"
         if not clock_path.is_file():
@@ -951,7 +1008,18 @@ def check_committed_toml(toml_path: pathlib.Path) -> tuple[int, int]:
             raise SystemExit(f"{toml_path}: bad sha256 on {wid}")
         if not (MIN_WINDOW_STEPS <= int(w["window_w"]) <= MAX_WINDOW_STEPS):
             raise SystemExit(f"{toml_path}: window_w out of bounds on {wid}")
-    return len(wins), len(parsed.get("cases_skipped", []))
+    skipped = parsed.get("cases_skipped", [])
+    seen_skipped: set[str] = set()
+    for entry in skipped:
+        suite = str(entry.get("suite", ""))
+        case = str(entry.get("case", ""))
+        reason = str(entry.get("reason", ""))
+        if not suite or not case or not reason:
+            raise SystemExit(f"{toml_path}: incomplete [[cases_skipped]] entry")
+        if case in seen_skipped:
+            raise SystemExit(f"{toml_path}: duplicate skipped case {case}")
+        seen_skipped.add(case)
+    return len(wins), len(skipped)
 
 
 def estimate_full_star_workload(
@@ -1002,10 +1070,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot-dir", type=pathlib.Path, default=None)
     parser.add_argument("--cases", nargs="*", default=None)
     parser.add_argument("--plan-only", action="store_true")
+    parser.add_argument(
+        "--prune-case",
+        type=str,
+        default=None,
+        help="Prune unkept Pass-1 .mod files for one case after its clock log.",
+    )
     parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT_TOML)
     parser.add_argument("--write-toml", action="store_true")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.prune_case is not None:
+        if args.clock_dir is None or args.snapshot_dir is None:
+            parser.error(
+                "--prune-case requires both --clock-dir and --snapshot-dir"
+            )
+        kept, deleted = prune_case_snapshots(
+            args.prune_case,
+            args.clock_dir / f"{args.prune_case}.clock.tsv",
+            args.snapshot_dir,
+        )
+        print(
+            f"{args.prune_case}: kept {len(kept)} snapshot(s), "
+            f"deleted {len(deleted)} unkept"
+        )
+        return 0
 
     if args.plan_only:
         if args.spec_dir is not None:

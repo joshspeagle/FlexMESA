@@ -6992,7 +6992,12 @@ upstream_lines = 163
 upstream_sha256 = "465b589f0f4806c216f56faeda13421427418bdb6eae25199b2b1133c6e814cd"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_psi_Iec_and_Jec", "do_psi_Iee_and_Jee"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"fd_integral" = "crates/flexmesa-rates/src/ecapture.rs::fd_complete_ad"
+"do_psi_Iec_and_Jec" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: inlined; returns zero where upstream stops for zeta > -beta (#737)
+"do_psi_Iee_and_Jee" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: inlined; returns zero where upstream stops for zeta < beta (#737)
 
 [[files]]
 upstream_path = "rates/private/eval_weak.f90"

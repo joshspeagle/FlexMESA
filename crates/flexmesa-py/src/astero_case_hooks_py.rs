@@ -22,6 +22,8 @@
 //! `"t_xtra9"`), or a dictionary with `"termination_code"` /
 //! `"termination_code_slot"` and optional `"termination_code_str"`.
 
+use std::path::Path;
+
 use flexmesa_astero::{AsteroCaseHooks, AsteroSearchControls};
 use flexmesa_star::controls::StarError;
 use flexmesa_star::inlist::InlistBundle;
@@ -214,6 +216,41 @@ fn build_after_evolve_snapshot<'py>(
     Ok(snap)
 }
 
+/// Adds the `astero_def` variables that a case's `extras_after_evolve` reads
+/// to move the track's `best_model_*` files
+/// (`astero/test_suite/fast_scan_grid/src/run_star_extras.f90:205-244`):
+/// `astero_results_directory` (resolved against the run's output root),
+/// `next_sample_number` (`sample_number + 1`), `num_digits`,
+/// `sample_results_prefix` and the four `best_model_*_filename` values.
+fn add_sample_files_snapshot(
+    snap: &Bound<'_, PyDict>,
+    ctrl: &AsteroSearchControls,
+    results_dir: &Path,
+    next_sample_number: usize,
+) -> PyResult<()> {
+    snap.set_item(
+        "astero_results_directory",
+        results_dir.to_string_lossy().into_owned(),
+    )?;
+    snap.set_item("next_sample_number", next_sample_number)?;
+    snap.set_item("num_digits", ctrl.num_digits)?;
+    snap.set_item("sample_results_prefix", &ctrl.sample_results_prefix)?;
+    snap.set_item(
+        "best_model_fgong_filename",
+        &ctrl.best_model_fgong_filename,
+    )?;
+    snap.set_item("best_model_gyre_filename", &ctrl.best_model_gyre_filename)?;
+    snap.set_item(
+        "best_model_profile_filename",
+        &ctrl.best_model_profile_filename,
+    )?;
+    snap.set_item(
+        "best_model_save_model_filename",
+        &ctrl.best_model_save_model_filename,
+    )?;
+    Ok(())
+}
+
 fn parse_after_evolve_result(
     res: &Bound<'_, PyAny>,
 ) -> Result<Option<String>, StarError> {
@@ -396,6 +433,42 @@ impl AsteroCaseHooks for PyAsteroCaseHooksAdapter {
             };
             let snap = build_after_evolve_snapshot(py, model, best_chi2)
                 .map_err(|e| to_err(&e))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("extras_after_evolve", (snap,))
+                .map_err(|e| to_err(&e))?;
+            parse_after_evolve_result(&res)
+        })
+    }
+
+    fn extras_after_evolve_for_sample(
+        &mut self,
+        model: &StarModel,
+        best_chi2: f64,
+        ctrl: &AsteroSearchControls,
+        results_dir: &Path,
+        next_sample_number: usize,
+    ) -> Result<Option<String>, StarError> {
+        if !self.has_after_evolve {
+            return Ok(None);
+        }
+        Python::attach(|py| {
+            let to_err = |e: &PyErr| {
+                StarError::InvalidInput(format!(
+                    "extras_after_evolve: {}",
+                    format_py_err(py, e)
+                ))
+            };
+            let snap = build_after_evolve_snapshot(py, model, best_chi2)
+                .map_err(|e| to_err(&e))?;
+            add_sample_files_snapshot(
+                &snap,
+                ctrl,
+                results_dir,
+                next_sample_number,
+            )
+            .map_err(|e| to_err(&e))?;
             let res = self
                 .py_obj
                 .bind(py)

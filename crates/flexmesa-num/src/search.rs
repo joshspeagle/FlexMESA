@@ -4,8 +4,7 @@
 //! `two_sum`, Neumaier compensated summation, ascending and descending
 //! `binary_search`, index permutation sorting `qsort_index`, linear
 //! root-finding `find0`, quadratic root-finding `find0_quadratic`, and
-//! quadratic maximum interpolation `find_max_quadratic` (with the upstream
-//! concavity check bug fixed).
+//! quadratic maximum interpolation `find_max_quadratic`.
 
 use crate::NumError;
 
@@ -265,16 +264,16 @@ pub fn find0_quadratic(
     ))
 }
 
-/// Finds the maximum $(x_{\max}, y_{\max})$ of the concave quadratic passing
-/// through $(x_1, y_1)$, $(x_2, y_2)$, and $(x_3, y_3)$.
+/// Finds the location and value `(xmax, ymax, ierr)` of the maximum of the
+/// quadratic fit to `(x1, y1)`, `(x2, y2)`, and `(x3, y3)`
+/// (`find_max_quadratic` in `num/public/num_lib.f90:558-578`).
 ///
-/// Fixes the upstream `num_lib.f90` line 581 typo (`if (y2 < max(y1, y2))`) by
-/// enforcing $y_2 \ge \max(y_1, y_3)$ and strict concavity $c < 0$.
-///
-/// # Errors
-///
-/// Returns [`NumError::InvalidParameter`] if abscissas are not strictly
-/// ordered, $y_2 < \max(y_1, y_3)$, or the parabola is not strictly concave.
+/// Computes `dx1`, `dx2`, `a`, `b`, `c`, `dxmax`, `xmax`, and `ymax` in
+/// upstream's exact expression order, then applies upstream's three tests
+/// (`ymax < y2`, `y2 < max(y1, y2)` per deferred upstream bug `#671`, and
+/// strict monotonicity of `(x1, x2, x3)`), setting `ierr = -1` when any test
+/// fails while still returning the computed `(xmax, ymax)`.
+#[must_use]
 pub fn find_max_quadratic(
     x1: f64,
     y1: f64,
@@ -282,56 +281,33 @@ pub fn find_max_quadratic(
     y2: f64,
     x3: f64,
     y3: f64,
-) -> Result<(f64, f64), NumError> {
-    if !y1.is_finite() || !y2.is_finite() || !y3.is_finite() {
-        return Err(NumError::NonFiniteValue(
-            "non-finite ordinate in find_max_quadratic",
-        ));
-    }
-    if !((x1 < x2 && x2 < x3) || (x1 > x2 && x2 > x3)) {
-        return Err(NumError::InvalidParameter(
-            "x1, x2, x3 must be strictly monotonic in find_max_quadratic",
-        ));
-    }
-    if y2 < y1.max(y3) {
-        return Err(NumError::InvalidParameter(
-            "interior value y2 must be >= max(y1, y3)",
-        ));
-    }
+) -> (f64, f64, i32) {
+    let mut ierr = 0_i32;
     let dx1 = x2 - x1;
     let dx2 = x3 - x2;
-    if flexmesa_math::numerics_mode() == flexmesa_math::NumericsMode::Strict {
-        // Match upstream `num_lib.f90:569-574` expression order in Strict
-        // mode so `xmax` and `ymax` preserve IEEE-754 rounding.
-        let b = (y2 - y1) / dx1
-            + (y2 - y1) / (dx1 + dx2)
-            + (dx1 / dx2) * (y2 - y3) / (dx1 + dx2);
-        let c = (dx2 * y1 - dx1 * y2 - dx2 * y2 + dx1 * y3)
-            / (dx1 * dx2 * (dx1 + dx2));
-        if c >= 0.0 {
-            return Err(NumError::InvalidParameter(
-                "quadratic is not strictly concave (c >= 0)",
-            ));
-        }
-        let dxmax = -b / (2.0 * c);
-        let xmax = dxmax + x1;
-        let ymax = y1 + dxmax * (b + dxmax * c);
-        return Ok((xmax, ymax));
+    // f(dx) = a + b dx + c dx^2; dx = x - x1 (`num/public/num_lib.f90:568-574`)
+    let a = y1;
+    let b = (y2 - y1) / dx1
+        + (y2 - y1) / (dx1 + dx2)
+        + (dx1 / dx2) * (y2 - y3) / (dx1 + dx2);
+    let c =
+        (dx2 * y1 - dx1 * y2 - dx2 * y2 + dx1 * y3) / (dx1 * dx2 * (dx1 + dx2));
+    let dxmax = -(b / (2.0 * c));
+    let xmax = dxmax + x1;
+    let ymax = a + dxmax * (b + dxmax * c);
+    if ymax < y2 {
+        ierr = -1;
     }
-    let dx12 = x3 - x1;
-    let b = (y2 - y1) / dx1;
-    let c = ((y3 - y2) / dx2 - b) / dx12;
-    if c >= 0.0 {
-        return Err(NumError::InvalidParameter(
-            "quadratic is not strictly concave (c >= 0)",
-        ));
+    // Deferred upstream bug #671: `num/public/num_lib.f90:576` tests
+    // `y2 < max(y1, y2)` rather than `y2 < max(y1, y3)`. Reproduce verbatim
+    // until v0.1.0.
+    if y2 < y1.max(y2) {
+        ierr = -1;
     }
-    // Stationary point of p(x) = y1 + b*(x - x1) + c*(x - x1)*(x - x2):
-    // dp/dx = b + c*(2*(x - x1) - dx1) = 0 => x - x1 = 0.5*(dx1 - b/c)
-    let dxmax = 0.5 * (dx1 - b / c);
-    let xmax = x1 + dxmax;
-    let ymax = y1 + dxmax * b + dxmax * (xmax - x2) * c;
-    Ok((xmax, ymax))
+    if !((x1 < x2 && x2 < x3) || (x1 > x2 && x2 > x3)) {
+        ierr = -1;
+    }
+    (xmax, ymax, ierr)
 }
 
 /// Solves for the two-piece linear expansion coefficients $(a_0, a_1, a_2)$

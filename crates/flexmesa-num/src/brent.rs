@@ -167,6 +167,109 @@ where
     ))
 }
 
+/// `eval_brent_safe_zero` as upstream writes it
+/// (`num/private/mod_brent.f90:513-705`): Brent's zero on the change-of-sign
+/// interval `[a, b]` with the caller's `fa_in = f(a)` and `fb_in = f(b)`.
+///
+/// Unlike [`brent_safe_zero`], this adds nothing to upstream: no iteration
+/// cap (the loop at `:615` is an unbounded `do`), no finiteness tests and no
+/// check that `fa_in` and `fb_in` differ in sign. It stops when
+/// `abs(m) <= tol`, `fb == 0` or `abs(fb) < epsy`, and returns `(sb, fb)`.
+/// The interpolation keeps upstream's `a` in place of `q` (`:653`, #194).
+///
+/// # Errors
+///
+/// Propagates an error from `func`, as upstream returns on `ierr /= 0`
+/// (`:683-684`).
+pub fn eval_brent_safe_zero<F>(
+    a: f64,
+    b: f64,
+    machep: f64,
+    t: f64,
+    epsy: f64,
+    mut func: F,
+    fa_in: f64,
+    fb_in: f64,
+) -> Result<(f64, f64), NumError>
+where
+    F: FnMut(f64) -> Result<f64, NumError>,
+{
+    let mut sa = a;
+    let mut sb = b;
+    let mut fa = fa_in;
+    let mut fb = fb_in;
+    let mut c = sa;
+    let mut fc = fa;
+    let mut e = sb - sa;
+    let mut d = e;
+    loop {
+        if fc.abs() < fb.abs() {
+            sa = sb;
+            sb = c;
+            c = sa;
+            fa = fb;
+            fb = fc;
+            fc = fa;
+        }
+        let tol = 2.0 * machep * sb.abs() + t;
+        let m = 0.5 * (c - sb);
+        if m.abs() <= tol || fb == 0.0 {
+            break;
+        }
+        if e.abs() < tol || fa.abs() <= fb.abs() {
+            e = m;
+            d = e;
+        } else {
+            let mut s = fb / fa;
+            let (mut p, mut q);
+            if sa == c {
+                p = 2.0 * m * s;
+                q = 1.0 - s;
+            } else {
+                q = fa / fc;
+                let r = fb / fc;
+                p = s * (2.0 * m * a * (q - r) - (sb - sa) * (r - 1.0));
+                q = (q - 1.0) * (r - 1.0) * (s - 1.0);
+            }
+            if 0.0 < p {
+                q = -q;
+            } else {
+                p = -p;
+            }
+            s = e;
+            e = d;
+            if 2.0 * p < 3.0 * m * q - (tol * q).abs()
+                && p < (0.5 * s * q).abs()
+            {
+                d = p / q;
+            } else {
+                e = m;
+                d = e;
+            }
+        }
+        sa = sb;
+        fa = fb;
+        if tol < d.abs() {
+            sb += d;
+        } else if 0.0 < m {
+            sb += tol;
+        } else {
+            sb -= tol;
+        }
+        fb = func(sb)?;
+        if fb.abs() < epsy {
+            break;
+        }
+        if (0.0 < fb && 0.0 < fc) || (fb <= 0.0 && fc <= 0.0) {
+            c = sa;
+            fc = fa;
+            e = sb - sa;
+            d = e;
+        }
+    }
+    Ok((sb, fb))
+}
+
 /// Finds a local minimum $(x_{\min}, f(x_{\min}))$ of $f$ on $[a, b]$ via
 /// Brent's (1973) golden-section and parabolic interpolation method
 /// (`eval_brent_local_min`).

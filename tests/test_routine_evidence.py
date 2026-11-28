@@ -93,13 +93,39 @@ def test_oracle_level_needs_a_listed_routine_id_and_a_mapped_target(
     manifest, inv = _mini(tmp_path, S.PARTIAL, ("One", "Two"))
     ids = {"star/private/x.f90::One", "star/private/x.f90::Unmapped"}
     t = routine_table.build_table(
-        manifest, inv, tmp_path, oracle_ids=ids, gaps=[]
+        manifest, inv, tmp_path, oracle_ids=(ids, set()), gaps=[]
     )
     row = _row(t)
-    assert (row["routines_full"], row["routines_oracle"]) == (2, 1)
-    assert row["lines_oracle"] == 10
+    assert (row["routines_full"], row["routines_oracle_exact"]) == (2, 1)
+    assert row["lines_oracle_exact"] == 10
     assert row["ceiling"] == "ported_unverified"
-    assert t["engine"]["routines_oracle"] == 1
+    assert t["engine"]["routines_oracle_exact"] == 1
+
+
+def test_print_precision_evidence_does_not_raise_the_ceiling(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Print-only oracle ids are counted apart and never reach vectors."""
+    manifest, inv = _mini(tmp_path, S.PARTIAL, ("One", "Two"))
+    both = {"star/private/x.f90::One", "star/private/x.f90::Two"}
+    t = routine_table.build_table(
+        manifest, inv, tmp_path, oracle_ids=(set(), both), gaps=[]
+    )
+    row = _row(t)
+    assert (row["routines_oracle_exact"], row["routines_oracle_print"]) == (
+        0,
+        2,
+    )
+    assert row["ceiling"] == "ported_unverified"
+    t = routine_table.build_table(
+        manifest, inv, tmp_path, oracle_ids=(both, both), gaps=[]
+    )
+    row = _row(t)
+    assert (row["routines_oracle_exact"], row["routines_oracle_print"]) == (
+        2,
+        0,
+    )
+    assert row["ceiling"] == "kernel_reference_vectors"
 
 
 def test_oracle_level_ignores_unmapped_routines(
@@ -109,9 +135,9 @@ def test_oracle_level_ignores_unmapped_routines(
     manifest, inv = _mini(tmp_path, S.PARTIAL, ("One",))
     ids = {"star/private/x.f90::Two"}
     t = routine_table.build_table(
-        manifest, inv, tmp_path, oracle_ids=ids, gaps=[]
+        manifest, inv, tmp_path, oracle_ids=(ids, set()), gaps=[]
     )
-    assert _row(t)["routines_oracle"] == 0
+    assert _row(t)["routines_oracle_exact"] == 0
     assert _row(t)["ceiling"] == "partial"
 
 
@@ -121,7 +147,7 @@ def test_ceiling_report_lists_exceeding_and_raise_candidate_files(
     """Status above the ceiling and fully mapped partial files are listed."""
     manifest, inv = _mini(tmp_path, S.KERNEL_REFERENCE_VECTORS, ("One", "Two"))
     t = routine_table.build_table(
-        manifest, inv, tmp_path, oracle_ids=set(), gaps=[]
+        manifest, inv, tmp_path, oracle_ids=(set(), set()), gaps=[]
     )
     rep = t["ceiling"]
     assert [f["ceiling"] for f in rep["files_exceeding_ceiling"]] == [
@@ -130,7 +156,7 @@ def test_ceiling_report_lists_exceeding_and_raise_candidate_files(
     assert rep["raise_candidates"] == []
     manifest, inv = _mini(tmp_path, S.PARTIAL, ("One", "Two"))
     t = routine_table.build_table(
-        manifest, inv, tmp_path, oracle_ids=set(), gaps=[]
+        manifest, inv, tmp_path, oracle_ids=(set(), set()), gaps=[]
     )
     assert t["ceiling"]["files_exceeding_ceiling"] == []
     assert len(t["ceiling"]["raise_candidates"]) == 1
@@ -142,7 +168,7 @@ def test_ceiling_report_makes_no_claim_for_files_without_mapped_routines(
     """A ported file with no mapped routine is counted, not flagged."""
     manifest, inv = _mini(tmp_path, S.PORTED_UNVERIFIED, ())
     t = routine_table.build_table(
-        manifest, inv, tmp_path, oracle_ids=set(), gaps=[]
+        manifest, inv, tmp_path, oracle_ids=(set(), set()), gaps=[]
     )
     rep = t["ceiling"]
     assert rep["files_exceeding_ceiling"] == []
@@ -196,13 +222,19 @@ def test_committed_table_oracle_counts_do_not_exceed_mapped_counts() -> None:
     )
     t = routine_table.build_table(manifest, inv, REPO_ROOT)
     for f in t["files"]:
-        assert f["routines_oracle"] <= f["routines_full"], f
-        assert f["lines_oracle"] <= f["lines_full"]
+        assert f["routines_oracle_exact"] <= f["routines_full"], f
+        assert f["lines_oracle_exact"] <= f["lines_full"]
     for mod, m in t["modules"].items():
-        assert m["routines_oracle"] <= m["routines_full"], mod
-    ids = routine_table.oracle_routine_ids(REPO_ROOT)
-    listed = {i for i in ids if i.split("::")[0] in inv["files"]}
-    assert t["engine"]["routines_oracle"] <= len(listed)
+        assert m["routines_oracle_exact"] <= m["routines_full"], mod
+    exact, printed = routine_table.oracle_routine_ids(REPO_ROOT, manifest)
+    assert not exact & printed
+    for f in t["files"]:
+        assert (
+            f["routines_oracle_exact"] + f["routines_oracle_print"]
+            <= f["routines_full"]
+        ), f
+    listed = {i for i in exact if i.split("::")[0] in inv["files"]}
+    assert t["engine"]["routines_oracle_exact"] <= len(listed)
     core = port_manifest.CORE_ENGINE_MODULES
     for b in t["backlog"]:
         entry = next(
@@ -287,12 +319,12 @@ def test_table_credits_only_the_qualified_contained_procedure(
     manifest = _dup_manifest(tmp_path, ("outer_a::check", "solo"))
     ids = {"star/private/x.f90::outer_a::check"}
     t = routine_table.build_table(
-        manifest, _dup_inventory(), tmp_path, oracle_ids=ids, gaps=[]
+        manifest, _dup_inventory(), tmp_path, oracle_ids=(ids, set()), gaps=[]
     )
     row = _row(t)
-    assert (row["routines_full"], row["routines_oracle"]) == (2, 1)
+    assert (row["routines_full"], row["routines_oracle_exact"]) == (2, 1)
     assert row["lines_full"] == 4 + 20
-    assert row["lines_oracle"] == 4
+    assert row["lines_oracle_exact"] == 4
 
 
 def test_table_credits_nothing_for_an_ambiguous_bare_key(
@@ -301,7 +333,7 @@ def test_table_credits_nothing_for_an_ambiguous_bare_key(
     """The gate flags a bare duplicate, so the table gives it no credit."""
     manifest = _dup_manifest(tmp_path, ("check",))
     t = routine_table.build_table(
-        manifest, _dup_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+        manifest, _dup_inventory(), tmp_path, oracle_ids=(set(), set()), gaps=[]
     )
     assert _row(t)["routines_full"] == 0
 
@@ -365,7 +397,11 @@ def test_mapped_parent_does_not_credit_unmapped_children(
     """Mapping ``parent`` credits 25 lines; a child adds only its own."""
     manifest = _nest_manifest(tmp_path, ("parent",))
     t = routine_table.build_table(
-        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=(set(), set()),
+        gaps=[],
     )
     row = _row(t)
     assert (row["routines_full"], row["lines_full"]) == (1, 25)
@@ -373,7 +409,11 @@ def test_mapped_parent_does_not_credit_unmapped_children(
     assert row["lines_in_routines"] == 50
     manifest = _nest_manifest(tmp_path, ("parent", "parent::kid_a"))
     t = routine_table.build_table(
-        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=(set(), set()),
+        gaps=[],
     )
     assert _row(t)["lines_full"] == 35
 
@@ -384,7 +424,11 @@ def test_partial_marker_moves_a_mapped_routine_to_its_own_level(
     """Partial routines are neither full nor unmapped, and cap the ceiling."""
     manifest = _nest_manifest(tmp_path, ("tail", "solo_x"), ("tail",))
     t = routine_table.build_table(
-        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=(set(), set()),
+        gaps=[],
     )
     row = _row(t)
     assert (row["routines_full"], row["routines_partial"]) == (0, 1)
@@ -406,13 +450,17 @@ def test_partial_routine_blocks_the_raise_and_gets_no_oracle_credit(
     manifest = _nest_manifest(tmp_path, keys, ("tail",))
     ids = {"star/private/x.f90::tail"}
     t = routine_table.build_table(
-        manifest, _nest_inventory(), tmp_path, oracle_ids=ids, gaps=[]
+        manifest, _nest_inventory(), tmp_path, oracle_ids=(ids, set()), gaps=[]
     )
-    assert _row(t)["routines_oracle"] == 0
+    assert _row(t)["routines_oracle_exact"] == 0
     assert t["ceiling"]["raise_candidates"] == []
     manifest = _nest_manifest(tmp_path, keys)
     t = routine_table.build_table(
-        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=(set(), set()),
+        gaps=[],
     )
     assert _row(t)["ceiling"] == "ported_unverified"
     assert len(t["ceiling"]["raise_candidates"]) == 1
@@ -434,7 +482,7 @@ def test_na_routines_stay_in_the_denominator_and_do_not_block_the_ceiling(
         manifest,
         _nest_inventory(),
         tmp_path,
-        oracle_ids=set(),
+        oracle_ids=(set(), set()),
         gaps=[],
         na_entries=na,
     )
@@ -455,7 +503,7 @@ def test_na_routine_is_never_counted_as_mapped(tmp_path: pathlib.Path) -> None:
         manifest,
         _nest_inventory(),
         tmp_path,
-        oracle_ids=set(),
+        oracle_ids=(set(), set()),
         gaps=[],
         na_entries=[_na("tail")],
     )

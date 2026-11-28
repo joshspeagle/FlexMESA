@@ -22,19 +22,30 @@
 
 use crate::NumError;
 
-/// Park-Miller (`ran1_zah` in `mod_random.f90`) uniform pseudo-random number
-/// generator in $[0, 1)$, updating `seed` in-place.
+/// Park-Miller uniform pseudo-random number generator in $[0, 1)$
+/// (`r8_uniform_01` in `num/private/mod_random.f90:275-375`), updating
+/// `seed` in place.
 ///
 /// Uses multiplier $a = 16807$, modulus $m = 2147483647 = 2^{31} - 1$, and
 /// Schrage quotient/remainder $(q = 127773, r = 2836)$.
-pub fn r8_uniform_01(seed: &mut i32) -> f64 {
+///
+/// # Errors
+///
+/// Upstream stops with `R8_UNIFORM_01 - Fatal error! Input value of
+/// SEED = 0.` (`mod_random.f90:354-359`); a zero seed is a fixed point of
+/// the recursion. That is returned as [`NumError::InvalidParameter`], with
+/// `seed` left unchanged (#660).
+pub fn r8_uniform_01(seed: &mut i32) -> Result<f64, NumError> {
     const IA: i64 = 16_807;
     const IM: i64 = 2_147_483_647;
     const IQ: i64 = 127_773;
     const IR: i64 = 2_836;
 
     if *seed == 0 {
-        *seed = 123_459_876;
+        return Err(NumError::InvalidParameter(
+            "R8_UNIFORM_01 - Fatal error! Input value of SEED = 0 \
+             (num/private/mod_random.f90:354-359)",
+        ));
     }
     let s = i64::from(*seed);
     let k = s / IQ;
@@ -43,30 +54,38 @@ pub fn r8_uniform_01(seed: &mut i32) -> f64 {
         next += IM;
     }
     *seed = next as i32;
-    (next as f64) * 4.656_612_875e-10
+    Ok((next as f64) * 4.656_612_875e-10)
 }
 
 /// Returns a uniform pseudo-random integer in `[a, b]` (inclusive) using
 /// [`r8_uniform_01`].
-pub fn i4_uniform(a: i32, b: i32, seed: &mut i32) -> i32 {
+///
+/// # Errors
+///
+/// Upstream `i4_uniform` stops on a zero seed (`mod_random.f90:175-180`);
+/// returned as [`NumError::InvalidParameter`] (#660).
+pub fn i4_uniform(a: i32, b: i32, seed: &mut i32) -> Result<i32, NumError> {
     let lo = a.min(b);
     let hi = a.max(b);
-    let u = r8_uniform_01(seed);
+    let u = r8_uniform_01(seed)?;
     let span = i64::from(hi) - i64::from(lo) + 1;
     let offset = ((u * (span as f64)).floor() as i64).clamp(0, span - 1);
-    (i64::from(lo) + offset) as i32
+    Ok((i64::from(lo) + offset) as i32)
 }
 
 /// Generates a random 1-based permutation of `1..=n` using [`i4_uniform`].
-#[must_use]
-pub fn perm_uniform(n: usize, seed: &mut i32) -> Vec<usize> {
+///
+/// # Errors
+///
+/// Propagates the zero-seed error of [`i4_uniform`] (#660).
+pub fn perm_uniform(n: usize, seed: &mut i32) -> Result<Vec<usize>, NumError> {
     let mut p: Vec<usize> = (1..=n).collect();
     for i in 0..n {
-        let j =
-            (i4_uniform(i as i32, (n.saturating_sub(1)) as i32, seed)) as usize;
+        let j = (i4_uniform(i as i32, (n.saturating_sub(1)) as i32, seed)?)
+            as usize;
         p.swap(i, j);
     }
-    p
+    Ok(p)
 }
 
 /// Configuration parameters for [`nm_simplex`] matching upstream `NM_simplex`.
@@ -320,7 +339,7 @@ where
                         break;
                     }
                     for i in 0..n {
-                        let u = r8_uniform_01(&mut seed);
+                        let u = r8_uniform_01(&mut seed)?;
                         x_ars[i] = x_lower[i] + u * (x_upper[i] - x_lower[i]);
                     }
                     let f_ars = eval_point(&x_ars, &mut num_evals, &mut fcn)?;
@@ -361,4 +380,42 @@ where
         num_iters,
         num_shrinks,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A zero seed is upstream's `R8_UNIFORM_01 - Fatal error!` and
+    /// `I4_UNIFORM - Fatal error!` stop (`num/private/mod_random.f90:175-180,
+    /// 354-359`): an error, with the seed left at 0 (#660).
+    #[test]
+    fn zero_seed_is_an_error_in_every_uniform_generator() {
+        let mut seed = 0_i32;
+        assert!(r8_uniform_01(&mut seed).is_err());
+        assert_eq!(seed, 0);
+        assert!(i4_uniform(1, 10, &mut seed).is_err());
+        assert!(perm_uniform(4, &mut seed).is_err());
+        assert_eq!(seed, 0);
+    }
+
+    /// `nm_simplex` with `adaptive_random_search` reaches `r8_uniform_01`
+    /// once a contraction fails; with `seed = 0` that is an error, not a
+    /// substituted seed (#660).
+    #[test]
+    fn adaptive_random_search_with_zero_seed_errors() {
+        let cfg = SimplexConfig {
+            adaptive_random_search: true,
+            seed: 0,
+            ..SimplexConfig::default()
+        };
+        let res =
+            nm_simplex(2, &[0.0, 0.0], &[1.0, 1.0], &[0.5, 0.5], &cfg, |_| {
+                Ok(1.0)
+            });
+        assert!(
+            matches!(res, Err(NumError::InvalidParameter(m)) if m.contains("SEED = 0")),
+            "{res:?}"
+        );
+    }
 }

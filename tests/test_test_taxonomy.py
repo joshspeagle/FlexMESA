@@ -10,6 +10,7 @@ import pytest
 from flexmesa.data import fetch
 from flexmesa.testing import (
     _dashboard_render,
+    _oracle_provenance,
     dashboard,
     port_manifest,
     test_taxonomy,
@@ -18,6 +19,15 @@ from flexmesa.testing import (
 pytestmark = pytest.mark.invariant
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _claim(*routines: str) -> _oracle_provenance.OracleEntry:
+    """Return an exact oracle entry claiming ``routines`` (fixture helper)."""
+    return _oracle_provenance.OracleEntry(
+        reference="benchmarks/fortran_mesa/turb_oracles/mlt.tsv",
+        precision="exact",
+        routines=routines,
+    )
 
 
 def _write_mini_manifest(repo: pathlib.Path) -> pathlib.Path:
@@ -130,7 +140,7 @@ def test_taxonomy_detects_bijection_and_duplicate_errors(
             module="turb",
             kind="oracle",
             provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex oracle",
-            routines=("turb/private/mlt.f90::calc_MLT",),
+            oracles=(_claim("turb/private/mlt.f90::calc_MLT"),),
         ),
         test_taxonomy.TestFileRecord(
             path="tests/test_turb_invariants.py",
@@ -470,7 +480,7 @@ def test_taxonomy_detects_inline_markers_and_invalid_routines(
             language="rust",
             module="turb",
             kind="invariant",
-            routines=("turb/private/mlt.f90::nonexistent_routine",),
+            oracles=(_claim("turb/private/mlt.f90::nonexistent_routine"),),
         ),
         test_taxonomy.TestFileRecord(
             path="tests/test_turb_invariants.py",
@@ -528,7 +538,7 @@ def test_taxonomy_detects_inline_markers_and_invalid_routines(
                         provenance=(
                             "MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex"
                         ),
-                        routines=("turb/private/mlt.f90::set_MLT",),
+                        oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
                     ),
                     test_taxonomy.TestFileRecord(
                         path="tests/test_turb_invariants.py",
@@ -623,10 +633,12 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt.f90::calc_MLT",
-                    "auto_diff/private/o1.f90::fn_ref_op",
-                    "auto_diff/private/o1.f90::diff1",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt.f90::calc_MLT",
+                        "auto_diff/private/o1.f90::fn_ref_op",
+                        "auto_diff/private/o1.f90::diff1",
+                    ),
                 ),
             ),
             test_taxonomy.TestFileRecord(
@@ -635,7 +647,7 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=("turb/private/mlt.f90::set_MLT",),
+                oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
             ),
         ),
     )
@@ -665,9 +677,11 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt.f90::calc_MLT",
-                    "auto_diff/private/o1.f90::fn_ref_op",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt.f90::calc_MLT",
+                        "auto_diff/private/o1.f90::fn_ref_op",
+                    ),
                 ),
             ),
             test_taxonomy.TestFileRecord(
@@ -676,7 +690,7 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=("turb/private/mlt.f90::set_MLT",),
+                oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
             ),
         ),
     )
@@ -746,12 +760,14 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt.f90::calc_MLT",
-                    "turb/private/mlt.f90::set_MLT",
-                    "turb/private/mlt_meth.f90::run_MLT",
-                    "turb/private/mlt_meth.f90::mod_MLT",
-                    "auto_diff/private/o1.f90::fn_ref_op",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt.f90::calc_MLT",
+                        "turb/private/mlt.f90::set_MLT",
+                        "turb/private/mlt_meth.f90::run_MLT",
+                        "turb/private/mlt_meth.f90::mod_MLT",
+                        "auto_diff/private/o1.f90::fn_ref_op",
+                    ),
                 ),
             ),
             test_taxonomy.TestFileRecord(
@@ -760,7 +776,7 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=("turb/private/mlt.f90::set_MLT",),
+                oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
             ),
         ),
     )
@@ -838,9 +854,11 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt_meth.f90::mod_MLT",
-                    "turb/private/mlt.f90::set_MLT",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt_meth.f90::mod_MLT",
+                        "turb/private/mlt.f90::set_MLT",
+                    ),
                 ),
             ),
             test_taxonomy.TestFileRecord(
@@ -849,7 +867,7 @@ def test_taxonomy_enforces_call_sites_and_rust_imports(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=("turb/private/mlt.f90::set_MLT",),
+                oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
             ),
         ),
     )
@@ -946,12 +964,14 @@ def test_call_site_gate_followup_skips_let_shadows_and_flexmesa_rust(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt.f90::eval3",
-                    "turb/private/mlt.f90::eval_mlt_ref",
-                    "turb/private/mlt.f90::set_MLT",
-                    "turb/private/mlt.f90::calc_MLT",
-                    "turb/private/mlt.f90::fn_disabled",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt.f90::eval3",
+                        "turb/private/mlt.f90::eval_mlt_ref",
+                        "turb/private/mlt.f90::set_MLT",
+                        "turb/private/mlt.f90::calc_MLT",
+                        "turb/private/mlt.f90::fn_disabled",
+                    ),
                 ),
             ),
             test_taxonomy.TestFileRecord(
@@ -960,9 +980,11 @@ def test_call_site_gate_followup_skips_let_shadows_and_flexmesa_rust(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=(
-                    "turb/private/mlt.f90::set_MLT",
-                    "turb/private/mlt.f90::calc_MLT",
+                oracles=(
+                    _claim(
+                        "turb/private/mlt.f90::set_MLT",
+                        "turb/private/mlt.f90::calc_MLT",
+                    ),
                 ),
             ),
         ),
@@ -1010,7 +1032,7 @@ def test_call_site_gate_followup_skips_let_shadows_and_flexmesa_rust(
                 module="turb",
                 kind="oracle",
                 provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
-                routines=("turb/private/mlt.f90::set_MLT",),
+                oracles=(_claim("turb/private/mlt.f90::set_MLT"),),
             ),
         ),
     )

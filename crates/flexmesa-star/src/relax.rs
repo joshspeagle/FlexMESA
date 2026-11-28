@@ -63,7 +63,7 @@ pub fn set_uniform_initial_composition(
 /// Applies solid-body rotation $\Omega_k = \Omega_0$, computes shell-corrected
 /// $i_{\mathrm{rot},k}$ and $j_{\mathrm{rot},k} = i_{\mathrm{rot},k}\Omega_0$,
 /// and updates Roche distortion factors (`set_uniform_omega` in
-/// `star/private/hydro_rotation.f90:501-543`).
+/// `star/private/hydro_rotation.f90:492-535`).
 pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
     model.controls.rotation_flag = true;
     let nz = model.nz;
@@ -84,13 +84,11 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
         }
     }
     crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
-    // `hydro_rotation.f90:509-531` zeroes the rotational distortion and the
-    // angular-momentum mixing arrays. Of those FlexMESA stores
-    // `w_div_w_crit_roche` (`w_div_wc`, set again by `set_rotation_info`), the
-    // `am_nu_*`/`am_sig_*` viscosities and `D_mix_non_rotation`; `r_polar`,
-    // `r_equatorial`, `domega_dlnR`, `richardson_number`, `D_visc`, `D_DSI`,
-    // `D_SH`, `D_SSI`, `D_ES`, `D_GSF`, `D_ST`, `nu_ST`, `omega_shear` and
-    // `dynamo_B_*` are recomputed where they are used, not stored.
+    // `hydro_rotation.f90:509-531` zeroes `w_div_w_crit_roche`, `r_polar`,
+    // `r_equatorial` (the latter two are not yet stored on `HydroAuxState`),
+    // the angular-momentum mixing viscosities/sigmas, and the rotational mixing
+    // arrays. Note `D_omega` is not zeroed here (`relax.f90:1307` zeroes it
+    // when `do_relax_uniform_omega` finishes).
     let aux = &mut model.aux;
     for v in [
         &mut aux.w_div_wc,
@@ -100,11 +98,27 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
         &mut aux.am_nu_j,
         &mut aux.am_sig_omega,
         &mut aux.am_sig_j,
+        &mut aux.rotmix.domega_dlnr,
+        &mut aux.rotmix.richardson_number,
         &mut aux.mixing.d_mix_non_rotation,
+        &mut aux.rotmix.d_visc,
+        &mut aux.rotmix.d_dsi,
+        &mut aux.rotmix.d_sh,
+        &mut aux.rotmix.d_ssi,
+        &mut aux.rotmix.d_es,
+        &mut aux.rotmix.d_gsf,
+        &mut aux.rotmix.d_st,
+        &mut aux.rotmix.nu_st,
+        &mut aux.rotmix.omega_shear,
+        &mut aux.rotmix.dynamo_b_r,
+        &mut aux.rotmix.dynamo_b_phi,
     ] {
+        v.resize(nz, 0.0);
         v.fill(0.0);
     }
     crate::hydro_rotation::set_rotation_info(model, false);
+    // `s% need_to_setvars = .true.` (`hydro_rotation.f90:534`).
+    model.aux.need_to_setvars = true;
 }
 
 /// Excises all interior zones hotter than `t_cut_k` (`K`) and replaces the
@@ -201,4 +215,135 @@ pub fn excise_core_by_temperature(
     trimmed.sync_mesh_and_pack()?;
     *model = trimmed;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_uniform_rotation;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::zams::load_zams_model;
+
+    #[test]
+    fn test_apply_uniform_rotation_sets_need_to_setvars_and_zeroes_rotmix() {
+        let mut model = load_zams_model(
+            StarControls::default(),
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        let nz = model.nz;
+
+        // First call with default empty `RotMixArrays` resizes and zeroes all
+        // 13 `rotmix` arrays and sets `need_to_setvars = true`.
+        model.aux.need_to_setvars = false;
+        apply_uniform_rotation(&mut model, 1.0e-5);
+        assert!(model.aux.need_to_setvars);
+
+        let rm = &model.aux.rotmix;
+        for (name, arr) in [
+            ("domega_dlnr", &rm.domega_dlnr),
+            ("richardson_number", &rm.richardson_number),
+            ("d_visc", &rm.d_visc),
+            ("d_dsi", &rm.d_dsi),
+            ("d_sh", &rm.d_sh),
+            ("d_ssi", &rm.d_ssi),
+            ("d_es", &rm.d_es),
+            ("d_gsf", &rm.d_gsf),
+            ("d_st", &rm.d_st),
+            ("nu_st", &rm.nu_st),
+            ("omega_shear", &rm.omega_shear),
+            ("dynamo_b_r", &rm.dynamo_b_r),
+            ("dynamo_b_phi", &rm.dynamo_b_phi),
+        ] {
+            assert_eq!(arr.len(), nz, "{name} len mismatch");
+            assert!(arr.iter().all(|&v| v == 0.0), "{name} not zeroed");
+        }
+
+        // Second call clears pre-existing non-zero sentinels in the 13
+        // `rotmix` arrays and 7 `am_*`/`d_mix_non_rotation` arrays, while
+        // leaving `d_omega`, `grad_density`, `grad_temperature`, and
+        // `d_mix_rotation` untouched (`hydro_rotation.f90:509-531`).
+        model.aux.need_to_setvars = false;
+        let aux = &mut model.aux;
+        for arr in [
+            &mut aux.am_nu_rot,
+            &mut aux.am_nu_non_rot,
+            &mut aux.am_nu_omega,
+            &mut aux.am_nu_j,
+            &mut aux.am_sig_omega,
+            &mut aux.am_sig_j,
+            &mut aux.mixing.d_mix_non_rotation,
+            &mut aux.rotmix.domega_dlnr,
+            &mut aux.rotmix.richardson_number,
+            &mut aux.rotmix.d_visc,
+            &mut aux.rotmix.d_dsi,
+            &mut aux.rotmix.d_sh,
+            &mut aux.rotmix.d_ssi,
+            &mut aux.rotmix.d_es,
+            &mut aux.rotmix.d_gsf,
+            &mut aux.rotmix.d_st,
+            &mut aux.rotmix.nu_st,
+            &mut aux.rotmix.omega_shear,
+            &mut aux.rotmix.dynamo_b_r,
+            &mut aux.rotmix.dynamo_b_phi,
+        ] {
+            arr.fill(42.0);
+        }
+        aux.rotmix.d_omega = vec![1.25; nz];
+        aux.rotmix.grad_density = vec![2.5; nz];
+        aux.rotmix.grad_temperature = vec![3.75; nz];
+        aux.rotmix.d_mix_rotation = vec![5.0; nz];
+
+        apply_uniform_rotation(&mut model, 2.0e-5);
+        assert!(model.aux.need_to_setvars);
+
+        let aux = &model.aux;
+        for (name, arr) in [
+            ("am_nu_rot", &aux.am_nu_rot),
+            ("am_nu_non_rot", &aux.am_nu_non_rot),
+            ("am_nu_omega", &aux.am_nu_omega),
+            ("am_nu_j", &aux.am_nu_j),
+            ("am_sig_omega", &aux.am_sig_omega),
+            ("am_sig_j", &aux.am_sig_j),
+            ("d_mix_non_rotation", &aux.mixing.d_mix_non_rotation),
+            ("domega_dlnr", &aux.rotmix.domega_dlnr),
+            ("richardson_number", &aux.rotmix.richardson_number),
+            ("d_visc", &aux.rotmix.d_visc),
+            ("d_dsi", &aux.rotmix.d_dsi),
+            ("d_sh", &aux.rotmix.d_sh),
+            ("d_ssi", &aux.rotmix.d_ssi),
+            ("d_es", &aux.rotmix.d_es),
+            ("d_gsf", &aux.rotmix.d_gsf),
+            ("d_st", &aux.rotmix.d_st),
+            ("nu_st", &aux.rotmix.nu_st),
+            ("omega_shear", &aux.rotmix.omega_shear),
+            ("dynamo_b_r", &aux.rotmix.dynamo_b_r),
+            ("dynamo_b_phi", &aux.rotmix.dynamo_b_phi),
+        ] {
+            assert!(
+                arr.iter().all(|&v| v == 0.0),
+                "{name} sentinel was not zeroed"
+            );
+        }
+
+        assert!(aux
+            .rotmix
+            .d_omega
+            .iter()
+            .all(|&v| v.to_bits() == 1.25_f64.to_bits()));
+        assert!(aux
+            .rotmix
+            .grad_density
+            .iter()
+            .all(|&v| v.to_bits() == 2.5_f64.to_bits()));
+        assert!(aux
+            .rotmix
+            .grad_temperature
+            .iter()
+            .all(|&v| v.to_bits() == 3.75_f64.to_bits()));
+        assert!(aux
+            .rotmix
+            .d_mix_rotation
+            .iter()
+            .all(|&v| v.to_bits() == 5.0_f64.to_bits()));
+    }
 }

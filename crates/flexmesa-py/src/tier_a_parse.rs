@@ -100,12 +100,13 @@ fn remove_underbars(text: &str) -> String {
     flexmesa_utils::remove_underbars(text)
 }
 
-/// Splits `line` on whitespace into at most `num` tokens.
+/// Splits `line` into `num` entries as upstream `utils_lib::split_line`.
 ///
-/// Matches upstream MESA `utils_lib::split_line`.
+/// Raises `ValueError` where upstream would read past the end of `line`.
 #[pyfunction]
-fn split_line(line: &str, num: usize) -> Vec<String> {
+fn split_line(line: &str, num: usize) -> PyResult<Vec<String>> {
     flexmesa_utils::split_line(line, num)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 /// Tokenizes MESA `.net` or list text into `(kind_str, value_str)` pairs.

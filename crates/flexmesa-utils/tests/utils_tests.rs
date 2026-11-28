@@ -167,7 +167,9 @@ fn test_token_stream_matches_upstream_mesa_token_txt() {
     // Verify directly against upstream MESA utils/test/token.txt and test_output
     verify_upstream_utils_files(&expected);
 
-    // Also test inline comment and & continuation stripping
+    // Also test inline comment and & continuation stripping. A `!` right
+    // after a name character is part of the name: `token` ends a name only
+    // before a blank, `(`, `)` or `,` (`utils/public/utils_lib.f90:642-647`).
     let inline_input = "add_isos(ih1, ihe4, & ! ignore &\n ic12!inline\n)";
     assert_eq!(
         tokenize(inline_input),
@@ -178,7 +180,7 @@ fn test_token_stream_matches_upstream_mesa_token_txt() {
             Token::Comma,
             Token::Name("ihe4".to_owned()),
             Token::Comma,
-            Token::Name("ic12".to_owned()),
+            Token::Name("ic12!inline".to_owned()),
             Token::RightParen,
             Token::Eof,
         ]
@@ -204,9 +206,85 @@ fn test_finiteness_guards_and_string_helpers() {
 
     assert_eq!(remove_underbars("star_mass_msun   "), "star mass msun");
     assert_eq!(
-        split_line("alpha   beta  gamma delta", 3),
+        split_line("alpha   beta  gamma delta", 3).expect("3 tokens"),
         vec!["alpha", "beta", "gamma"]
     );
+}
+
+/// `split_line` follows upstream's loop (`utils/public/utils_lib.f90:
+/// 1104-1138`): a leading blank gives an empty first entry, a final token
+/// with no blank after it loses its last character, and running past the
+/// end of `line` is an error (#665).
+#[test]
+fn split_line_follows_upstream_loop() {
+    assert_eq!(split_line(" a b", 2).expect("2"), vec!["", "a"]);
+    assert_eq!(split_line("a bc", 2).expect("2"), vec!["a", "b"]);
+    assert_eq!(split_line("a\tb c", 1).expect("1"), vec!["a\tb"]);
+    assert!(split_line("a b", 3).is_err());
+    assert!(split_line("", 1).is_err());
+}
+
+/// `token` (`utils/public/utils_lib.f90:567-667`): a name ends only before
+/// a blank, `(`, `)` or `,`; tabs, `!`, `&` and quotes inside a name stay;
+/// at a token start `&` and tabs are skipped and `!` ends the line; names
+/// and strings are cut to `len(string)` (#665).
+#[test]
+fn tokenizer_follows_upstream_token() {
+    assert_eq!(
+        tokenize("a!b c&d e'f\tg & !x\n"),
+        vec![
+            Token::Name("a!b".to_owned()),
+            Token::Name("c&d".to_owned()),
+            Token::Name("e'f\tg".to_owned()),
+            Token::Eof,
+        ]
+    );
+    let mut tz = Tokenizer::with_lengths("abcdef 'xyz12' q", 256, 3);
+    assert_eq!(tz.next_token(), Token::Name("abc".to_owned()));
+    // The string is cut at 3 bytes; the byte that did not fit is consumed
+    // and the scan resumes after it, as upstream's loop leaves `i`.
+    assert_eq!(tz.next_token(), Token::String("xyz".to_owned()));
+    assert_eq!(tz.next_token(), Token::Name("2'".to_owned()));
+    let mut short = Tokenizer::with_lengths("abc def", 5, 256);
+    assert_eq!(short.next_token(), Token::Name("abc".to_owned()));
+    assert_eq!(short.next_token(), Token::Name("d".to_owned()));
+    assert_eq!(short.next_token(), Token::Eof);
+}
+
+/// Records end at `\n`, `\r\n` and a lone `\r`, as gfortran's formatted
+/// read does (MESA SDK gfortran 15.2.0: `ab\r\n`, `cd \r\n`, `xy\rzz\n`
+/// read as `ab`, `cd`, `xy`, `zz`), so a CR is never part of a name.
+#[test]
+fn tokenizer_records_end_at_lf_crlf_and_lone_cr() {
+    assert_eq!(
+        tokenize("ab\r\ncd \r\nxy\rzz\n"),
+        vec![
+            Token::Name("ab".to_owned()),
+            Token::Name("cd".to_owned()),
+            Token::Name("xy".to_owned()),
+            Token::Name("zz".to_owned()),
+            Token::Eof,
+        ]
+    );
+    let records: Vec<&str> =
+        flexmesa_utils::Records::new("a\r\n\rb\nc").collect();
+    assert_eq!(records, vec!["a", "", "b", "c"]);
+}
+
+/// `integer_dict` stores `character(len=50)` keys and compares with blank
+/// padding (`utils/private/utils_dict.f90:101-141, 273-310`, #665).
+#[test]
+fn integer_dict_truncates_keys_to_50_bytes() {
+    let long = "k".repeat(60);
+    let mut dict = IntegerDict::new();
+    dict.define(&long, 7);
+    assert_eq!(dict.lookup(&long), None);
+    assert_eq!(dict.lookup(&"k".repeat(50)), Some(7));
+    assert!(dict.define_and_report_duplicates(&"k".repeat(55), 8));
+    assert_eq!(dict.lookup("he4\t"), None);
+    dict.define("he4", 1);
+    assert_eq!(dict.lookup("he4   "), Some(1));
+    assert_eq!(dict.lookup("he4\t"), None);
 }
 
 proptest! {
@@ -244,6 +322,9 @@ fn test_is_zero_skips_opt_out_values() {
     assert!(!is_zero_skips_opt_out(Some("1")));
     assert!(!is_zero_skips_opt_out(Some("true")));
     for token in ["0", "false", "FALSE", "no", "off", " OFF "] {
-        assert!(is_zero_skips_opt_out(Some(token)), "expected opt-out for {token}");
+        assert!(
+            is_zero_skips_opt_out(Some(token)),
+            "expected opt-out for {token}"
+        );
     }
 }

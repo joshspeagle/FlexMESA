@@ -79,51 +79,113 @@ enum NetToken {
     Comma,
 }
 
+/// `character (len=256) :: buffer, string` in `do_read_net_file`
+/// (`net/private/net_initialize.f90:276`).
+const NET_TOKEN_LEN: usize = 256;
+
+/// Formatted records of a `.net` file as `read(iounit,fmt='(a)')` returns
+/// them under the MESA SDK's gfortran 15.2.0 runtime: a record ends at `\n`,
+/// at `\r\n` or at a lone `\r`, and the terminator is not part of the record
+/// (compiler runtime behaviour, not MESA source). A terminator at the very
+/// end does not start an empty record.
+fn gfortran_records(src: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = src;
+    while !rest.is_empty() {
+        let bytes = rest.as_bytes();
+        let Some(end) = bytes.iter().position(|&c| c == b'\n' || c == b'\r')
+        else {
+            out.push(rest);
+            break;
+        };
+        out.push(&rest[..end]);
+        let skip = if bytes[end] == b'\r' && bytes.get(end + 1) == Some(&b'\n')
+        {
+            2
+        } else {
+            1
+        };
+        rest = &rest[end + skip..];
+    }
+    out
+}
+
+/// The `.net` token stream as upstream `token` produces it
+/// (`utils/public/utils_lib.f90:567-667`), transcribed on bytes (#666).
+///
+/// Each record is read into a 256-byte buffer (a longer record is cut) and
+/// `n = len_trim(buffer)` drops trailing blanks only. Records end where the
+/// gfortran runtime ends a formatted record ([`gfortran_records`]). At a
+/// token start,
+/// tabs, blanks and `&` are skipped and `!` ends the line; `(`, `)` and `,`
+/// are single tokens; a quote starts a string that runs to the matching
+/// quote or the end of the line; anything else starts a name that ends only
+/// before a blank, `(`, `)` or `,`, so a tab, `!`, `&` or quote after
+/// its first byte stays in it. Names and strings are cut to 256 bytes and
+/// returned without the Fortran blank padding.
 fn tokenize_net(src: &str) -> Vec<NetToken> {
     let mut tokens = Vec::new();
-    for raw_line in src.lines() {
-        let line = raw_line.split('!').next().unwrap_or("");
-        let bytes = line.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            let b = bytes[i];
-            if b.is_ascii_whitespace() {
-                i += 1;
-            } else if b == b'(' {
-                tokens.push(NetToken::LParen);
-                i += 1;
-            } else if b == b')' {
-                tokens.push(NetToken::RParen);
-                i += 1;
-            } else if b == b',' {
-                tokens.push(NetToken::Comma);
-                i += 1;
-            } else if b == b'\'' || b == b'"' {
-                let quote = b;
-                i += 1;
-                let start = i;
-                while i < bytes.len() && bytes[i] != quote {
-                    i += 1;
+    for raw_line in gfortran_records(src) {
+        let bytes = raw_line.as_bytes();
+        let buffer = &bytes[..bytes.len().min(NET_TOKEN_LEN)];
+        let n = buffer.iter().rposition(|&c| c != b' ').map_or(0, |p| p + 1);
+        // `i` is the 1-based index of the last byte read (`:589-665`).
+        let mut i = 0_usize;
+        while i < n {
+            i += 1;
+            let c = buffer[i - 1];
+            match c {
+                b'\t' | b' ' | b'&' => {}
+                b'!' => i = n,
+                b'(' => tokens.push(NetToken::LParen),
+                b')' => tokens.push(NetToken::RParen),
+                b',' => tokens.push(NetToken::Comma),
+                b'"' | b'\'' => {
+                    let mut out = Vec::new();
+                    loop {
+                        i += 1;
+                        if i > n
+                            || buffer[i - 1] == c
+                            || out.len() >= NET_TOKEN_LEN
+                        {
+                            break;
+                        }
+                        out.push(buffer[i - 1]);
+                    }
+                    let text = String::from_utf8_lossy(&out);
+                    tokens.push(NetToken::Quoted(
+                        text.trim_end_matches(' ').to_owned(),
+                    ));
                 }
-                let s = String::from_utf8_lossy(&bytes[start..i]).into_owned();
-                tokens.push(NetToken::Quoted(s));
-                if i < bytes.len() {
-                    i += 1;
+                _ => {
+                    let j1 = i;
+                    let mut j2 = i;
+                    while i < n
+                        && !matches!(buffer[i], b' ' | b'(' | b')' | b',')
+                    {
+                        i += 1;
+                        j2 = i;
+                    }
+                    let l = (j2 - j1 + 1).min(NET_TOKEN_LEN);
+                    let name = &buffer[j1 - 1..j1 - 1 + l];
+                    tokens.push(NetToken::Name(
+                        String::from_utf8_lossy(name).into_owned(),
+                    ));
                 }
-            } else {
-                let start = i;
-                while i < bytes.len()
-                    && !bytes[i].is_ascii_whitespace()
-                    && !matches!(bytes[i], b'(' | b')' | b',' | b'\'' | b'"')
-                {
-                    i += 1;
-                }
-                let s = String::from_utf8_lossy(&bytes[start..i]).into_owned();
-                tokens.push(NetToken::Name(s));
             }
         }
     }
     tokens
+}
+
+/// `read(string,fmt=*,iostat=ierr) A` for one integer
+/// (`net/private/net_initialize.f90:509, 521, 532`): a list-directed read
+/// takes the first field, which ends at a blank, tab, comma or slash, so
+/// `"2\t"` (a name with a tab kept in it) reads as 2.
+fn list_directed_usize(s: &str) -> Option<usize> {
+    let t = s.trim_start_matches([' ', '\t']);
+    let end = t.find([' ', '\t', ',', '/']).unwrap_or(t.len());
+    t[..end].parse().ok()
 }
 
 impl ParsedNetDef {
@@ -223,11 +285,12 @@ impl ParsedNetDef {
         let mut owned_src = None;
         for candidate in [&local_path, &nets_sub_path] {
             if candidate.is_file() {
-                owned_src = Some(fs::read_to_string(candidate).map_err(|e| {
-                    NetError::ParseError(format!(
-                        "failed to read net file '{trimmed}': {e}"
-                    ))
-                })?);
+                owned_src =
+                    Some(fs::read_to_string(candidate).map_err(|e| {
+                        NetError::ParseError(format!(
+                            "failed to read net file '{trimmed}': {e}"
+                        ))
+                    })?);
                 break;
             }
         }
@@ -366,7 +429,7 @@ impl ParsedNetDef {
                 }
             } else {
                 let z = chem_get_element_id(name)
-                    .or_else(|| name.parse::<usize>().ok())
+                    .or_else(|| list_directed_usize(name))
                     .ok_or_else(|| {
                         NetError::InvalidReactionOrIso(name.clone())
                     })?;
@@ -382,12 +445,10 @@ impl ParsedNetDef {
                     ));
                 };
                 *idx += 1;
-                let a1: usize = a1_s
-                    .parse()
-                    .map_err(|_| NetError::ParseError(a1_s.clone()))?;
-                let a2: usize = a2_s
-                    .parse()
-                    .map_err(|_| NetError::ParseError(a2_s.clone()))?;
+                let a1: usize = list_directed_usize(a1_s)
+                    .ok_or_else(|| NetError::ParseError(a1_s.clone()))?;
+                let a2: usize = list_directed_usize(a2_s)
+                    .ok_or_else(|| NetError::ParseError(a2_s.clone()))?;
                 for a in a1..=a2 {
                     let cid = nuclides
                         .lookup_zn_isomeric_state(z, a - z, 0)
@@ -975,3 +1036,117 @@ const SPECIAL_CASE_REACTIONS: &[SpecialCaseReaction] = &[
         "",
     ),
 ];
+
+#[cfg(test)]
+mod tokenizer_666_tests {
+    use super::*;
+
+    /// The `.net` tokenizer before #666, kept only to check that the
+    /// bundled nets tokenize the same way under `token`'s rules.
+    fn tokenize_net_before_666(src: &str) -> Vec<NetToken> {
+        let mut tokens = Vec::new();
+        for raw_line in src.lines() {
+            let line = raw_line.split('!').next().unwrap_or("");
+            let bytes = line.as_bytes();
+            let mut i = 0;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if b.is_ascii_whitespace() {
+                    i += 1;
+                } else if b == b'(' {
+                    tokens.push(NetToken::LParen);
+                    i += 1;
+                } else if b == b')' {
+                    tokens.push(NetToken::RParen);
+                    i += 1;
+                } else if b == b',' {
+                    tokens.push(NetToken::Comma);
+                    i += 1;
+                } else if b == b'\'' || b == b'"' {
+                    let quote = b;
+                    i += 1;
+                    let start = i;
+                    while i < bytes.len() && bytes[i] != quote {
+                        i += 1;
+                    }
+                    let s =
+                        String::from_utf8_lossy(&bytes[start..i]).into_owned();
+                    tokens.push(NetToken::Quoted(s));
+                    if i < bytes.len() {
+                        i += 1;
+                    }
+                } else {
+                    let start = i;
+                    while i < bytes.len()
+                        && !bytes[i].is_ascii_whitespace()
+                        && !matches!(
+                            bytes[i],
+                            b'(' | b')' | b',' | b'\'' | b'"'
+                        )
+                    {
+                        i += 1;
+                    }
+                    let s =
+                        String::from_utf8_lossy(&bytes[start..i]).into_owned();
+                    tokens.push(NetToken::Name(s));
+                }
+            }
+        }
+        tokens
+    }
+
+    /// Every bundled `.net` file gives the same token stream as before,
+    /// except `mesa_206.net`, whose `2<TAB>` names now keep the tab as
+    /// upstream `token` does; the list-directed read still gives 2 (#666).
+    #[test]
+    fn bundled_nets_tokenize_as_before_except_mesa_206_tabs() {
+        let mut differing = Vec::new();
+        for (name, src) in builtin_net_files() {
+            // The bundle also carries the nets directory's README.rst,
+            // which is documentation, not a net.
+            if name == "README.rst" {
+                continue;
+            }
+            if tokenize_net(src) != tokenize_net_before_666(src) {
+                differing.push(name.clone());
+            }
+        }
+        assert_eq!(differing, vec![String::from("mesa_206.net")]);
+        assert_eq!(list_directed_usize("2\t"), Some(2));
+        assert!(ParsedNetDef::parse_from_name("mesa_206.net").is_ok());
+    }
+
+    /// `token` keeps `!`, `&`, quotes and tabs after a name's first byte,
+    /// skips `&` and tabs at a token start, and starts a comment with `!`
+    /// only at a token start (`utils/public/utils_lib.f90:589-665`).
+    #[test]
+    fn net_tokens_follow_upstream_token() {
+        assert_eq!(
+            tokenize_net("add_isos(h1!x, &c12, he4'q 'a!b' ) o16\r! end\n"),
+            vec![
+                NetToken::Name(String::from("add_isos")),
+                NetToken::LParen,
+                NetToken::Name(String::from("h1!x")),
+                NetToken::Comma,
+                NetToken::Name(String::from("c12")),
+                NetToken::Comma,
+                NetToken::Name(String::from("he4'q")),
+                NetToken::Quoted(String::from("a!b")),
+                NetToken::RParen,
+                // A lone CR ends the record, so `! end` starts a new one.
+                NetToken::Name(String::from("o16")),
+            ]
+        );
+        // MESA SDK gfortran 15.2.0 reads `ab\r\n`, `cd \r\n`, `xy\rzz\n` as
+        // the records `ab`, `cd`, `xy`, `zz`.
+        assert_eq!(
+            gfortran_records("ab\r\ncd \r\nxy\rzz\n"),
+            vec!["ab", "cd ", "xy", "zz"]
+        );
+        let long = "x".repeat(300);
+        assert_eq!(
+            tokenize_net(&long),
+            vec![NetToken::Name("x".repeat(NET_TOKEN_LEN))]
+        );
+    }
+}

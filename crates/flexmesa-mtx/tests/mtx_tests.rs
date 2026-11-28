@@ -200,10 +200,10 @@ fn test_square2_and_inv_match_upstream_golden_output() {
 /// (1-based and 0-based), band<->CSC, band<->CSR, diagonal-preserving sparse
 /// exports, and `find_loc_in_sparse`.
 ///
-/// Specifically verifies that the upstream 0-based index bounds bugs in
-/// `row_sparse_0_based_to_dense` and `find_loc_in_column_0_based` are resolved
-/// so that 0-based CSR/CSC roundtrips and 0-based diagonal entry lookups match
-/// the original dense tridiagonal matrix identically.
+/// Checks that `row_sparse_0_based_to_dense` and out-of-bounds paths of
+/// `find_loc_in_sparse` with `CompressedColSparse0Based` return explicit
+/// errors (`#674`, `DECISIONS #43`), while in-bounds `CompressedColSparse0Based`
+/// lookups reproduce upstream's `colptr(j)-1..=colptr(j+1)` search range.
 #[test]
 fn test_format_conversions_match_upstream_golden_output() {
     let n = 5;
@@ -244,8 +244,12 @@ fn test_format_conversions_match_upstream_golden_output() {
     let nz0 =
         dense_to_row_0_based(n, n, &a, nzmax, &mut ptr, &mut ind, &mut vals)
             .unwrap();
-    row_sparse_0_based_to_dense(n, n, &mut a2, nz0, &ptr, &ind, &vals).unwrap();
-    assert_eq!(a, a2);
+    // Upstream `do_row_sparse_0_based_to_dense` (`mtx_support.f90:428-447`)
+    // reads `rowptr(n+1)` out of bounds and mixes 0-/1-based indexing (#674).
+    assert!(matches!(
+        row_sparse_0_based_to_dense(n, n, &mut a2, nz0, &ptr, &ind, &vals),
+        Err(MtxError::InvalidParameter(_))
+    ));
 
     // 3. Dense <-> 1-based and 0-based CSC roundtrips
     let nz_c =
@@ -305,10 +309,94 @@ fn test_format_conversions_match_upstream_golden_output() {
         fmt_csc0, n, n, &a, nzmax, &mut ptr, &mut ind, &mut vals,
     )
     .unwrap();
+    // Upstream `find_loc_in_column_0_based` (`mtx_formats.dek:261-280`)
+    // searches `colptr(j)-1..=colptr(j+1)`. For column 1 (`colptr=[2, 5]`),
+    // `k = 1` lies in bounds (`rowind[1] = 1` from column 0, `vals[1] = 0.2`)
+    // and matches before column 1's own diagonal entry at `k = 3`.
     let loc_0 = find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 1, 1, None)
         .unwrap()
         .unwrap();
-    assert_eq!(vals[loc_0], 0.0);
+    assert_eq!(loc_0, 1);
+    assert_eq!(vals[loc_0], a[n]);
+    // With `hint = Some(2)` (`k = hint + 1 = 3`), upstream's hint fast path
+    // (`mtx_formats.dek:265-272`) matches column 1's own diagonal zero first.
+    let loc_0_hint =
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 1, 1, Some(2))
+            .unwrap()
+            .unwrap();
+    assert_eq!(loc_0_hint, 3);
+    assert_eq!(vals[loc_0_hint], 0.0);
+    // In-bounds miss on interior column 1 (`k = 1..=5` all in `0..13`).
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 4, 1, None).unwrap(),
+        None
+    );
+    // In-bounds hit in the last column before reaching `k = nz_d0`.
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 3, n - 1, None)
+            .unwrap(),
+        Some(11)
+    );
+    // Out-of-bounds paths return explicit errors (#674, DECISIONS #43):
+    // `colptr(0) = 0` reads `rowind(-1)`; missing entry in last column reaches
+    // `rowind(nz)`; `j = n` reads `colptr(n + 1)`.
+    assert!(matches!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 0, 0, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
+    assert!(matches!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 0, n - 1, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
+    assert!(matches!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, 0, n, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
+    // Upper-edge (`k = colptr(j + 1)`) and lower-edge (`k = colptr(j) - 1`)
+    // neighbouring-column matches on a 3x3 diagonal 0-based CSC matrix.
+    let diag_ptr = [0_usize, 1, 2, 3];
+    let diag_ind = [0_usize, 1, 2];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &diag_ptr, &diag_ind, 0, 1, None)
+            .unwrap(),
+        Some(0)
+    );
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &diag_ptr, &diag_ind, 2, 1, None)
+            .unwrap(),
+        Some(2)
+    );
+    // Out-of-range row_idx with in-bounds search compares `rowind(k) == i`
+    // and returns `Ok(None)` (`ierr = -1`, `mtx_formats.dek:273-279`).
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, n, 1, None).unwrap(),
+        None
+    );
+    // `start > end + 1`: `do k = start - 1, end` executes zero iterations -> `None`.
+    let rev_gt_ptr = [0_usize, 3, 1, 3];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_gt_ptr, &diag_ind, 1, 1, None)
+            .unwrap(),
+        None
+    );
+    // `start == end + 1`: single `k = end` iteration (`lo == end`).
+    let rev_eq_ptr = [0_usize, 2, 1, 3];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_eq_ptr, &diag_ind, 1, 1, None)
+            .unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_eq_ptr, &diag_ind, 0, 1, None)
+            .unwrap(),
+        None
+    );
+    // `end > nz`: still rejected with `InvalidParameter`.
+    let oob_end_ptr = [0_usize, 1, 4, 4];
+    assert!(matches!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &oob_end_ptr, &diag_ind, 1, 1, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
 }
 
 /// Verifies banded LU solver `dgbtrf`/`dgbtrs` and `band_multiply_xa` against

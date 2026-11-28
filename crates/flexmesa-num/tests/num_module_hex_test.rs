@@ -509,8 +509,9 @@ fn test_num_module_hex_zero_ulp() {
         );
 
         // 6..10: test_find_max_quadratic
-        let (xmax, ymax) =
-            find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0).unwrap();
+        let (xmax, ymax, ierr) =
+            find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0);
+        assert_eq!(ierr, 0, "test_find_max_quadratic returned ierr={ierr}");
         idx = check_section(
             "test_find_max_quadratic",
             &[xmax, 1.85_f64, ymax, 12.4083_f64],
@@ -643,17 +644,17 @@ fn test_num_module_hex_zero_ulp() {
             Ok((tanh(x) - 0.4621171572600098_f64, 1.0 / (c * c)))
         };
         let ((x1_b, x3_b), (y1_b, y3_b)) =
-            look_for_brackets(-1.0, 0.1, -1.0e30, 1.0e30, f_root2, 50).unwrap();
+            look_for_brackets(-1.0, 0.1, f_root2, 50).unwrap();
         let (r2, _) = safe_root_with_brackets(
             f_root2, x1_b, x3_b, y1_b, y3_b, 50, 1e-10, 1e-10,
         )
         .unwrap();
         let (r3a, _) = safe_root_without_brackets(
-            f_root2, 0.1, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+            f_root2, 0.1, 0.1, 10, 50, 1e-10, 1e-10,
         )
         .unwrap();
         let (r3b, _) = safe_root_without_brackets(
-            f_root2, -1.0, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+            f_root2, -1.0, 0.1, 10, 50, 1e-10, 1e-10,
         )
         .unwrap();
         idx = check_section(

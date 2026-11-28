@@ -461,13 +461,14 @@ where
                 simplex[h] = x_contract;
                 f[h] = f_contract;
             } else if adaptive_random_search {
-                let x_ars: Vec<f64> = (0..n)
-                    .map(|i| {
-                        x_lower[i]
-                            + r8_uniform_01(&mut seed)
-                                * (x_upper[i] - x_lower[i])
-                    })
-                    .collect();
+                let mut x_ars = vec![0.0_f64; n];
+                for i in 0..n {
+                    // Zero seed: upstream `r8_uniform_01` stops (#660).
+                    let u = r8_uniform_01(&mut seed).map_err(|e| {
+                        StarError::InvalidInput(format!("simplex_seed: {e}"))
+                    })?;
+                    x_ars[i] = x_lower[i] + u * (x_upper[i] - x_lower[i]);
+                }
                 let f_ars = eval_pt(&x_ars, &mut num_evals)?;
                 if f_ars < f[h] {
                     simplex[h] = x_ars;

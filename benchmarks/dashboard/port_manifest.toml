@@ -8550,11 +8550,9 @@ upstream_path = "star/private/paquette_coeffs.f90"
 module = "star"
 upstream_lines = 721
 upstream_sha256 = "47b3db29cce213cf21166a93f9ada8febc8d3905607ea9130ad3d05a38f0847d"
-status = "kernel_reference_vectors"
+status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/paquette_coeffs.rs"]
-evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
-evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
-notes = "updated for #156: full Paquette et al. (1986) 1,600-coefficient spline tables tested against MESA 26.4.1 hex oracles across 4 psi regimes (Ddiff, Kdiff, Zdiff, Zdiff1, Zdiff2, Ath at rtol=1e-13, atol=1e-30)"
+notes = "lowered to ported_unverified under DECISIONS #80 (print-precision evidence only); updated for #156: full Paquette et al. (1986) 1,600-coefficient spline tables tested against MESA 26.4.1 hex oracles across 4 psi regimes (Ddiff, Kdiff, Zdiff, Zdiff1, Zdiff2, Ath at rtol=1e-13, atol=1e-30)"
 [files.routine_map]
 "paquette_coefficients" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"
 "initialise_collision_integrals" = "crates/flexmesa-star/src/paquette_coeffs.rs::paquette_coefficients"

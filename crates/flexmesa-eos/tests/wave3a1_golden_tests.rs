@@ -166,8 +166,46 @@ fn test_dfermi_matches_upstream_mesa_dirac_integral_golden() {
     assert!((fd_dual.d1[1] - fdtheta_ph).abs() < 1.0e-15);
 }
 
+/// MESA `26.4.1` outputs of `ion_offset::compute_ion_offset` at this file's
+/// operating points, written by
+/// `benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90`.
+const EOS_PGAS_ION_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+);
+
+/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
+fn mesa_ion_bits(case: &str, role: &str, field: &str) -> u64 {
+    for line in EOS_PGAS_ION_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[1] == role
+            && cols[2] == field
+            && cols[3] == "val"
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA ion_offset oracle row for {case} {role} {field}");
+}
+
+fn assert_ion_bits(label: &str, actual: f64, expected_bits: u64) {
+    let actual_bits = actual.to_bits();
+    assert_eq!(
+        actual_bits,
+        expected_bits,
+        "{label}: MESA {expected:.17e} ({expected_bits:016X}) vs Flex {actual:.17e} ({actual_bits:016X})",
+        expected = f64::from_bits(expected_bits),
+    );
+}
+
 /// Verifies `compute_ion_offset` and `compute_ion_offset_from_za` against
-/// exact NIST atomic binding energies (`ion_offset.f90`).
+/// exact NIST atomic binding energies (`ion_offset.f90`) and MESA `26.4.1`
+/// `ion_offset::compute_ion_offset` hex oracles.
 #[test]
 fn test_ion_offset_matches_nist_binding_table() {
     let h_offset = compute_ion_offset_from_za(&[1.0], &[1], &[1.0]);
@@ -191,8 +229,29 @@ fn test_ion_offset_matches_nist_binding_table() {
     let ih1 = catalog.get_by_name("h1").unwrap().chem_id;
     let ihe4 = catalog.get_by_name("he4").unwrap().chem_id;
     let ic12 = catalog.get_by_name("c12").unwrap().chem_id;
+
+    assert_ion_bits(
+        "ion_offset_pure_h.in.xa_0",
+        1.0,
+        mesa_ion_bits("ion_offset_pure_h", "in", "xa_0"),
+    );
+    let h_cat_offset = compute_ion_offset(&[1.0], &[ih1]).unwrap();
+    let exp_h_bits = mesa_ion_bits("ion_offset_pure_h", "out", "offset");
+    assert_ion_bits("ion_offset_pure_h.from_za", h_offset, exp_h_bits);
+    assert_ion_bits("ion_offset_pure_h.catalog", h_cat_offset, exp_h_bits);
+
+    for (idx, &x) in xa.iter().enumerate() {
+        assert_ion_bits(
+            &format!("ion_offset_solar_3sp.in.xa_{idx}"),
+            x,
+            mesa_ion_bits("ion_offset_solar_3sp", "in", &format!("xa_{idx}")),
+        );
+    }
     let cat_offset = compute_ion_offset(&xa, &[ih1, ihe4, ic12]).unwrap();
     assert!((cat_offset - expected_mix).abs() / expected_mix < 1.0e-15);
+    let exp_mix_bits = mesa_ion_bits("ion_offset_solar_3sp", "out", "offset");
+    assert_ion_bits("ion_offset_solar_3sp.from_za", mix_offset, exp_mix_bits);
+    assert_ion_bits("ion_offset_solar_3sp.catalog", cat_offset, exp_mix_bits);
 }
 
 /// Verifies `eval_ideal_eos` and `eval_ideal_eos_from_weights` against compiled

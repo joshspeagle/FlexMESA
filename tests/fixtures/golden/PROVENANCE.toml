@@ -1,0 +1,60 @@
+# Golden copies of upstream MESA 26.4.1 files (DECISIONS #80).
+#
+# Each entry records the repository copy, the upstream file it copies at
+# git tag 26.4.1 (commit c8c2026), and the SHA-256 of both (they are
+# byte-identical). The oracle provenance check accepts a golden file as a
+# reference only when it is listed here and its SHA-256 still matches.
+# Files under this directory that are not listed are not upstream copies.
+
+mesa_version = "26.4.1"
+mesa_git_tag = "26.4.1"
+
+[[files]]
+path = "tests/fixtures/golden/adipls/Gemma.fgong"
+upstream = "adipls/test/Gemma.fgong"
+sha256 = "0c04e695d4864ff71dd1ab4eafc4d07a91e07cbbead59d0781511ea99d948de1"
+
+[[files]]
+path = "tests/fixtures/golden/atm/test_output.txt"
+upstream = "atm/test/test_output"
+sha256 = "6b33e7485e6acf1f0254098645937b9a480f4483660f4a41550e3854681cb5a9"
+
+[[files]]
+path = "tests/fixtures/golden/const/test_output.txt"
+upstream = "const/test/test_output"
+sha256 = "0da2bbbbc55c2c0bae539734bd0212d45ec87aaea8fed03736117eeaa423d2ca"
+
+[[files]]
+path = "tests/fixtures/golden/eos/test_output.txt"
+upstream = "eos/test/test_output"
+sha256 = "fb6ed316e61b3da257cc3f2923317a82c9d413e902646051fa237d705be6769a"
+
+[[files]]
+path = "tests/fixtures/golden/gyre/model.dat"
+upstream = "gyre/test/model.dat"
+sha256 = "ab85f98185a1be4c8115123d92006e9b6a8ab1f7964e651e91d0833a89e252ab"
+
+[[files]]
+path = "tests/fixtures/golden/kap/test_output.txt"
+upstream = "kap/test/test_output"
+sha256 = "00a7e9a34c1c19bdf170048593fac3ebf64711904a33c881f9921f5f186c2fd9"
+
+[[files]]
+path = "tests/fixtures/golden/net/test_output.txt"
+upstream = "net/test/test_output"
+sha256 = "8bd214eac93323fd0f9724108210f6bc90091d7ab983e789244529b5bfaffba0"
+
+[[files]]
+path = "tests/fixtures/golden/rates/test_output.txt"
+upstream = "rates/test/test_output"
+sha256 = "107c17cb2301f5910a50ab8c212c84ba5c256d359e586b7bf4865f1c561e7c7a"
+
+[[files]]
+path = "tests/fixtures/golden/stella/mesa.abn"
+upstream = "stella/test/mesa.abn"
+sha256 = "a7635cfd9901dbab67a083c95c43f4fdcec40c7e1d6c7694dd16871dd788e3ac"
+
+[[files]]
+path = "tests/fixtures/golden/turb/test_output.txt"
+upstream = "turb/test/test_output"
+sha256 = "5d453f565c8d7889f2f22ba093440ee66737b030b0b600eb5bb687670c2f701d"

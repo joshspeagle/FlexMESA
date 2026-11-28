@@ -36,11 +36,13 @@ pub fn approx21_dfdt_dfdrho(
     min_t_for_fe56ec_fake_factor: f64,
     fe56ec_n_neut: i32,
     temp: f64,
+    den: f64,
     dfdy: &[f64],
     dfdt: &mut [f64],
     dfdrho: &mut [f64],
     d_epstotal_dy: &mut [f64],
-) {
+) -> Result<(), NetError> {
+    dfdt[..species].fill(0.0);
     approx21_dydt(
         idx,
         y,
@@ -51,8 +53,10 @@ pub fn approx21_dfdt_dfdrho(
         min_t_for_fe56ec_fake_factor,
         fe56ec_n_neut,
         temp,
+        den,
         dfdt,
-    );
+    )?;
+    dfdrho[..species].fill(0.0);
     approx21_dydt(
         idx,
         y,
@@ -63,8 +67,9 @@ pub fn approx21_dfdt_dfdrho(
         min_t_for_fe56ec_fake_factor,
         fe56ec_n_neut,
         temp,
+        den,
         dfdrho,
-    );
+    )?;
     let enuc_conv2 = -AVO * CLIGHT * CLIGHT;
     for j in 0..species {
         let mut xx = 0.0_f64;
@@ -73,6 +78,7 @@ pub fn approx21_dfdt_dfdrho(
         }
         d_epstotal_dy[j] = xx * enuc_conv2;
     }
+    Ok(())
 }
 
 /// Evaluates `eval_net_approx21_procs` directly into `w`'s direct-export
@@ -199,8 +205,9 @@ pub(crate) fn eval_net_approx21_into(
         g.min_t_for_fe56ec_fake_factor,
         g.fe56ec_n_neut,
         temp,
+        rho,
         &mut dydt1,
-    );
+    )?;
 
     let f_ii = approx21_eval_ppii_fraction(&idx, &w.y, &w.rate_screened);
     let (eps_total, eps_neu_total) = approx21_eps_info(
@@ -263,11 +270,12 @@ pub(crate) fn eval_net_approx21_into(
         g.min_t_for_fe56ec_fake_factor,
         g.fe56ec_n_neut,
         temp,
+        rho,
         &dfdy,
         &mut dfdt,
         &mut dfdrho,
         &mut d_epstotal_dy,
-    );
+    )?;
 
     let mut dummy_cats = [0.0_f64; NUM_CATEGORIES];
     let (deps_total_dt, deps_neu_dt) = approx21_eps_info(

@@ -24,7 +24,11 @@ import tomllib
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from flexmesa.testing import _routine_call_gate, port_manifest
+from flexmesa.testing import (
+    _oracle_provenance,
+    _routine_call_gate,
+    port_manifest,
+)
 
 DEFAULT_TAXONOMY_REL: str = "benchmarks/dashboard/test_taxonomy.toml"
 
@@ -143,6 +147,16 @@ class TestFileRecord:
     provenance: str = ""
     routines: tuple[str, ...] = ()
     mislabel_reason: str = ""
+    oracles: tuple[_oracle_provenance.OracleEntry, ...] = ()
+
+    @property
+    def oracle_routines(self) -> tuple[str, ...]:
+        """Routine ids claimed by this record's ``[[tests.oracles]]``."""
+        seen: dict[str, None] = {}
+        for entry in self.oracles:
+            for rid in entry.routines:
+                seen.setdefault(rid, None)
+        return tuple(seen)
 
 
 @dataclass(frozen=True)
@@ -846,6 +860,7 @@ def load_test_taxonomy(path: pathlib.Path) -> TestTaxonomy:
                 provenance=provenance,
                 routines=routines,
                 mislabel_reason=mislabel_reason,
+                oracles=_oracle_provenance.parse_oracles(item),
             )
         )
     return TestTaxonomy(schema_version=schema_version, entries=tuple(records))
@@ -868,7 +883,9 @@ def dump_test_taxonomy(taxonomy: TestTaxonomy) -> str:
     lines: list[str] = [
         "# SPDX-License-Identifier: GPL-3.0-or-later",
         "# W4 test-suite classification & per-routine MESA 26.4.1 oracle map.",
-        "# Schema enforced by `flexmesa.testing.test_taxonomy` (#563).",
+        "# Schema enforced by `flexmesa.testing.test_taxonomy` (#563); oracle",
+        "# claims are [[tests.oracles]] entries checked per routine by",
+        "# `flexmesa.testing._oracle_provenance` (DECISIONS #80).",
         "",
         "[metadata]",
         f"schema_version = {taxonomy.schema_version}",
@@ -898,8 +915,38 @@ def dump_test_taxonomy(taxonomy: TestTaxonomy) -> str:
             lines.append(
                 f"mislabel_reason = {_toml_quote(entry.mislabel_reason)}"
             )
+        for oracle in entry.oracles:
+            lines.append("")
+            lines.extend(_dump_oracle(oracle))
         lines.append("")
     return "\n".join(lines)
+
+
+def _toml_list(key: str, values: tuple[str, ...]) -> list[str]:
+    """Render ``key = [...]`` one value per line (inline when single)."""
+    if len(values) == 1:
+        return [f"{key} = [{_toml_quote(values[0])}]"]
+    out = [f"{key} = ["]
+    out.extend(f"  {_toml_quote(v)}," for v in values)
+    out.append("]")
+    return out
+
+
+def _dump_oracle(oracle: _oracle_provenance.OracleEntry) -> list[str]:
+    """Render one ``[[tests.oracles]]`` table."""
+    lines = [
+        "[[tests.oracles]]",
+        f"reference = {_toml_quote(oracle.reference)}",
+    ]
+    if oracle.recipe:
+        lines.append(f"recipe = {_toml_quote(oracle.recipe)}")
+    lines.append(f"precision = {_toml_quote(oracle.precision)}")
+    if oracle.tolerance:
+        lines.append(f"tolerance = {_toml_quote(oracle.tolerance)}")
+    if oracle.consts:
+        lines.extend(_toml_list("consts", oracle.consts))
+    lines.extend(_toml_list("routines", tuple(sorted(oracle.routines))))
+    return lines
 
 
 def _collect_manifest_routine_meta(
@@ -947,7 +994,7 @@ def _verify_routine_claims(
                     "import `flexmesa._rust`"
                 )
 
-    for routine_id in rec.routines:
+    for routine_id in rec.oracle_routines:
         meta = routine_meta.get(routine_id)
         if meta is None:
             errs.append(
@@ -1067,12 +1114,21 @@ def verify_test_taxonomy(
                 errors.extend(
                     validate_oracle_provenance(repo_root, rec, full_path)
                 )
-            else:
-                if rec.routines:
-                    errors.append(
-                        f"{rec.path}: kind={rec.kind!r} cannot claim "
-                        "oracle routines"
+                for oracle in rec.oracles:
+                    errors.extend(
+                        _oracle_provenance.structural_errors(rec.path, oracle)
                     )
+            elif rec.oracles:
+                errors.append(
+                    f"{rec.path}: kind={rec.kind!r} cannot claim "
+                    "oracle routines"
+                )
+        if rec.routines:
+            errors.append(
+                f"{rec.path}: the top-level `routines` list is retired; "
+                "claim routines through [[tests.oracles]] entries that "
+                "name their MESA reference (DECISIONS #80)"
+            )
         if rec.kind == "oracle" or not _has_restricted_oracle_token(rec.path):
             if rec.mislabel_reason.strip():
                 errors.append(
@@ -1088,7 +1144,7 @@ def verify_test_taxonomy(
                     "vocabulary and requires mislabel_reason citing #<issue>"
                 )
 
-        if routine_meta and rec.routines:
+        if routine_meta and rec.oracle_routines:
             errors.extend(
                 _verify_routine_claims(
                     rec, full_path, repo_root, routine_meta, source_cache
@@ -1178,7 +1234,7 @@ def summarize_test_taxonomy(
                 }
             )
         if rec.kind == "oracle":
-            for rid in rec.routines:
+            for rid in rec.oracle_routines:
                 if not routine_meta or rid in routine_meta:
                     listed_oracle_routines.add(rid)
 

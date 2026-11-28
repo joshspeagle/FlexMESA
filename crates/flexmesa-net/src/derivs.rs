@@ -364,7 +364,7 @@ pub fn get_derivs(
                     use_3a_fl87,
                     symbolic,
                     just_dydt,
-                );
+                )?;
                 i += 1;
             }
             ReaclibKind::Ng | ReaclibKind::Pg | ReaclibKind::Ag => {
@@ -433,7 +433,23 @@ pub fn get_derivs(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+/// `get1_derivs` (`net/private/net_derivs.f90:1073-1545`) for one
+/// reaction of the `other_kind` path, with upstream's slot handling and
+/// error stops (#661).
+///
+/// # Errors
+///
+/// Returns [`NetError::IntegrationError`] naming the reaction where upstream
+/// calls `mesa_error`: `itab(outK) = 0` (`:1185-1212`),
+/// `num_reaction_outputs >= 4` (`:1215-1218`), `itab(in1) = 0` for one input
+/// (`:1264-1268`), an invalid coefficient pair (`:1326-1329`),
+/// `itab(in3) = 0` (`:1335-1339`), an invalid input count (`:1343-1346`), an
+/// output count the dispatch does not allow (`:1364-1477`), and
+/// `weak_id > num_wk_reactions` (`:1489-1496`). A two- or three-input
+/// reaction with `itab(in1)` or `itab(in2)` zero would read `n% y(0)`,
+/// outside the array, which has no defined value (DECISIONS #43,
+/// deferred #675).
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn get1_derivs(
     g: &NetGeneralInfo,
     w: &mut NetWorkState,
@@ -445,66 +461,98 @@ fn get1_derivs(
     use_3a_fl87: bool,
     symbolic: bool,
     just_dydt: bool,
-) {
+) -> Result<(), NetError> {
     let rxn = &g.reactions[i];
+    let fail = |what: &str| {
+        Err(NetError::IntegrationError(format!(
+            "get1_derivs: {} {what} (net/private/net_derivs.f90)",
+            rxn.name
+        )))
+    };
     if rxn.out_num[0] == 0 {
         w.raw_rate[i] = 0.0;
         w.screened_rate[i] = 0.0;
         w.eps_nuc_rate[i] = 0.0;
         w.eps_neu_rate[i] = 0.0;
-        return;
+        return Ok(());
     }
     if (rxn.name == "r_he4_he4_he4_to_c12" && use_3a_fl87)
         || rxn.name == "rn14ag_lite"
     {
-        return;
+        return Ok(());
     }
 
-    let n_in = rxn.num_in.min(3);
-    let n_out = rxn.num_out.min(3);
+    let n_in = rxn.num_in;
+    let n_out = rxn.num_out;
 
     let prot = g.net_iso[IPROTON];
     let h1 = g.net_iso[IH1];
-    let switch_to_prot =
-        prot != 0 && g.reaction_max_z[i] >= MIN_Z_FOR_SWITCH_TO_PROT;
 
-    let mut i_in = [0usize; 3];
-    let mut c_in = [0.0; 3];
-    let mut in_cid = [0usize; 3];
-    for k in 0..n_in {
-        c_in[k] = f64::from(rxn.in_num[k]);
-        in_cid[k] = rxn.in_iso[k] as usize;
-        i_in[k] = g.net_iso[in_cid[k]];
-        if switch_to_prot && i_in[k] == h1 {
-            in_cid[k] = IPROTON;
-            i_in[k] = prot;
-        }
-    }
-
+    // Outputs (`:1180-1218`): each used slot must be in the net, and at
+    // most three outputs.
     let mut i_out = [0usize; 3];
     let mut c_out = [0.0; 3];
-    for k in 0..n_out {
+    for k in 0..n_out.min(3) {
         c_out[k] = f64::from(rxn.out_num[k]);
-        let cid = rxn.out_iso[k] as usize;
-        i_out[k] = g.net_iso[cid];
-        if switch_to_prot && i_out[k] == h1 {
-            i_out[k] = prot;
+        i_out[k] = g.net_iso[rxn.out_iso[k] as usize];
+        if i_out[k] == 0 {
+            return fail(&format!("itab(out{}) = 0", k + 1));
+        }
+    }
+    if n_out >= 4 {
+        return fail("num_reaction_outputs >= 4");
+    }
+
+    // Inputs (`:1220-1236`).
+    let mut i_in = [0usize; 3];
+    let mut c_in = [0.0; 3];
+    let mut in1 = 0usize;
+    if (1..=3).contains(&n_in) {
+        for k in 0..n_in {
+            c_in[k] = f64::from(rxn.in_num[k]);
+            i_in[k] = g.net_iso[rxn.in_iso[k] as usize];
+        }
+        in1 = rxn.in_iso[0] as usize;
+    }
+
+    // `switch_to_prot` (`:1238-1259`): the first matching slot on each side
+    // only, testing every slot index (unused ones are 0) against `h1`.
+    let switch_to_prot =
+        prot != 0 && g.reaction_max_z[i] >= MIN_Z_FOR_SWITCH_TO_PROT;
+    if switch_to_prot {
+        if i_in[0] == h1 {
+            in1 = IPROTON;
+            i_in[0] = prot;
+        } else if i_in[1] == h1 {
+            i_in[1] = prot;
+        } else if i_in[2] == h1 {
+            i_in[2] = prot;
+        }
+        if i_out[0] == h1 {
+            i_out[0] = prot;
+        } else if i_out[1] == h1 {
+            i_out[1] = prot;
+        } else if i_out[2] == h1 {
+            i_out[2] = prot;
         }
     }
 
-    let mut r = 0.0;
+    let r;
     let mut idr = [0usize; 3];
     let mut dr = [0.0; 3];
 
     if n_in == 1 {
         let i1 = i_in[0];
+        if i1 == 0 {
+            return fail("itab(in1) = 0");
+        }
         let y1 = w.y[i1 - 1];
         let cin1 = rxn.in_num[0];
         if cin1 == 1 {
             r = y1;
             idr[0] = i1;
             dr[0] = 1.0;
-        } else if cin1 == 3 && in_cid[0] != IH1 {
+        } else if cin1 == 3 && in1 != IH1 {
             r = (1.0 / 6.0) * y1 * y1 * y1;
             idr[0] = i1;
             dr[0] = 0.5 * y1 * y1;
@@ -513,9 +561,13 @@ fn get1_derivs(
             idr[0] = i1;
             dr[0] = y1;
         }
-    } else {
+    } else if n_in == 2 || n_in == 3 {
         let i1 = i_in[0];
         let i2 = i_in[1];
+        if i1 == 0 || i2 == 0 {
+            // Upstream reads `n% y(0)` here (DECISIONS #43, deferred #675).
+            return fail("itab(in1) or itab(in2) = 0 reads n% y(0) (#675)");
+        }
         let y1 = w.y[i1 - 1];
         let y2 = w.y[i2 - 1];
         let cin1 = rxn.in_num[0];
@@ -550,15 +602,39 @@ fn get1_derivs(
             idr[0] = i2;
             dr[1] = y1 * 0.5 * y2 * y2;
             idr[1] = i1;
+        } else {
+            return fail("invalid coefficient");
         }
         if n_in == 3 {
-            idr[2] = i_in[2];
             dr[2] = 0.0;
+            idr[2] = i_in[2];
+            if i_in[2] == 0 {
+                return fail("itab(in3) = 0");
+            }
         }
+    } else {
+        return fail("invalid specification");
+    }
+
+    // Output counts the dispatch allows (`:1364-1476`).
+    let outputs_ok = match n_in {
+        1 | 2 => (1..=3).contains(&n_out),
+        _ => (1..=2).contains(&n_out),
+    };
+    if !outputs_ok {
+        return fail(&format!(
+            "too many reaction_outputs for num_reaction_inputs == {n_in}"
+        ));
     }
 
     if n_in == 1 && n_out == 1 {
         let weak_id = g.weak_reaction_index[i];
+        if weak_id > g.num_wk_reactions {
+            return fail(&format!(
+                "weak_id {weak_id} > num_wk_reactions {}",
+                g.num_wk_reactions
+            ));
+        }
         if weak_id > 0 && g.weaklib_ids[weak_id - 1] > 0 {
             let wk = weak_id - 1;
             w.rate_screened[i] = w.wk_lambda[wk];
@@ -586,7 +662,7 @@ fn get1_derivs(
                 symbolic,
                 just_dydt,
             );
-            return;
+            return Ok(());
         }
     }
 
@@ -608,6 +684,7 @@ fn get1_derivs(
         symbolic,
         just_dydt,
     );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -641,5 +718,72 @@ mod tests {
         with_thread_local_work(&g2, |w| {
             assert_eq!(w.y[0], 99.5);
         });
+    }
+
+    /// Runs `get1_derivs` on reaction `i` of `g` with unit abundances.
+    fn run_get1(g: &NetGeneralInfo, i: usize) -> Result<(), NetError> {
+        let mut w = NetWorkState::new(g);
+        w.y.fill(0.1);
+        let mut dydt = vec![[Quad::default(); NUM_RVS]; g.num_isos];
+        let mut eps = [Quad::default(); NUM_RVS];
+        get1_derivs(
+            g, &mut w, &mut dydt, &mut eps, i, 1.0e8, 1.0e2, false, false,
+            false,
+        )
+    }
+
+    /// The first two-input, one-output `other` reaction of `basic.net`.
+    fn basic_two_in_one_out() -> (NetGeneralInfo, usize) {
+        let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
+        let i = (0..g.num_reactions)
+            .find(|&i| {
+                let r = &g.reactions[i];
+                g.reaction_reaclib_kind[i] == ReaclibKind::Other
+                    && r.num_in == 2
+                    && r.num_out == 1
+                    && r.out_num[0] != 0
+                    && r.name != "rn14ag_lite"
+            })
+            .expect("a 2 -> 1 reaction");
+        (g, i)
+    }
+
+    /// Each upstream `mesa_error` stop in `get1_derivs`
+    /// (`net/private/net_derivs.f90:1185-1496`) is an explicit error naming
+    /// the reaction, not a clamp, a silent zero or an index panic (#661).
+    #[test]
+    fn get1_derivs_upstream_stops_are_errors() {
+        let (g, i) = basic_two_in_one_out();
+        assert!(run_get1(&g, i).is_ok());
+        let msg =
+            |g: &NetGeneralInfo| run_get1(g, i).expect_err("error").to_string();
+
+        let mut bad = g.clone();
+        bad.reactions[i].num_out = 4;
+        bad.reactions[i].out_iso = [bad.reactions[i].out_iso[0]; 3];
+        bad.reactions[i].out_num = [1; 3];
+        assert!(msg(&bad).contains("num_reaction_outputs >= 4"));
+
+        let mut bad = g.clone();
+        bad.reactions[i].num_in = 4;
+        assert!(msg(&bad).contains("invalid specification"));
+
+        let mut bad = g.clone();
+        bad.reactions[i].in_num = [3, 3, 0];
+        bad.reactions[i].rho_exp = 2;
+        assert!(msg(&bad).contains("invalid coefficient"));
+
+        let mut bad = g.clone();
+        bad.reactions[i].num_in = 3;
+        bad.reactions[i].in_num[2] = 1;
+        bad.reactions[i].in_iso[2] = 0;
+        assert!(msg(&bad).contains("itab(in3) = 0"));
+
+        let mut bad = g.clone();
+        bad.reactions[i].num_out = 3;
+        bad.reactions[i].out_num = [1; 3];
+        bad.reactions[i].out_iso[1] = bad.reactions[i].out_iso[0];
+        bad.reactions[i].out_iso[2] = 0;
+        assert!(msg(&bad).contains("itab(out3) = 0"));
     }
 }

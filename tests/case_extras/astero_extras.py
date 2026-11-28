@@ -218,7 +218,83 @@ class ExampleAsteroExtras(SearchAsteroExtras):
         return None
 
 
-class FastFromFileAsteroExtras(SearchAsteroExtras):
+# `extras_after_evolve`, identical in `fast_from_file` (`:214-253`),
+# `fast_scan_grid` (`:205-244`) and `fast_simplex` (`:206-245`) of
+# `astero/test_suite/*/src/run_star_extras.f90`.
+_SAMPLE_FILES_AFTER_EVOLVE_DIGEST = (
+    "99a93e2e257cec484fc30bc38c0aec2d851ff381b38f314121fda2d75217d4d4"
+)
+
+
+def _fortran_i_n_n(value: int, width: int) -> str:
+    """Format `value` like the Fortran edit descriptor `(iN.N)`.
+
+    Args:
+        value: Non-negative integer.
+        width: Field width `N` (`num_digits`), also the minimum digit count.
+
+    Returns:
+        `value` zero-padded to `width` digits, or `width` asterisks when it
+        needs more digits (Fortran field overflow).
+    """
+    text = str(value)
+    if len(text) > width:
+        return "*" * width
+    return text.zfill(width)
+
+
+def _move_best_model_files(snap: dict[str, Any]) -> None:
+    """Move the track's `best_model_*` files to the next sample's names.
+
+    `extras_after_evolve` of `fast_from_file` (`:214-253`), `fast_scan_grid`
+    (`:205-244`) and `fast_simplex` (`:206-245`) calls
+    `test_suite_after_evolve`, which writes testhub output only and has no
+    effect on the run, then moves `best_model_{fgong,gyre,profile,
+    save_model}_filename` in `astero_results_directory` to
+    `<sample_results_prefix><sample_number+1>` plus the matching extension.
+
+    Args:
+        snap: Post-evolve snapshot with the `astero_def` values
+            `astero_results_directory`, `next_sample_number`
+            (`sample_number + 1`, as the sample number is not yet
+            incremented), `num_digits`, `sample_results_prefix` and
+            `best_model_{fgong,gyre,profile,save_model}_filename`.
+    """
+    results_dir = str(snap["astero_results_directory"]).rstrip()
+    next_number = int(snap["next_sample_number"])
+    num_string = _fortran_i_n_n(next_number, int(snap["num_digits"]))
+    basename = str(snap["sample_results_prefix"]).rstrip() + num_string
+    for key, extension in (
+        ("best_model_fgong_filename", ".fgong"),
+        ("best_model_gyre_filename", ".gyre"),
+        ("best_model_profile_filename", ".profile"),
+        ("best_model_save_model_filename", ".mod"),
+    ):
+        src = f"{results_dir}/{str(snap[key]).rstrip()}"
+        tgt = f"{results_dir}/{basename}{extension}"
+        # The file is absent when the sample quit early on a bad
+        # chi-squared, so upstream skips errors (`skip_errors=.true.`).
+        try:
+            os.replace(src, tgt)
+        except OSError:
+            print(f" mv failed for '{src}' '{tgt}' skipping")
+        print(f" moved {src} to {tgt}")
+
+
+class SampleFilesAsteroExtras(SearchAsteroExtras):
+    """`set_param`, `set_constraint_value` and `extras_after_evolve` of
+    `fast_scan_grid` and `fast_simplex`.
+
+    Upstream `extras_after_evolve`:
+    `astero/test_suite/fast_scan_grid/src/run_star_extras.f90:205-244`.
+    """
+
+    def extras_after_evolve(self, snap: dict[str, Any]) -> None:
+        """Move `best_model_*` files to the next sample's file names."""
+        _move_best_model_files(snap)
+
+
+class UnportedAfterEvolveFastFromFileExtras(SearchAsteroExtras):
     """`set_param` of fast_from_file: the shared cases plus `semiconv`,
     `thermohal` and `diffusion`.
 
@@ -238,6 +314,18 @@ class FastFromFileAsteroExtras(SearchAsteroExtras):
         if name == "diffusion":
             return {"diffusion_class_factor(:)": val}
         return _search_set_param(snap, name, val)
+
+
+class FastFromFileAsteroExtras(UnportedAfterEvolveFastFromFileExtras):
+    """`set_param` and `extras_after_evolve` of fast_from_file.
+
+    Upstream `extras_after_evolve`:
+    `astero/test_suite/fast_from_file/src/run_star_extras.f90:214-253`.
+    """
+
+    def extras_after_evolve(self, snap: dict[str, Any]) -> None:
+        """Move `best_model_*` files to the next sample's file names."""
+        _move_best_model_files(snap)
 
 
 class EmptySetParamAsteroExtras:
@@ -328,6 +416,13 @@ _STOCK_ROUTINE_DIGESTS: dict[str, frozenset[str]] = {
         {
             "0f8ffc1f59541485197e392a04c13581e4cb341d57c3ed32c7ac4659ae43d01d",
             "3c867eb2541d822c6cc5a98b2bd567dea1c7c46041d68251631cac261075796d",
+            # `astero/test_suite/fast_from_file/src/run_star_extras.f90`
+            # `:256-286`: stock body plus a `.not. astero_gyre_is_enabled`
+            # early exit.
+            # The MESA 26.4.1 reference build has GYRE enabled (5508 modes
+            # recorded for the case) and FlexMESA always provides GYRE, so
+            # the branch is never taken.
+            "107584e9f8240baba27e63962661579903100104bc58535f18ea9338ce9d08ae",
         }
     ),
     "extras_finish_step": frozenset(
@@ -1339,6 +1434,11 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
         return EmptySetParamAsteroExtras(unported)
     if set_constraint_value != _SEARCH_SET_CONSTRAINT_VALUE_DIGEST:
         return None
+    sample_files_ported = (
+        routines.get("extras_after_evolve") == _SAMPLE_FILES_AFTER_EVOLVE_DIGEST
+    )
+    if sample_files_ported:
+        unported = tuple(n for n in unported if n != "extras_after_evolve")
     if set_param == _SEARCH_SET_PARAM_DIGEST:
         if (
             unported == ("extras_after_evolve",)
@@ -1346,7 +1446,11 @@ def match_astero_extras(norm_star: str, digest: Any) -> Any:
             == _EXAMPLE_ASTERO_AFTER_EVOLVE_DIGEST
         ):
             return ExampleAsteroExtras()
+        if sample_files_ported:
+            return SampleFilesAsteroExtras(unported)
         return SearchAsteroExtras(unported)
     if set_param == _FAST_FROM_FILE_SET_PARAM_DIGEST:
-        return FastFromFileAsteroExtras(unported)
+        if sample_files_ported:
+            return FastFromFileAsteroExtras(unported)
+        return UnportedAfterEvolveFastFromFileExtras(unported)
     return None

@@ -11,7 +11,7 @@ Scope: `src/flexmesa/<pkg>/` (excluding `testing/` and `plotting/`) and external
 
 ## Per-Subpackage Summary
 
-Headline totals: **701** public Python items (**234** pure-python mirror, **212** PyO3 wrapper, **200** JAX kernel, **55** frozen JAX twin; **500** `mirror-current`, **170** `mirror-stale`, **31** `python-only`), plus **1485** `rust-only` public items and **19** `#295` JAX `xfail` tests.
+Headline totals: **702** public Python items (**235** pure-python mirror, **212** PyO3 wrapper, **200** JAX kernel, **55** frozen JAX twin; **500** `mirror-current`, **171** `mirror-stale`, **31** `python-only`), plus **1491** `rust-only` public items and **19** `#295` JAX `xfail` tests.
 
 | Subpackage | Python | `pure-python mirror` | `PyO3 wrapper` | `JAX kernel` | `JAX engine twin (frozen)` | `mirror-current` | `mirror-stale` | `python-only` | `rust-only` | `#295` xfails |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -32,17 +32,17 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `ionization` | 13 | 1 | 7 | 5 | 0 | 11 | 2 | 0 | 3 | 2 |
 | `kap` | 38 | 1 | 9 | 28 | 0 | 23 | 12 | 3 | 30 | 2 |
 | `math` | 44 | 1 | 0 | 43 | 0 | 9 | 34 | 1 | 15 | 0 |
-| `mtx` | 34 | 27 | 3 | 4 | 0 | 20 | 13 | 1 | 55 | 0 |
+| `mtx` | 34 | 27 | 3 | 4 | 0 | 21 | 12 | 1 | 60 | 0 |
 | `net` | 12 | 5 | 6 | 1 | 0 | 10 | 2 | 0 | 34 | 0 |
 | `neu` | 17 | 15 | 1 | 1 | 0 | 16 | 1 | 0 | 1 | 0 |
-| `num` | 49 | 47 | 0 | 2 | 0 | 32 | 17 | 0 | 6 | 0 |
+| `num` | 50 | 48 | 0 | 2 | 0 | 32 | 18 | 0 | 6 | 0 |
 | `rates` | 25 | 3 | 16 | 6 | 0 | 19 | 6 | 0 | 19 | 0 |
 | `replay` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 29 | 0 |
 | `schema` | 16 | 12 | 4 | 0 | 0 | 16 | 0 | 0 | 9 | 0 |
 | `star` | 46 | 0 | 15 | 0 | 31 | 26 | 20 | 0 | 659 | 6 |
 | `turb` | 47 | 44 | 1 | 2 | 0 | 35 | 12 | 0 | 2 | 0 |
-| `utils` | 11 | 5 | 5 | 1 | 0 | 11 | 0 | 0 | 18 | 0 |
-| **TOTAL** | **701** | **234** | **212** | **200** | **55** | **500** | **170** | **31** | **1485** | **19** |
+| `utils` | 11 | 5 | 5 | 1 | 0 | 10 | 1 | 0 | 19 | 0 |
+| **TOTAL** | **702** | **235** | **212** | **200** | **55** | **500** | **171** | **31** | **1491** | **19** |
 
 ## Oldest `mirror-stale` Rows
 
@@ -93,7 +93,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `tests/test_star_wave5_1.py:264` | `test_burgers_velocities_jax_match_rust` | `star` | `eval_burgers_velocities_jax` | #295: Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions. |
 | `tests/test_star_wave5_1.py:305` | `test_phase_separation_shift_jax_matches_rust` | `star` | `eval_phase_separation_shift_jax` | #295: Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (#156); the frozen JAX twin keeps its earlier expression. |
 
-## Python & JAX Items (701)
+## Python & JAX Items (702)
 
 | Python path:line | Rust path:line | Kind | State | `#295` xfail |
 | :--- | :--- | :--- | :--- | :--- |
@@ -101,8 +101,8 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/astero/drivers.py:41` (`eval_ratios_r02`) | `crates/flexmesa-astero/src/ratios_chi2.rs:487` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/astero/drivers.py:85` (`eval_astero_chi2`) | `crates/flexmesa-astero/src/ratios_chi2.rs:626` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/astero/drivers.py:263` (`nelder_mead_minimize`) | `crates/flexmesa-astero/src/optimize.rs:87` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/astero/drivers.py:304` (`powell_quadratic_minimize`) | `crates/flexmesa-astero/src/optimize.rs:673` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/astero/drivers.py:339` (`scan_cartesian_grid`) | `crates/flexmesa-astero/src/optimize.rs:788` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/astero/drivers.py:304` (`powell_quadratic_minimize`) | `crates/flexmesa-astero/src/optimize.rs:674` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/astero/drivers.py:339` (`scan_cartesian_grid`) | `crates/flexmesa-astero/src/optimize.rs:789` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/astero/drivers.py:364` (`run_astero_test_suite_case`) | `crates/flexmesa-astero/src/e2e.rs:177` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/astero/jax_kernels.py:23` (`eval_delta_nu_asymptotic_jax`) | `crates/flexmesa-astero/src/scaling.rs:94` | `JAX engine twin (frozen)` | `mirror-current` | - |
 | `src/flexmesa/astero/jax_kernels.py:41` (`eval_delta_nu_scaling_jax`) | `crates/flexmesa-astero/src/scaling.rs:108` | `JAX engine twin (frozen)` | `mirror-stale` | - |
@@ -258,7 +258,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/binary/orbit_mdot.py:127` (`eval_j_orb`) | `crates/flexmesa-binary/src/orbit.rs:85` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/orbit_mdot.py:160` (`separation_from_j_orb`) | `crates/flexmesa-binary/src/orbit.rs:100` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/orbit_mdot.py:191` (`eval_ritter_mdot_thin`) | `crates/flexmesa-binary/src/mdot.rs:28` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/binary/orbit_mdot.py:260` (`eval_kolb_mdot_thick`) | `crates/flexmesa-binary/src/mdot.rs:150` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/binary/orbit_mdot.py:260` (`eval_kolb_mdot_thick`) | `crates/flexmesa-binary/src/mdot.rs:192` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/orbit_mdot.py:297` (`eval_l2_mass_loss_fraction`) | `crates/flexmesa-binary/src/disk.rs:140` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/orbit_mdot.py:328` (`pick_next_timestep_rl`) | `crates/flexmesa-binary/src/timestep.rs:78` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/system.py:13` (`BinarySystem`) | `crates/flexmesa-binary/src/system.rs:121` | `PyO3 wrapper` | `mirror-current` | - |
@@ -420,13 +420,13 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/interp_1d/pm.py:163` (`interp_pm_slopes_only`) | `crates/flexmesa-interp1d/src/pm.rs:70` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/interp_1d/pm.py:184` (`interp_4pt_pm`) | `crates/flexmesa-interp1d/src/pm.rs:144` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/interp_1d/pm.py:233` (`interp_pm_autodiff`) | `crates/flexmesa-interp1d/src/pm.rs:174` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/interp_1d/remesh.py:23` (`interpolate_vector`) | `crates/flexmesa-interp1d/src/remesh.rs:17` | `JAX kernel` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:55` (`interpolate_vector_pm`) | `crates/flexmesa-interp1d/src/remesh.rs:36` | `JAX kernel` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:97` (`interp_values_autodiff`) | `crates/flexmesa-interp1d/src/remesh.rs:120` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:168` (`interpolate_vector_pm_autodiff`) | `crates/flexmesa-interp1d/src/remesh.rs:203` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:192` (`interp_3_to_1`) | `crates/flexmesa-interp1d/src/remesh.rs:51` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:224` (`interp_3_to_2`) | `crates/flexmesa-interp1d/src/remesh.rs:73` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/interp_1d/remesh.py:259` (`interp_4_to_1`) | `crates/flexmesa-interp1d/src/remesh.rs:97` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:23` (`interpolate_vector`) | `crates/flexmesa-interp1d/src/remesh.rs:16` | `JAX kernel` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:55` (`interpolate_vector_pm`) | `crates/flexmesa-interp1d/src/remesh.rs:35` | `JAX kernel` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:97` (`interp_values_autodiff`) | `crates/flexmesa-interp1d/src/remesh.rs:127` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:168` (`interpolate_vector_pm_autodiff`) | `crates/flexmesa-interp1d/src/remesh.rs:194` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:192` (`interp_3_to_1`) | `crates/flexmesa-interp1d/src/remesh.rs:50` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:224` (`interp_3_to_2`) | `crates/flexmesa-interp1d/src/remesh.rs:72` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/interp_1d/remesh.py:259` (`interp_4_to_1`) | `crates/flexmesa-interp1d/src/remesh.rs:96` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/interp_2d/akima.py:152` (`interp_rgbi3p_db`) | `crates/flexmesa-interp2d/src/akima.rs:174` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/interp_2d/akima.py:196` (`interp_rgsf3p_db`) | `crates/flexmesa-interp2d/src/akima.rs:212` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/interp_2d/akima_pd.py:189` (`rgpd3p_db`) | `crates/flexmesa-interp2d/src/akima_pd.rs:174` | `JAX kernel` | `mirror-stale` | - |
@@ -565,16 +565,16 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/mtx/pcr.py:36` (`validate_jax_blocks`) | - | `JAX kernel` | `python-only` | - |
 | `src/flexmesa/mtx/pcr.py:77` (`solve_block_tridiag_pcr`) | `crates/flexmesa-mtx/src/block_tridiag.rs:472` | `JAX kernel` | `mirror-stale` | - |
 | `src/flexmesa/mtx/pcr.py:194` (`solve_block_tridiag_rust_ffi`) | `crates/flexmesa-mtx/src/bcyclic.rs:634` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:17` (`SparseFormat`) | `crates/flexmesa-mtx/src/lib.rs:106` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:93` (`dense_to_row_sparse`) | `crates/flexmesa-mtx/src/sparse.rs:130` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:118` (`dense_to_row_0_based`) | `crates/flexmesa-mtx/src/sparse.rs:168` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:143` (`row_sparse_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:206` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:168` (`row_sparse_0_based_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:223` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:195` (`dense_to_col_sparse`) | `crates/flexmesa-mtx/src/sparse.rs:240` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:219` (`dense_to_col_0_based`) | `crates/flexmesa-mtx/src/sparse.rs:278` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:243` (`column_sparse_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:348` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:268` (`col_sparse_0_based_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:365` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/mtx/sparse.py:293` (`find_loc_in_sparse`) | `crates/flexmesa-mtx/src/sparse_band.rs:275` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/mtx/sparse.py:16` (`SparseFormat`) | `crates/flexmesa-mtx/src/lib.rs:107` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:92` (`dense_to_row_sparse`) | `crates/flexmesa-mtx/src/sparse.rs:130` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:117` (`dense_to_row_0_based`) | `crates/flexmesa-mtx/src/sparse.rs:168` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:142` (`row_sparse_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:206` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:167` (`row_sparse_0_based_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:230` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:204` (`dense_to_col_sparse`) | `crates/flexmesa-mtx/src/sparse.rs:255` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:228` (`dense_to_col_0_based`) | `crates/flexmesa-mtx/src/sparse.rs:293` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:252` (`column_sparse_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:363` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:277` (`col_sparse_0_based_to_dense`) | `crates/flexmesa-mtx/src/sparse.rs:380` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/mtx/sparse.py:363` (`find_loc_in_sparse`) | `crates/flexmesa-mtx/src/sparse_band.rs:358` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/net/_core.py:17` (`NetInfo`) | `crates/flexmesa-net/src/types.rs:163` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/net/_core.py:38` (`NetEvalOutput`) | `crates/flexmesa-net/src/types.rs:253` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/net/_core.py:80` (`Burn1ZoneOutput`) | `crates/flexmesa-net/src/burn.rs:67` | `pure-python mirror` | `mirror-current` | - |
@@ -606,11 +606,12 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/neu/reco.py:177` (`reco_neu`) | `crates/flexmesa-neu/src/reco.rs:196` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/bobyqa.py:21` (`BobyqaResult`) | `crates/flexmesa-num/src/bobyqa.rs:13` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/bobyqa.py:35` (`bobyqa`) | `crates/flexmesa-num/src/bobyqa.rs:48` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/brent.py:15` (`brent_safe_zero`) | `crates/flexmesa-num/src/brent.rs:42` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/brent.py:135` (`brent_local_min`) | `crates/flexmesa-num/src/brent.rs:178` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/brent.py:244` (`local_min`) | `crates/flexmesa-num/src/brent.rs:300` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/brent.py:268` (`brent_global_min`) | `crates/flexmesa-num/src/brent.rs:336` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/brent.py:433` (`glomin`) | `crates/flexmesa-num/src/brent.rs:522` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/brent.py:17` (`brent_safe_zero`) | `crates/flexmesa-num/src/brent.rs:42` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/brent.py:137` (`eval_brent_safe_zero`) | `crates/flexmesa-num/src/brent.rs:184` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/brent.py:239` (`brent_local_min`) | `crates/flexmesa-num/src/brent.rs:281` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/brent.py:348` (`local_min`) | `crates/flexmesa-num/src/brent.rs:403` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/brent.py:372` (`brent_global_min`) | `crates/flexmesa-num/src/brent.rs:439` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/brent.py:537` (`glomin`) | `crates/flexmesa-num/src/brent.rs:625` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/newton.py:29` (`NewtonConfig`) | `crates/flexmesa-num/src/newton.rs:25` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/newton.py:48` (`NewtonResult`) | `crates/flexmesa-num/src/newton.rs:52` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/newton.py:168` (`newton_solve_dense`) | `crates/flexmesa-num/src/newton.rs:184` | `pure-python mirror` | `mirror-current` | - |
@@ -627,32 +628,32 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/num/rk.py:76` (`DopriResult`) | `crates/flexmesa-num/src/rk_tableau.rs:71` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/rk.py:124` (`dopri5`) | `crates/flexmesa-num/src/rk.rs:127` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/num/rk.py:306` (`dop853`) | `crates/flexmesa-num/src/rk.rs:422` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/root.py:25` (`look_for_brackets`) | `crates/flexmesa-num/src/root.rs:34` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/root.py:100` (`safe_root_with_brackets`) | `crates/flexmesa-num/src/root.rs:121` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/root.py:143` (`safe_root_with_guess`) | `crates/flexmesa-num/src/root.rs:161` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/root.py:232` (`safe_root_without_brackets`) | `crates/flexmesa-num/src/root.rs:252` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/root.py:280` (`safe_root_jax`) | `crates/flexmesa-num/src/root.rs:289` | `JAX kernel` | `mirror-current` | - |
+| `src/flexmesa/num/root.py:25` (`look_for_brackets`) | `crates/flexmesa-num/src/root.rs:42` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/root.py:97` (`safe_root_with_brackets`) | `crates/flexmesa-num/src/root.rs:114` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/root.py:138` (`safe_root_with_guess`) | `crates/flexmesa-num/src/root.rs:162` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/root.py:232` (`safe_root_without_brackets`) | `crates/flexmesa-num/src/root.rs:239` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/root.py:277` (`safe_root_jax`) | `crates/flexmesa-num/src/root.rs:283` | `JAX kernel` | `mirror-stale` | - |
 | `src/flexmesa/num/rosenbrock.py:24` (`RosenbrockVariant`) | `crates/flexmesa-num/src/rosenbrock_coeffs.rs:19` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/rosenbrock.py:37` (`RosenbrockResult`) | `crates/flexmesa-num/src/rosenbrock.rs:74` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/num/rosenbrock.py:409` (`rosenbrock_dense`) | `crates/flexmesa-num/src/rosenbrock.rs:96` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/num/rosenbrock.py:460` (`rosenbrock_banded`) | `crates/flexmesa-num/src/rosenbrock.rs:273` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/num/rosenbrock.py:517` (`rosenbrock_dae_diag`) | `crates/flexmesa-num/src/rosenbrock.rs:211` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/search.py:17` (`two_sum`) | `crates/flexmesa-num/src/search.rs:16` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:33` (`neumaier_sum`) | `crates/flexmesa-num/src/search.rs:28` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:56` (`binary_search`) | `crates/flexmesa-num/src/search.rs:53` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:122` (`binary_search_1based`) | `crates/flexmesa-num/src/search.rs:123` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:138` (`qsort_index`) | `crates/flexmesa-num/src/search.rs:131` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:152` (`linear_interp`) | `crates/flexmesa-num/src/search.rs:139` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:176` (`find0`) | `crates/flexmesa-num/src/search.rs:153` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/search.py:226` (`find0_quadratic`) | `crates/flexmesa-num/src/search.rs:202` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/search.py:282` (`find_max_quadratic`) | `crates/flexmesa-num/src/search.rs:278` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/search.py:321` (`two_piece_linear_coeffs`) | `crates/flexmesa-num/src/search.rs:353` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/simplex.py:17` (`r8_uniform_01`) | `crates/flexmesa-num/src/simplex.rs:30` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/simplex.py:39` (`i4_uniform`) | `crates/flexmesa-num/src/simplex.rs:51` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/simplex.py:58` (`perm_uniform`) | `crates/flexmesa-num/src/simplex.rs:62` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/simplex.py:77` (`SimplexConfig`) | `crates/flexmesa-num/src/simplex.rs:74` | `pure-python mirror` | `mirror-stale` | - |
-| `src/flexmesa/num/simplex.py:109` (`SimplexResult`) | `crates/flexmesa-num/src/simplex.rs:123` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/num/simplex.py:127` (`nm_simplex`) | `crates/flexmesa-num/src/simplex.rs:145` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/search.py:16` (`two_sum`) | `crates/flexmesa-num/src/search.rs:15` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:32` (`neumaier_sum`) | `crates/flexmesa-num/src/search.rs:27` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:55` (`binary_search`) | `crates/flexmesa-num/src/search.rs:52` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:121` (`binary_search_1based`) | `crates/flexmesa-num/src/search.rs:122` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:137` (`qsort_index`) | `crates/flexmesa-num/src/search.rs:130` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:151` (`linear_interp`) | `crates/flexmesa-num/src/search.rs:138` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:175` (`find0`) | `crates/flexmesa-num/src/search.rs:152` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/search.py:225` (`find0_quadratic`) | `crates/flexmesa-num/src/search.rs:201` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:281` (`find_max_quadratic`) | `crates/flexmesa-num/src/search.rs:277` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/search.py:354` (`two_piece_linear_coeffs`) | `crates/flexmesa-num/src/search.rs:329` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/simplex.py:17` (`r8_uniform_01`) | `crates/flexmesa-num/src/simplex.rs:38` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/simplex.py:39` (`i4_uniform`) | `crates/flexmesa-num/src/simplex.rs:67` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/simplex.py:58` (`perm_uniform`) | `crates/flexmesa-num/src/simplex.rs:81` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/simplex.py:77` (`SimplexConfig`) | `crates/flexmesa-num/src/simplex.rs:93` | `pure-python mirror` | `mirror-stale` | - |
+| `src/flexmesa/num/simplex.py:109` (`SimplexResult`) | `crates/flexmesa-num/src/simplex.rs:142` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/num/simplex.py:127` (`nm_simplex`) | `crates/flexmesa-num/src/simplex.rs:164` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/rates/core.py:29` (`ReactionInfo`) | `crates/flexmesa-rates/src/types.rs:132` | `pure-python mirror` | `mirror-stale` | - |
 | `src/flexmesa/rates/core.py:62` (`reaction_id_by_name`) | `crates/flexmesa-rates/src/loader.rs:454` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/rates/core.py:74` (`reaction_name_by_id`) | `crates/flexmesa-rates/src/loader.rs:454` | `PyO3 wrapper` | `mirror-current` | - |
@@ -694,7 +695,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/schema/namelist.py:55` (`parse_namelist_text`) | `crates/flexmesa-schema/src/namelist.rs:138` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/schema/namelist.py:106` (`parse_namelist_file`) | `crates/flexmesa-schema/src/namelist.rs:208` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/schema/namelist.py:179` (`validate_namelist_block`) | `crates/flexmesa-schema/src/namelist.rs:231` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/star/e2e.py:16` (`copy_cleaned_case`) | `crates/flexmesa-star/src/inlist_inventory.rs:1891` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/star/e2e.py:16` (`copy_cleaned_case`) | `crates/flexmesa-star/src/inlist_inventory.rs:1892` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/star/e2e.py:27` (`parse_inlist_bundle`) | `crates/flexmesa-star/src/inlist.rs:359` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/star/e2e.py:48` (`parse_rn_stages`) | `crates/flexmesa-star/src/rn_parser.rs:189` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/star/e2e.py:64` (`run_test_suite_case`) | `crates/flexmesa-star/src/inlist.rs:359` | `PyO3 wrapper` | `mirror-current` | - |
@@ -725,7 +726,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/star/jax_kernels.py:108` (`interp_cell_to_face_jax`) | `crates/flexmesa-star/src/mesh.rs:329` | `JAX engine twin (frozen)` | `mirror-stale` | - |
 | `src/flexmesa/star/jax_kernels.py:127` (`eval_optical_depth_jax`) | `crates/flexmesa-star/src/micro.rs:1816` | `JAX engine twin (frozen)` | `mirror-current` | - |
 | `src/flexmesa/star/jax_kernels.py:268` (`eval_face_mlt_and_brunt_jax`) | `crates/flexmesa-star/src/hydro_vars.rs:45` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave4_1.py:102::test_star_jax_face_gradr_and_gradt_match_rust`, `tests/test_wave4_bench.py:163::test_wave4_star_micro_vars_rust_matches_frozen_jax` |
-| `src/flexmesa/star/jax_kernels.py:347` (`eval_hydro_residuals_jax`) | `crates/flexmesa-star/src/hydro_eqns.rs:971` | `JAX engine twin (frozen)` | `mirror-current` | `tests/test_star_wave4_2.py:46::test_eval_equations_rust_jax_residual_consistency`, `tests/test_wave4_bench.py:178::test_wave4_star_hydro_eqns_rust_matches_frozen_jax` |
+| `src/flexmesa/star/jax_kernels.py:347` (`eval_hydro_residuals_jax`) | `crates/flexmesa-star/src/hydro_eqns.rs:973` | `JAX engine twin (frozen)` | `mirror-current` | `tests/test_star_wave4_2.py:46::test_eval_equations_rust_jax_residual_consistency`, `tests/test_wave4_bench.py:178::test_wave4_star_hydro_eqns_rust_matches_frozen_jax` |
 | `src/flexmesa/star/jax_kernels.py:536` (`solve_henyey_linear_jax`) | `crates/flexmesa-star/src/solver.rs:534` | `JAX engine twin (frozen)` | `mirror-stale` | - |
 | `src/flexmesa/star/jax_rsp.py:37` (`rsp2_flux_limiter_jax`) | `crates/flexmesa-star/src/rsp2.rs:138` | `JAX engine twin (frozen)` | `mirror-current` | - |
 | `src/flexmesa/star/jax_rsp.py:64` (`compute_rsp2_uq_face_jax`) | `crates/flexmesa-star/src/rsp2.rs:161` | `JAX engine twin (frozen)` | `mirror-current` | - |
@@ -791,15 +792,15 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `src/flexmesa/utils/__init__.py:43` (`is_bad_array`) | `crates/flexmesa-utils/src/lib.rs:247` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/utils/__init__.py:57` (`replace_bad_nums`) | `crates/flexmesa-utils/src/lib.rs:264` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/utils/__init__.py:79` (`remove_underbars`) | `crates/flexmesa-utils/src/lib.rs:273` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:93` (`split_line`) | `crates/flexmesa-utils/src/lib.rs:280` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:110` (`IntegerDict`) | `crates/flexmesa-utils/src/lib.rs:302` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:176` (`IntegerIdict`) | `crates/flexmesa-utils/src/lib.rs:369` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:246` (`TokenKind`) | `crates/flexmesa-utils/src/lib.rs:429` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:258` (`Token`) | `crates/flexmesa-utils/src/lib.rs:429` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:273` (`tokenize`) | `crates/flexmesa-utils/src/lib.rs:542` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/utils/__init__.py:293` (`Tokenizer`) | `crates/flexmesa-utils/src/lib.rs:451` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:93` (`split_line`) | `crates/flexmesa-utils/src/lib.rs:292` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:114` (`IntegerDict`) | `crates/flexmesa-utils/src/lib.rs:351` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:185` (`IntegerIdict`) | `crates/flexmesa-utils/src/lib.rs:432` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:255` (`TokenKind`) | `crates/flexmesa-utils/src/lib.rs:492` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:267` (`Token`) | `crates/flexmesa-utils/src/lib.rs:492` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:282` (`tokenize`) | `crates/flexmesa-utils/src/lib.rs:696` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/utils/__init__.py:302` (`Tokenizer`) | `crates/flexmesa-utils/src/lib.rs:569` | `pure-python mirror` | `mirror-stale` | - |
 
-## Public Rust Items With No Python Access (1485)
+## Public Rust Items With No Python Access (1491)
 
 | Crate | Rust path:line | Item kind | Name | State |
 | :--- | :--- | :--- | :--- | :--- |
@@ -943,12 +944,12 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-astero` | `crates/flexmesa-astero/src/inlist_parser.rs:253` | `fn` | `validate_astero_sections` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:18` | `fn` | `nelder_mead_minimize` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:51` | `fn` | `simplex_minimize_with_options` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:499` | `fn` | `map_bobyqa_param` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:517` | `fn` | `unmap_bobyqa_param` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:534` | `fn` | `newuoa_minimize` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:559` | `fn` | `try_newuoa_minimize` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:648` | `fn` | `bobyqa_minimize` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:767` | `fn` | `powell_quadratic_minimize` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:500` | `fn` | `map_bobyqa_param` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:518` | `fn` | `unmap_bobyqa_param` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:535` | `fn` | `newuoa_minimize` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:560` | `fn` | `try_newuoa_minimize` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:649` | `fn` | `bobyqa_minimize` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/optimize.rs:768` | `fn` | `powell_quadratic_minimize` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/ratios_chi2.rs:67` | `fn` | `get_max_sequence` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/ratios_chi2.rs:98` | `struct` | `FrequencyRatiosR010` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/ratios_chi2.rs:131` | `fn` | `eval_frequency_ratios_with_trimming` | `rust-only` |
@@ -962,13 +963,13 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-astero` | `crates/flexmesa-astero/src/sample_eval.rs:207` | `fn` | `eval_spectro_and_delta_nu_chi2` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/sample_eval.rs:239` | `fn` | `eval_model_astero_sample` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:43` | `struct` | `AsteroSearchReport` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:828` | `fn` | `run_single_astero_track` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:906` | `fn` | `run_single_astero_track_with_logs` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:934` | `fn` | `run_single_astero_track_with_case_hooks` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1065` | `fn` | `run_star_astero` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1082` | `fn` | `run_star_astero_with_logs` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1100` | `fn` | `run_star_astero_with_options` | `rust-only` |
-| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1125` | `fn` | `run_star_astero_with_case_hooks` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:875` | `fn` | `run_single_astero_track` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:953` | `fn` | `run_single_astero_track_with_logs` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:981` | `fn` | `run_single_astero_track_with_case_hooks` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1109` | `fn` | `run_star_astero` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1126` | `fn` | `run_star_astero_with_logs` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1144` | `fn` | `run_star_astero_with_options` | `rust-only` |
+| `flexmesa-astero` | `crates/flexmesa-astero/src/search_driver.rs:1169` | `fn` | `run_star_astero_with_case_hooks` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/surface_corr.rs:54` | `fn` | `estimate_l0_n_obs_with_numax` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/surface_corr.rs:94` | `fn` | `estimate_l0_n_obs` | `rust-only` |
 | `flexmesa-astero` | `crates/flexmesa-astero/src/surface_corr.rs:107` | `fn` | `eval_surf_coefs` | `rust-only` |
@@ -1073,12 +1074,12 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-binary` | `crates/flexmesa-binary/src/jdot_tides.rs:224` | `fn` | `eval_jdot_ls_with_winds` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/jdot_tides.rs:248` | `fn` | `eval_jdot_ls_with_am_removed` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/jdot_tides.rs:288` | `fn` | `eval_jdot_missing_wind` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:80` | `fn` | `eval_ritter_mdot_eccentric` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:137` | `fn` | `kolb_f3` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:201` | `fn` | `eval_kolb_mdot_thick_photosphere` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:274` | `fn` | `eval_kolb_mdot_eccentric` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:326` | `fn` | `eval_kolb_mdot_eccentric_photosphere` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:419` | `fn` | `eval_edot_enhancement_isotropic` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:119` | `fn` | `eval_ritter_mdot_eccentric` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:177` | `fn` | `kolb_f3` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:244` | `fn` | `eval_kolb_mdot_thick_photosphere` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:317` | `fn` | `eval_kolb_mdot_eccentric` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:369` | `fn` | `eval_kolb_mdot_eccentric_photosphere` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/mdot.rs:462` | `fn` | `eval_edot_enhancement_isotropic` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/mdot_implicit.rs:87` | `enum` | `ImplicitSolverMode` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/mdot_implicit.rs:277` | `enum` | `ImplicitStepAction` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/mdot_implicit.rs:292` | `struct` | `RloIterReportContext` | `rust-only` |
@@ -1457,6 +1458,11 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-math` | `crates/flexmesa-math/src/trig.rs:58` | `fn` | `sin_cos` | `rust-only` |
 | `flexmesa-math` | `crates/flexmesa-math/src/trig.rs:165` | `fn` | `atan2` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/band.rs:253` | `fn` | `dgbtrs_trans` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/band_lapack/dgbcon.rs:34` | `fn` | `dgbcon` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/band_lapack/dlangb.rs:21` | `fn` | `dlangb` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/band_lapack/dlatbs.rs:38` | `fn` | `dlatbs` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/band_lapack/drscl.rs:13` | `fn` | `drscl` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/band_lapack/dtbsv.rs:27` | `fn` | `dtbsv` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/bcyclic.rs:276` | `struct` | `BcyclicFactorization` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/bcyclic.rs:329` | `fn` | `bcyclic_factor` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/bcyclic.rs:496` | `fn` | `bcyclic_solve` | `rust-only` |
@@ -1479,12 +1485,12 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/lapack/mod.rs:106` | `fn` | `lsame` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/lapack/mod.rs:129` | `fn` | `ilaenv_nb` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/lapack/mod.rs:145` | `fn` | `ilaenv_mnthr` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:91` | `enum` | `DecsolOption` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:123` | `enum` | `MatrixType` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:138` | `fn` | `decsol_option` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:152` | `fn` | `decsol_option_str` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:163` | `fn` | `is_block_tridiagonal_decsol` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:174` | `enum` | `MtxError` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:92` | `enum` | `DecsolOption` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:124` | `enum` | `MatrixType` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:139` | `fn` | `decsol_option` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:153` | `fn` | `decsol_option_str` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:164` | `fn` | `is_block_tridiagonal_decsol` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/lib.rs:175` | `enum` | `MtxError` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/precond.rs:34` | `enum` | `Equilibration` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/precond.rs:47` | `struct` | `EquilibrationFactors` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/precond.rs:67` | `struct` | `PreconditionedSolve` | `rust-only` |
@@ -1502,25 +1508,25 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/precond.rs:973` | `fn` | `solve_banded_equilibrated` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:149` | `fn` | `dense_to_row_sparse_with_diag` | `rust-only` |
 | `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:187` | `fn` | `dense_to_row_with_diag_0_based` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:259` | `fn` | `dense_to_col_sparse_with_diag` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:297` | `fn` | `dense_to_col_with_diag_0_based` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:317` | `fn` | `dense_to_sparse_with_diag` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:145` | `fn` | `band_to_column_sparse` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:166` | `fn` | `band_to_col_sparse_with_diag` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:187` | `fn` | `column_sparse_to_band` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:208` | `fn` | `band_to_row_sparse` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:229` | `fn` | `band_to_row_sparse_with_diag` | `rust-only` |
-| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:250` | `fn` | `row_sparse_to_band` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:274` | `fn` | `dense_to_col_sparse_with_diag` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:312` | `fn` | `dense_to_col_with_diag_0_based` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse.rs:332` | `fn` | `dense_to_sparse_with_diag` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:147` | `fn` | `band_to_column_sparse` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:168` | `fn` | `band_to_col_sparse_with_diag` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:189` | `fn` | `column_sparse_to_band` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:210` | `fn` | `band_to_row_sparse` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:231` | `fn` | `band_to_row_sparse_with_diag` | `rust-only` |
+| `flexmesa-mtx` | `crates/flexmesa-mtx/src/sparse_band.rs:252` | `fn` | `row_sparse_to_band` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21.rs:14` | `struct` | `Approx21Indices` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21.rs:325` | `fn` | `approx21_pa_pg_fractions` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21.rs:386` | `fn` | `approx21_weak_rates` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_dfdy.rs:12` | `fn` | `approx21_dfdy` | `rust-only` |
-| `flexmesa-net` | `crates/flexmesa-net/src/approx21_dydt.rs:29` | `fn` | `approx21_dydt` | `rust-only` |
+| `flexmesa-net` | `crates/flexmesa-net/src/approx21_dydt.rs:212` | `fn` | `approx21_dydt` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_eps.rs:43` | `fn` | `approx21_eval_ppii_fraction` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_eps.rs:61` | `fn` | `approx21_eps_info` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_eps.rs:466` | `fn` | `approx21_d_epsneu_dy` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_eval.rs:27` | `fn` | `approx21_dfdt_dfdrho` | `rust-only` |
-| `flexmesa-net` | `crates/flexmesa-net/src/approx21_eval.rs:323` | `fn` | `eval_net_approx21_procs` | `rust-only` |
+| `flexmesa-net` | `crates/flexmesa-net/src/approx21_eval.rs:331` | `fn` | `eval_net_approx21_procs` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_special.rs:16` | `struct` | `Approx21ReactionQs` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_special.rs:97` | `fn` | `global_approx21_qs` | `rust-only` |
 | `flexmesa-net` | `crates/flexmesa-net/src/approx21_special.rs:222` | `fn` | `approx21_special_reactions` | `rust-only` |
@@ -1548,8 +1554,8 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-neu` | `crates/flexmesa-neu/src/lib.rs:59` | `enum` | `NeuError` | `rust-only` |
 | `flexmesa-num` | `crates/flexmesa-num/src/accurate_sum.rs:23` | `struct` | `AccurateReal` | `rust-only` |
 | `flexmesa-num` | `crates/flexmesa-num/src/accurate_sum.rs:33` | `fn` | `neumaier_sum_qp` | `rust-only` |
-| `flexmesa-num` | `crates/flexmesa-num/src/lib.rs:102` | `enum` | `NumError` | `rust-only` |
-| `flexmesa-num` | `crates/flexmesa-num/src/root.rs:24` | `type` | `BracketPair` | `rust-only` |
+| `flexmesa-num` | `crates/flexmesa-num/src/lib.rs:103` | `enum` | `NumError` | `rust-only` |
+| `flexmesa-num` | `crates/flexmesa-num/src/root.rs:26` | `type` | `BracketPair` | `rust-only` |
 | `flexmesa-num` | `crates/flexmesa-num/src/rosenbrock.rs:129` | `fn` | `rosenbrock_dense_autonomous` | `rust-only` |
 | `flexmesa-num` | `crates/flexmesa-num/src/rosenbrock.rs:308` | `fn` | `rosenbrock_banded_autonomous` | `rust-only` |
 | `flexmesa-rates` | `crates/flexmesa-rates/src/ecapture.rs:325` | `fn` | `eval_mui_coulomb_with_derivs` | `rust-only` |
@@ -1636,7 +1642,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/cell_energy.rs:242` | `fn` | `cell_specific_total_energy` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/cell_energy.rs:267` | `struct` | `DkeDpeDt` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/cell_energy.rs:298` | `fn` | `get_dke_dt_dpe_dt` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/controls.rs:896` | `struct` | `ColorsControls` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/controls.rs:898` | `struct` | `ColorsControls` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/controls_diffusion.rs:17` | `struct` | `DiffusionControls` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/controls_mix_wind.rs:26` | `struct` | `OvershootParamSet` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/controls_mix_wind.rs:63` | `struct` | `PredictiveParamSet` | `rust-only` |
@@ -1699,9 +1705,9 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/diffusion_support.rs:2031` | `fn` | `bitsafe_erf_fit` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/element_diffusion.rs:53` | `fn` | `do_element_diffusion_step` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/element_diffusion.rs:631` | `fn` | `finish_element_diffusion` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:276` | `fn` | `eval_eps_grav_std_cell` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:287` | `fn` | `eval_eps_grav_lns_cell` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:379` | `fn` | `eval_eps_grav` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:228` | `fn` | `eval_eps_grav_std_cell` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:243` | `fn` | `eval_eps_grav_lns_cell` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/eps_grav.rs:356` | `fn` | `eval_eps_grav` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/eps_mdot.rs:25` | `fn` | `eval_cell_specific_total_energy` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/eps_mdot.rs:33` | `fn` | `eval_specific_total_energy_profile` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/eps_mdot.rs:44` | `fn` | `find_mass_flux` | `rust-only` |
@@ -1725,7 +1731,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/history.rs:149` | `fn` | `format_history_header` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_brunt_surf.rs:37` | `fn` | `do_brunt_b` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_brunt_surf.rs:182` | `fn` | `do_brunt_n2` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_brunt_surf.rs:301` | `fn` | `eval_surf_bc` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_brunt_surf.rs:303` | `fn` | `eval_surf_bc` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_energy.rs:47` | `fn` | `eval_pvsc_cell_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_energy.rs:120` | `fn` | `eval_cell_pressure_for_work_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_energy.rs:161` | `fn` | `setup_dl_dm` | `rust-only` |
@@ -1744,26 +1750,26 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_eqns.rs:546` | `fn` | `do_surf_bc_eqns` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_eqns.rs:631` | `fn` | `do1_chem_eqns` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_eqns.rs:858` | `fn` | `assemble_henyey_system` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_eqns.rs:932` | `fn` | `eval_henyey_equations_into` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:45` | `fn` | `eval_p_theta` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:65` | `fn` | `eval_mlt_pturb_cell_ad` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:90` | `fn` | `eval_time_centered_hse_geom_ad` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:116` | `fn` | `has_surf_momentum_bc` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:126` | `fn` | `eval_surf_momentum_bc_pressure_ad` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:155` | `fn` | `wrap_peos_00` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:165` | `fn` | `wrap_peos_m1` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:175` | `fn` | `wrap_r_00` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:186` | `fn` | `get_area_info_opt_time_center` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:213` | `fn` | `expected_hse_grav_and_area` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:232` | `fn` | `eval_cell_peos_time_centered_ad` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:252` | `fn` | `eval_face_dm_bar` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:274` | `fn` | `expected_hse_grav_term` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:341` | `fn` | `wrap_d_00` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:349` | `fn` | `wrap_d_m1` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:362` | `fn` | `expected_non_hse_term` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:419` | `fn` | `calc_ptot_ad_tw` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:441` | `fn` | `do1_momentum_eqn` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:550` | `fn` | `do1_radius_eqn` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_eqns.rs:934` | `fn` | `eval_henyey_equations_into` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:48` | `fn` | `eval_p_theta` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:68` | `fn` | `eval_mlt_pturb_cell_ad` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:93` | `fn` | `eval_time_centered_hse_geom_ad` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:119` | `fn` | `has_surf_momentum_bc` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:129` | `fn` | `eval_surf_momentum_bc_pressure_ad` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:158` | `fn` | `wrap_peos_00` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:168` | `fn` | `wrap_peos_m1` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:178` | `fn` | `wrap_r_00` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:189` | `fn` | `get_area_info_opt_time_center` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:216` | `fn` | `expected_hse_grav_and_area` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:235` | `fn` | `eval_cell_peos_time_centered_ad` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:255` | `fn` | `eval_face_dm_bar` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:277` | `fn` | `expected_hse_grav_term` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:345` | `fn` | `wrap_d_00` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:353` | `fn` | `wrap_d_m1` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:366` | `fn` | `expected_non_hse_term` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:429` | `fn` | `calc_ptot_ad_tw` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:451` | `fn` | `do1_momentum_eqn` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_momentum.rs:565` | `fn` | `do1_radius_eqn` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_rotation.rs:22` | `fn` | `rpsi_from_re_factor` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_rotation.rs:30` | `fn` | `re_from_rpsi_factor` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_rotation.rs:38` | `fn` | `roche_a` | `rust-only` |
@@ -2014,7 +2020,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/pulse_write.rs:217` | `fn` | `write_osc_data` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/relax.rs:29` | `fn` | `set_uniform_initial_composition` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/relax.rs:67` | `fn` | `apply_uniform_rotation` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/relax.rs:117` | `fn` | `excise_core_by_temperature` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/relax.rs:131` | `fn` | `excise_core_by_temperature` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/relax_comp.rs:81` | `fn` | `eval_current_y_and_z` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/relax_comp.rs:133` | `fn` | `eval_current_y` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/relax_comp.rs:150` | `fn` | `eval_current_z` | `rust-only` |
@@ -2065,23 +2071,23 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:460` | `fn` | `eval_upstream_omega_crit` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:491` | `fn` | `eval_conv_time_scale_zone` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:536` | `fn` | `eval_conv_time_scales` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:574` | `fn` | `eval_ledd_erg_s` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:608` | `struct` | `PhotosphereInfo` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:768` | `struct` | `SurfAvgRotationInfo` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:801` | `fn` | `star_surface_omega_crit` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:946` | `fn` | `eval_cz_bdy_dq` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:988` | `struct` | `ConvAndMixSummary` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1179` | `fn` | `eval_epsnuc_zones` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1395` | `fn` | `eval_history_mixing_regions` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1496` | `fn` | `eval_history_burning_regions` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1555` | `fn` | `eval_astero_report_scalars` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1657` | `struct` | `StepReportContext` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1807` | `struct` | `ShockInfo` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1837` | `fn` | `eval_shock_info` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2193` | `fn` | `gravity_darkening_table` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2211` | `fn` | `gravity_darkening_teff_coeff` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2219` | `fn` | `gravity_darkening_l_coeff` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2227` | `fn` | `eval_surface_w_div_w_kep` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:578` | `fn` | `eval_ledd_erg_s` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:610` | `struct` | `PhotosphereInfo` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:770` | `struct` | `SurfAvgRotationInfo` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:803` | `fn` | `star_surface_omega_crit` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:948` | `fn` | `eval_cz_bdy_dq` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:990` | `struct` | `ConvAndMixSummary` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1181` | `fn` | `eval_epsnuc_zones` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1397` | `fn` | `eval_history_mixing_regions` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1498` | `fn` | `eval_history_burning_regions` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1557` | `fn` | `eval_astero_report_scalars` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1659` | `struct` | `StepReportContext` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1809` | `struct` | `ShockInfo` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:1839` | `fn` | `eval_shock_info` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2195` | `fn` | `gravity_darkening_table` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2213` | `fn` | `gravity_darkening_teff_coeff` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2221` | `fn` | `gravity_darkening_l_coeff` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/report_utils.rs:2229` | `fn` | `eval_surface_w_div_w_kep` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann.rs:27` | `struct` | `HllcFaceState` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann_ad.rs:36` | `fn` | `calc_ptot_cell_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann_ad.rs:105` | `fn` | `do_uface_and_pface` | `rust-only` |
@@ -2130,7 +2136,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_inv.rs:212` | `fn` | `set_t_for_new_egas` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_inv.rs:241` | `fn` | `set_t_for_new_pgas` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_inv.rs:269` | `fn` | `set_t_for_new_energy` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_inv.rs:300` | `fn` | `get_surf_p_t_kap` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_inv.rs:306` | `fn` | `get_surf_p_t_kap` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_kap.rs:65` | `struct` | `RspEosKapOut` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_kap.rs:223` | `fn` | `compute_standard_metals_xa` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rsp_eos_kap.rs:446` | `fn` | `eval1_mesa_eos_and_kap` | `rust-only` |
@@ -2192,8 +2198,8 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:95` | `fn` | `apply_bdomain` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:207` | `fn` | `force_another_iteration` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:242` | `fn` | `set_vars_for_solver` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:583` | `fn` | `check_after_converge` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:621` | `fn` | `rti_check_after_converge` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:587` | `fn` | `check_after_converge` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/solver_support.rs:625` | `fn` | `rti_check_after_converge` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/star_ad.rs:77` | `type` | `StarAdOrder1` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/star_ad.rs:81` | `trait` | `StarAdExt` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/star_job_init.rs:413` | `fn` | `init_or_update_model_from_bundle` | `rust-only` |
@@ -2282,6 +2288,7 @@ Headline totals: **701** public Python items (**234** pure-python mirror, **212*
 | `flexmesa-utils` | `crates/flexmesa-utils/src/lib.rs:181` | `fn` | `is_zero_skips_opt_out` | `rust-only` |
 | `flexmesa-utils` | `crates/flexmesa-utils/src/lib.rs:192` | `fn` | `require_zero_skips_enabled` | `rust-only` |
 | `flexmesa-utils` | `crates/flexmesa-utils/src/lib.rs:204` | `fn` | `require_mesa_test_input_path` | `rust-only` |
+| `flexmesa-utils` | `crates/flexmesa-utils/src/lib.rs:512` | `struct` | `Records` | `rust-only` |
 | `flexmesa-utils` | `crates/flexmesa-utils/src/sha256.rs:94` | `struct` | `Sha256Hasher` | `rust-only` |
 | `flexmesa-utils` | `crates/flexmesa-utils/src/sha256.rs:238` | `fn` | `compute_sha256_reader` | `rust-only` |
 | `flexmesa-utils` | `crates/flexmesa-utils/src/sha256.rs:255` | `fn` | `compute_sha256_raw` | `rust-only` |

@@ -182,16 +182,17 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
         "Rust/Python line counts and test coverage appear in the "
         "[Live Progress & Verification Dashboard](progress-dashboard.md).",
         "",
-        "Progress is tracked by **upstream MESA `26.4.1` lines promoted to "
-        "verified status**, never by written Rust or Python lines (`DECISIONS "
-        "#24`, `#174`). No module begins as verified; moving a file above "
-        "`ported_unverified` requires committed MESA `26.4.1` vector or "
+        "Progress is tracked by **upstream MESA `26.4.1` lines by manifest "
+        "status** and by routine-level evidence (`notes/audit/"
+        "routine_table.md`), never by written Rust or Python lines "
+        "(`DECISIONS #24`, `#174`). A file's status is raised above "
+        "`ported_unverified` only with committed MESA `26.4.1` vector or "
         "history evidence in a pull request.",
         "",
         "## Headline Coverage Reconciliation",
         "",
         "| Denominator Scope | Upstream Lines | Ported (Unverified) | "
-        "Verified Against MESA `26.4.1` | Notes |",
+        "Compared Against MESA `26.4.1` | Notes |",
         "| :--- | ---: | ---: | ---: | :--- |",
         (
             f"| Core engines (`star` + `star_data` + `binary` + `astero`) | "
@@ -223,7 +224,7 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             f"{numerics['strict_kernels_bit_identical']} | "
             f"{numerics['strict_cross_machine_identical']} | "
             f"{other_suites_verified} / {other_suites_total} remaining module "
-            "suites marked verified in manifest |"
+            "suites at `verified` status in `port_manifest.toml` |"
         ),
         (
             f"| End-to-end `test_suite` cases | {hh_tot['total']} cases | "
@@ -236,7 +237,8 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
         f"## Per-Module Port Status (`{len(modules)}` MESA `26.4.1` Modules)",
         "",
         "| Module | Upstream LOC | Absent | Stub | Partial | "
-        "Ported (Unverified) | Verified LOC | % Ported | % Verified |",
+        "Ported (Unverified) | LOC at `verified` Status | % Ported | "
+        "% at `verified` Status |",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
@@ -299,8 +301,8 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
     lines.extend(
         [
             "",
-            "## Key Structural & Physics Gaps Driving "
-            f"`{hh_tot['passing']} / {hh_tot['total']}` Parity",
+            "## Key Structural & Physics Gaps Behind "
+            f"`{hh_tot['passing']} / {hh_tot['total']}` Acceptance Passes",
             "",
             "- **Model Construction & Relaxation (`#154`, `#150`)**: "
             "Multi-step `relax.f90` and `create_initial_model.f90` operations "

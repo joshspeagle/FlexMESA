@@ -3,21 +3,21 @@
 
 Routine- and line-level port tracking in `benchmarks/dashboard/port_manifest.toml` measures `FlexMESA` against **MESA release `r26.4.1`** (commit `c8c2026`, archive MD5 `994fd28f38da92efc80e38ca11d8317b`), reconciled below with the pre-rebaseline structural audit in [`notes/audit/coverage-map.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/coverage-map.md). Live per-commit Rust/Python line counts and test coverage appear in the [Live Progress & Verification Dashboard](progress-dashboard.md).
 
-Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified status**, never by written Rust or Python lines (`DECISIONS #24`, `#174`). No module begins as verified; moving a file above `ported_unverified` requires committed MESA `26.4.1` vector or history evidence in a pull request.
+Progress is tracked by **upstream MESA `26.4.1` lines by manifest status** and by routine-level evidence (`notes/audit/routine_table.md`), never by written Rust or Python lines (`DECISIONS #24`, `#174`). A file's status is raised above `ported_unverified` only with committed MESA `26.4.1` vector or history evidence in a pull request.
 
 ## Headline Coverage Reconciliation
 
-| Denominator Scope | Upstream Lines | Ported (Unverified) | Verified Against MESA `26.4.1` | Notes |
+| Denominator Scope | Upstream Lines | Ported (Unverified) | Compared Against MESA `26.4.1` | Notes |
 | :--- | ---: | ---: | ---: | :--- |
 | Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 39,487 (27.2%) | 5,640 (3.9%) | Excludes stub (`6,378`) and partial (`71,242`) lines |
 | All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 43,047 (8.6%) | 5,640 (1.1%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
-| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 complete, 16 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 16 / 23 remaining module suites marked verified in manifest |
+| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 with every probed value at 0 ULP, 16 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 16 / 23 remaining module suites at `verified` status in `port_manifest.toml` |
 | End-to-end `test_suite` cases | 106 cases | 106 in manifest | **63 / 106** passing | 36 declared gaps, 3 `no_reference_yet` |
 
 ## Per-Module Port Status (`26` MESA `26.4.1` Modules)
 
-| Module | Upstream LOC | Absent | Stub | Partial | Ported (Unverified) | Verified LOC | % Ported | % Verified |
+| Module | Upstream LOC | Absent | Stub | Partial | Ported (Unverified) | LOC at `verified` Status | % Ported | % at `verified` Status |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 120,509 | 17,101 | 6,378 | 54,084 | 37,306 | 5,640 | 35.6% | 4.7% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0.0% | 0.0% |
@@ -61,7 +61,7 @@ Compared against MESA `26.4.1` `.defaults` schemas, **237 / 1,444** `&controls` 
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
 | `kap &kap` | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
 
-## Key Structural & Physics Gaps Driving `63 / 106` Parity
+## Key Structural & Physics Gaps Behind `63 / 106` Acceptance Passes
 
 - **Model Construction & Relaxation (`#154`, `#150`)**: Multi-step `relax.f90` and `create_initial_model.f90` operations (`#154`) and upstream binary `.photo` compatibility (`#150`) remain unported; current `.photo` byte round-trips validate internal continuation consistency only.
 - **Silent Inlist Drops & Default Mismatches (`#147`, `#149`)**: Existing parsers silently ignore unimplemented namelist keys or map unknown option strings (`mlt_option`, `atm_option`, `screening_mode`) onto defaults instead of failing loudly.

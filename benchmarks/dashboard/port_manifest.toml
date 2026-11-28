@@ -5556,7 +5556,18 @@ upstream_lines = 441
 upstream_sha256 = "c47f439e387bae7a5d16f90272394a96aafa3babcc84af05104533e3c0b04b1f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kapCN_init", "read_kapCN_tables", "read_one_kapCN_table"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kapCN_init" = "crates/flexmesa-kap/src/loader.rs::kap_tables" # partial: tables load lazily on first kap_tables() call (embedded or built FMKAP001 payload); there is no kapCN_is_initialized flag
+"read_kapCN_tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_kapcn_section_bytes" # partial: reads kR_Z_fCN.data and the kR_Z*.data tables at table-build time into an i16 (1000 x log kappa) FMKAP001 section; file names come from a fixed match on Z rather than the 1pe6.1e1 format; no kapCN cache file
+"read_one_kapCN_table" = "crates/flexmesa-kap/src/loader_ascii.rs::build_kapcn_section_bytes" # partial: ASCII parsed at build time and quantised to i16/1000; bicubic splines fitted lazily per sub-table in loader.rs (KapCnZSet::spline_data) with added non-finite checks; no cache file read or write
+"kapCN_interp" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp"
+"outside_R_and_T_bounds" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp"
+"kapCN_interp_fixedZ" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp_fixed_z"
+"kapCN_interp_fixedZ::interp" = "crates/flexmesa-kap/src/low_t.rs::lagrange_3pt_weights"
+"kapCN_interp_RT" = "crates/flexmesa-kap/src/low_t.rs::eval_evbicub_kap"
+"kapCN_get" = "crates/flexmesa-kap/src/low_t.rs::kapcn_get"
 
 [[files]]
 upstream_path = "kap/private/load_co_kap.f90"

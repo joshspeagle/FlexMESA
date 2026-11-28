@@ -17,8 +17,7 @@ use crate::lapack::{ix, lsame, LapackError};
 ///   which needs `DLASSQ`; never reached by `DGBCON` or `DGBSVX`).
 /// - [`LapackError::IllegalArgument`] (`info = -1`) for any other `norm`.
 ///   Upstream returns `VALUE` unset there (`dlangb.f:160-217`), an unset
-///   read that DECISIONS #43 turns into an explicit error; its Deferred bug
-///   issue has been requested from the orchestrator.
+///   read that DECISIONS #43 turns into an explicit error; Deferred bug #689.
 pub fn dlangb(
     norm: u8,
     n: usize,
@@ -88,6 +87,8 @@ pub fn dlangb(
             lines: "203-214",
         });
     } else {
+        // Upstream returns VALUE unset here (dlangb.f:160-219): Deferred
+        // bug #689. Explicit error instead (DECISIONS #43).
         return Err(LapackError::IllegalArgument {
             routine: "DLANGB",
             info: -1,

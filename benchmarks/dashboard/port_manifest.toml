@@ -5659,8 +5659,8 @@ notes = "seeded from coverage-map.md section 7: partial / uncompared"
 "Prepare_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the form, version >= min_version and X/Z header-consistency (1e-6) checks; no cache read or write
 "Prepare_Kap_X_Table::Setup_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the |xin - X| and |zz - Z| > 1e-6 error; X and Z come from the caller rather than the file header
 "Prepare_Kap_X_Table::Read_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: log kappa is stored as round(1000 x value) in i16 and divided by 1000 at fit time; exact for 3-decimal table values; cache read path not ported
-"Make_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per table (OnceLock), and a non-finite table value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting (Check_Interpolation_Data)
-"Make_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them
+"Make_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per table (OnceLock), and a non-finite table value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting (Check_Interpolation_Data) (#704)
+"Make_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them (#704)
 "Get_Filenames" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: file names are built inline as <prefix>_z<Z>_x<X>.data with get_output_string; no cache or temp-cache file names
 "create_fname" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: inlined, including the Freedman11 name; no cache file name
 

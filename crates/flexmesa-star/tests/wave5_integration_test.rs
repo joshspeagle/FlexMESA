@@ -9,11 +9,10 @@ use std::fs;
 
 use flexmesa_star::{
     build_pulse_points, change_model_network, eval_burgers_velocities,
-    eval_hllc_face, eval_phase_separation_shift, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_rsp2_zone, export_fgong, export_gyre,
-    export_osc, load_zams_model, run_test_suite_case, set_hydro_vars,
-    solve_stationary_rsp2_w, verify_photo_restart_parity, DiffusionScheme,
-    Rsp2Config, StarControls, StarJobControls,
+    eval_hllc_face, eval_phase_separation_shift, eval_rsp2_zone, export_fgong,
+    export_gyre, export_osc, load_zams_model, run_test_suite_case,
+    set_hydro_vars, solve_stationary_rsp2_w, verify_photo_restart_parity,
+    DiffusionScheme, Rsp2Config, StarControls, StarJobControls,
 };
 
 #[test]
@@ -40,23 +39,6 @@ fn test_wave5_1_diffusion_rotation_and_premix_preserve_physical_invariants() {
     let mass_flux: f64 =
         x.iter().zip(res.v_gt.iter()).map(|(xi, vi)| xi * vi).sum();
     assert!(mass_flux.abs() <= 1.0e-12);
-
-    let (fp0, ft0, i0) = eval_rotation_fp_ft(0.0, 0.75, 0.95);
-    assert!((fp0 - 1.0).abs() <= 1.0e-15);
-    assert!((ft0 - 1.0).abs() <= 1.0e-15);
-    assert!((i0 - 2.0 / 3.0).abs() <= 1.0e-15);
-    let (fp_fast, ft_fast, i_fast) = eval_rotation_fp_ft(0.6, 0.5, 0.5);
-    assert!(fp_fast < 1.0 && fp_fast < ft_fast && ft_fast < 1.0);
-    assert!(i_fast > 2.0 / 3.0);
-
-    let rot_zone = eval_rotational_mixing_zone(
-        3.0e10, 5.0e9, 2.5e4, 5.0, 1.5e7, 3.5e8, 0.5, 1.0, 1.0, 0.4, 0.2,
-        1.0e-6, 1.0e-7, 1.0e-4, 0.5, 1.3, 1.1, 0.0,
-    );
-    assert!(rot_zone.d_es > 0.0);
-    assert!(
-        rot_zone.d_st > 0.0 && rot_zone.nu_st > 0.0 && rot_zone.b_phi > 0.0
-    );
 
     let dx_co = eval_phase_separation_shift(0.5, false);
     let dx_one = eval_phase_separation_shift(0.5, true);

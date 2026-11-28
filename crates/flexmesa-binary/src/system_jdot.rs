@@ -14,8 +14,7 @@ use flexmesa_const::{MixingType, MSUN, PI, RSUN};
 use flexmesa_math::{exp, pow, pow2};
 use flexmesa_star::{
     apply_uniform_rotation, eval_photosphere_info, eval_surf_avg_rotation_info,
-    update_rotation_distortion_factors, BinaryOtherTorqueHook, StarError,
-    StarModel,
+    BinaryOtherTorqueHook, StarError, StarModel,
 };
 
 use crate::inlist::BinaryInlistControls;
@@ -172,8 +171,13 @@ pub fn apply_initial_orbit_sync(
         flexmesa_star::relax_uniform_omega(star, target_omega, 100, 1.0e9)?;
     } else {
         star.controls.rotation_flag = true;
+        // Upstream `star_set_uniform_omega` -> `set_uniform_omega`
+        // (`binary/private/run_binary_support.f90:319-339`,
+        // `star/public/star_lib.f90:1664-1670`,
+        // `star/private/hydro_rotation.f90:492-535`);
+        // `apply_uniform_rotation` already calls
+        // `use_xh_to_update_i_rot_and_j_rot` and `set_rotation_info(star, false)`.
         apply_uniform_rotation(star, target_omega);
-        update_rotation_distortion_factors(star);
     }
     Ok(())
 }
@@ -209,45 +213,6 @@ pub fn restore_smooth_omega_after_remesh(
             om_old[idx - 1] + t * (om_old[idx] - om_old[idx - 1])
         };
         star.omega[k] = om_interp;
-    }
-}
-
-/// Restores exact total stellar spin angular momentum $S_{\mathrm{target}} = \max(S_{\mathrm{pre}} + \Delta S_{\dot{M}}, 0)$
-/// after Henyey radius changes and remeshing (`set_hydro_vars` updates `i_rot` at old `omega`).
-pub fn conserve_spin_after_henyey(
-    star: &mut StarModel,
-    s_pre: f64,
-    delta_s_mdot: f64,
-) {
-    if !star.controls.rotation_flag || star.nz == 0 {
-        return;
-    }
-    update_rotation_distortion_factors(star);
-    let s_target = (s_pre + delta_s_mdot).max(0.0);
-    let mut s_cur = 0.0_f64;
-    for k in 0..star.nz {
-        let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
-        s_cur += dm_k * star.aux.i_rot[k] * star.omega[k];
-    }
-    if s_cur > 0.0 {
-        let scale = s_target / s_cur;
-        for k in 0..star.nz {
-            star.omega[k] *= scale;
-            star.j_rot[k] = star.aux.i_rot[k] * star.omega[k];
-        }
-    } else if s_target > 0.0 {
-        let mut i_tot = 0.0_f64;
-        for k in 0..star.nz {
-            let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
-            i_tot += dm_k * star.aux.i_rot[k];
-        }
-        if i_tot > 0.0 {
-            let om = s_target / i_tot;
-            for k in 0..star.nz {
-                star.omega[k] = om;
-                star.j_rot[k] = star.aux.i_rot[k] * om;
-            }
-        }
     }
 }
 
@@ -501,7 +466,6 @@ pub(crate) fn apply_tidal_spin_sync_step(
     {
         return Ok(0.0);
     }
-    update_rotation_distortion_factors(star);
     let phot = eval_photosphere_info(star);
     let r_phot_cm = RSUN * phot.r_rsun;
     let omega_avg_surf = eval_surf_avg_rotation_info(star).omega;
@@ -1180,7 +1144,7 @@ pub fn eval_coupled_edot_breakdown(
             &donor.gamma1,
             is_kolb,
             ctrl.anomaly_steps,
-        );
+        )?;
         if enh > ctrl.max_abs_edot_enhance {
             enh = ctrl.max_abs_edot_enhance;
         }
@@ -1219,7 +1183,6 @@ mod tests {
         .expect("ZAMS model");
         star.controls.rotation_flag = true;
         apply_uniform_rotation(&mut star, omega);
-        update_rotation_distortion_factors(&mut star);
         star.dt = 10.0 * SECDAY;
         star.aux.extra_jdot = vec![0.0; star.nz];
         star

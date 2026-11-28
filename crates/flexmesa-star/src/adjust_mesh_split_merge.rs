@@ -1155,12 +1155,6 @@ pub(crate) fn remesh_split_merge_with(
         return Ok((0, 0));
     }
 
-    if model.controls.rotation_flag
-        && model.j_rot.iter().all(|&j| j == 0.0)
-        && model.omega.iter().any(|&w| w != 0.0)
-    {
-        crate::rotation::update_rotation_distortion_factors(model);
-    }
     let old_j = total_angular_momentum(model);
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);

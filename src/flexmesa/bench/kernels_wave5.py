@@ -3,22 +3,17 @@
 asteroseismology benchmarks (`flexmesa.bench.kernels_wave5`).
 
 Evaluates the Three-Tier Hybrid Architecture (`flexmesa._rust` + JAX `float64`)
-across Stages 0..3 for the four Wave 5 workloads:
-1. `w5_diff_rot`: Roche rotational distortion (`f_P, f_T`), Caplan, Bauer &
-   Freeman (2022) strong-coupling OCP self-diffusion $D^*(\\Gamma, \\kappa)$,
-   five hydrodynamic rotational instabilities (`DSI`, `SH`, `SSI`, `ES`, `GSF`),
-   and the Spruit-Tayler (2002) magnetic dynamo (`D_ST`, `nu_ST`, `B_phi`,
-   `B_r`).
-2. `w5_riemann_rsp2`: Well-balanced 1D spherical Lagrangian HLLC Riemann
+across Stages 0..3 for the three Wave 5 workloads:
+1. `w5_riemann_rsp2`: Well-balanced 1D spherical Lagrangian HLLC Riemann
    hydrodynamics, momentum residual assembly, Kuhfuss (1986) / Smolec &
    Moskalik (2008) `RSP2` turbulent convection equations, and Dziembowski
    dimensionless pulsation variables $(V, V_g, A^*, U, c_1)$.
-3. `w5_binary_rlof`: Eggleton (1983) Roche-lobe radius, Keplerian orbital
+2. `w5_binary_rlof`: Eggleton (1983) Roche-lobe radius, Keplerian orbital
    mechanics, Ritter (1988) optically thin RLOF mass transfer, Bardeen (1972) /
    King & Kolb (1999) / Podsiadlowski (2003) Kerr black hole ISCO spin and
    Eddington accretion, Peters (1964) + Rappaport, Verbunt & Joss (1983)
    orbital $\\dot{J}$, and Hut (1981) tidal eccentricity evolution.
-4. `w5_astero_seism`: Cumulative acoustic radius/depth integrals, asymptotic and
+3. `w5_astero_seism`: Cumulative acoustic radius/depth integrals, asymptotic and
    solar-scaled $\\Delta\\nu, \\nu_{\\max}, \\nu_{\\mathrm{ac}}, \\Delta\\Pi_1$,
    Ball & Gizon (2014) 1-term cubic and 2-term combined surface-effect
    frequency corrections, and Roxburgh & Vorontsov (2003) 5-point separation
@@ -38,77 +33,6 @@ from flexmesa import _rust, astero, binary, constants, star
 from flexmesa.bench import harness as _h
 
 type _ArrF64 = npt.NDArray[np.float64]
-
-
-@jax.jit
-def _eval_diff_rot_jax(s: jax.Array) -> jax.Array:
-    """Evaluate `w5_diff_rot` across dimensionless radial grid `s`."""
-    r = constants.RSUN * (0.08 + 0.88 * s)
-    m_grav = constants.MSUN * (0.05 + 0.95 * s * s)
-    cgrav = jnp.full_like(s, constants.STANDARD_CGRAV)
-    lum = constants.LSUN * (0.04 + 0.96 * s)
-    opacity = 0.34 + 1.40 * (1.0 - s)
-    rho = jnp.exp(constants.LN10 * (2.0 * (1.0 - s) - 0.8 * s))
-    t = jnp.exp(constants.LN10 * (7.15 - 1.35 * s))
-    cp = 2.4e8 * (1.0 + 0.25 * s)
-    hp = 0.085 * r
-    grada = jnp.full_like(s, 0.398)
-    gradt = 0.26 + 0.06 * jnp.sin(5.0 * s)
-    brunt_n2_t = 1.6e-6 * (0.4 + s)
-    brunt_n2_mu = 4.5e-7 * (1.0 - 0.4 * s)
-    w_div_wc = 0.12 + 0.58 * s
-    dln_om = -0.40 - 0.30 * s
-    abar = 1.28 + 0.42 * (1.0 - s)
-    zbar = 1.08 + 0.22 * (1.0 - s)
-    gam_ocp = 4.0 + 14.0 * (1.0 - s)
-    kap_ocp = 0.20 + 0.55 * s
-
-    om_crit = star.eval_omega_crit_jax(cgrav, m_grav, r, lum, opacity, 0.99)
-    om = w_div_wc * om_crit
-    fp, ft, i_rot_r2 = star.eval_rotation_fp_ft_jax(w_div_wc, 0.75, 0.95)
-    d_star = star.eval_caplan_ocp_dstar_jax(gam_ocp, kap_ocp)
-    grav = fp * (cgrav * m_grav / (r * r))
-    ones = jnp.ones_like(s)
-    (
-        d_dsi,
-        d_sh,
-        d_ssi,
-        d_es,
-        d_gsf,
-        d_st,
-        nu_st,
-        b_phi,
-        b_r,
-    ) = star.eval_rotational_mixing_zone_jax(
-        r,
-        hp,
-        grav,
-        rho,
-        t,
-        cp,
-        opacity,
-        ones,
-        ones,
-        grada,
-        gradt,
-        brunt_n2_t,
-        brunt_n2_mu,
-        om,
-        dln_om,
-        abar,
-        zbar,
-    )
-    return jnp.asarray(
-        fp
-        + ft
-        + i_rot_r2
-        + d_star
-        + 1.0e-12 * (d_dsi + d_sh + d_ssi + d_es + d_gsf + d_st + nu_st)
-        + 1.0e-5 * (b_phi + b_r)
-    )
-
-
-_DIFF_ROT_BATCH_JIT = jax.jit(jax.vmap(_eval_diff_rot_jax, in_axes=(0,)))
 
 
 @jax.jit
@@ -399,22 +323,6 @@ def _run_w5_four_stages(
     )
 
 
-def bench_w5_diff_rot(
-    nz: int, n_warmup: int = 3, n_repeats: int = 9
-) -> _h.BenchRecord:
-    """Benchmark Wave 5.1 rotation, diffusion, and dynamo (`w5_diff_rot`)."""
-    s_j, _, s_b = _make_s_and_idx(nz)
-    return _run_w5_four_stages(
-        "w5_diff_rot",
-        nz,
-        n_warmup,
-        n_repeats,
-        lambda par: _rust.w5_eval_diff_rot_batch(nz, par),
-        lambda: _eval_diff_rot_jax(s_j),
-        lambda: _DIFF_ROT_BATCH_JIT(s_b),
-    )
-
-
 def bench_w5_riemann_rsp2(
     nz: int, n_warmup: int = 3, n_repeats: int = 9
 ) -> _h.BenchRecord:
@@ -493,10 +401,9 @@ def run_all_wave5_benchmarks(
     n_warmup: int = 3,
     n_repeats: int = 9,
 ) -> list[_h.BenchRecord]:
-    """Run all four Wave 5 benchmarks across `zone_counts`."""
+    """Run all three Wave 5 benchmarks across `zone_counts`."""
     records: list[_h.BenchRecord] = []
     for nz in zone_counts:
-        records.append(bench_w5_diff_rot(nz, n_warmup, n_repeats))
         records.append(bench_w5_riemann_rsp2(nz, n_warmup, n_repeats))
         records.append(bench_w5_binary_rlof(nz, n_warmup, n_repeats))
         records.append(bench_w5_astero_seism(nz, n_warmup, n_repeats))

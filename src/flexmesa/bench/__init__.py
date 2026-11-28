@@ -82,7 +82,6 @@ run_all_wave4_benchmarks = _wave4.run_all_wave4_benchmarks
 
 bench_w5_astero_seism = _wave5.bench_w5_astero_seism
 bench_w5_binary_rlof = _wave5.bench_w5_binary_rlof
-bench_w5_diff_rot = _wave5.bench_w5_diff_rot
 bench_w5_riemann_rsp2 = _wave5.bench_w5_riemann_rsp2
 run_all_wave5_benchmarks = _wave5.run_all_wave5_benchmarks
 
@@ -119,7 +118,6 @@ __all__: list[str] = [
     "bench_turb_tdc",
     "bench_w5_astero_seism",
     "bench_w5_binary_rlof",
-    "bench_w5_diff_rot",
     "bench_w5_riemann_rsp2",
     "make_block_tridiag_fixture",
     "make_wave2_composition_profile",

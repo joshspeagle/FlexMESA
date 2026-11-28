@@ -407,7 +407,8 @@ fn test_select_mdot_action_solver_failure_retries_without_force_accept_139() {
     m.controls.mix_wind.rotational_mdot_boost_fac = 1.0e20;
     m.controls.mix_wind.rotational_mdot_kh_fac = 1.0e20;
     m.omega.fill(2.0e-4);
-    flexmesa_star::update_rotation_distortion_factors(&mut m);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut m);
+    flexmesa_star::set_rotation_info(&mut m, false);
     set_hydro_vars(&mut m, false, false).expect("hydro");
     flexmesa_star::sync_post_henyey_rotation(&mut m, 1.0)
         .expect("sync_post_henyey_rotation");

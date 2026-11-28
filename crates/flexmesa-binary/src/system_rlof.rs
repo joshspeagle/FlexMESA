@@ -881,7 +881,7 @@ pub fn eval_scheme_explicit_mdot_with_steps(
                 &donor.mu,
                 &donor.gamma1,
                 anomaly_steps,
-            )
+            )?
         } else {
             eval_kolb_mdot_thick_photosphere(
                 m_d,
@@ -893,7 +893,7 @@ pub fn eval_scheme_explicit_mdot_with_steps(
                 &donor.t,
                 &donor.mu,
                 &donor.gamma1,
-            )
+            )?
         };
         thin + thick
     } else if scheme.eq_ignore_ascii_case("Ritter") {

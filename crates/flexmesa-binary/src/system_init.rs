@@ -6,10 +6,8 @@
 
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    StarError, StarModel, apply_uniform_rotation, center_avg_x_by_name,
-    eval_total_energy_integrals,
-    set_hydro_vars, snapshot_step_history_old,
-    update_rotation_distortion_factors,
+    center_avg_x_by_name, eval_total_energy_integrals, set_hydro_vars,
+    snapshot_step_history_old, StarError, StarModel,
 };
 
 use crate::system::{BinaryCompanion, BinarySystem};
@@ -22,15 +20,11 @@ use crate::system::{BinaryCompanion, BinarySystem};
 pub(crate) fn prep_and_settle_binary_star(
     star: &mut StarModel,
 ) -> Result<(), StarError> {
-    if star.controls.rotation_flag {
-        let omega_0 = star.omega.first().copied().unwrap_or(0.0);
-        if omega_0 > 0.0
-            && star.omega.iter().all(|&w| (w - omega_0).abs() == 0.0)
-        {
-            apply_uniform_rotation(star, omega_0);
-        }
-    }
-    update_rotation_distortion_factors(star);
+    // No rotation update here: upstream's only one at this point is
+    // `star_relax_uniform_omega(.., 2*pi/period, ..)` under
+    // `do_initial_orbit_sync_N .and. .not. doing_restart`
+    // (`binary/private/run_binary_support.f90:319-339`), which FlexMESA
+    // performs in `apply_initial_orbit_sync` (`system_jdot.rs`).
 
     star.mstar_start = star.mstar;
     star.mstar_old = star.mstar;

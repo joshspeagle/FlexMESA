@@ -70,9 +70,9 @@ pub use kernels_wave4::{
     run_all_wave4_benchmarks,
 };
 pub use kernels_wave5::{
-    bench_w5_astero_seism, bench_w5_binary_rlof, bench_w5_diff_rot,
-    bench_w5_riemann_rsp2, eval_astero_seism_workload, eval_binary_rlof_zone,
-    eval_diff_rot_zone, run_all_wave5_benchmarks, RiemannRsp2Grid,
+    bench_w5_astero_seism, bench_w5_binary_rlof, bench_w5_riemann_rsp2,
+    eval_astero_seism_workload, eval_binary_rlof_zone,
+    run_all_wave5_benchmarks, RiemannRsp2Grid,
 };
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.

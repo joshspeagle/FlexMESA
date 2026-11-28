@@ -597,7 +597,10 @@ fn post_part2_mdot_redo_syncs_component_mdot_and_mdot_system_wind() {
 fn kolb_zone_search_errors_past_last_zone_and_empty_profile() {
     let kolb = |rl: f64, r: &[f64]| {
         let n = r.len();
-        let p: Vec<f64> = (0..n).map(|k| 1.0e5 * (1.0 + k as f64)).collect();
+        let p: Vec<f64> =
+            std::iter::successors(Some(1.0e5_f64), |v| Some(v + 1.0e5))
+                .take(n)
+                .collect();
         let t = vec![1.0e5; n];
         let mu = vec![0.6; n];
         let gamma1 = vec![5.0 / 3.0; n];

@@ -7199,7 +7199,13 @@ upstream_lines = 514
 upstream_sha256 = "7f5d625c8ddfc0f6fc968dec469e9d9e97779bcf984a8a31749924a018e463d8"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["interpolate_weaklib_table", "interpolate_weaklib_table::setup_for_linear_interp", "interpolate_weaklib_table::do_linear_interp"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"interpolate_weaklib_table" = "crates/flexmesa-rates/src/weak.rs::eval_weaklib_one" # partial: linear path only (weak_bicubic is .false. and has no setter); no non-finite fval error (#741)
+"interpolate_weaklib_table::find_location" = "crates/flexmesa-rates/src/weak.rs::find_location"
+"interpolate_weaklib_table::setup_for_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no x_alfa/y_alfa range checks (#741)
+"interpolate_weaklib_table::do_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no non-finite fval error (#741)
 
 [[files]]
 upstream_path = "rates/public/rates_def.f90"

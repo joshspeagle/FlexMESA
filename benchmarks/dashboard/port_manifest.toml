@@ -7173,7 +7173,12 @@ upstream_lines = 1422
 upstream_sha256 = "2b967697cc5859cdfc310a762d0e60a4edc8b9c638fb3b86bbf1177f9cdb920e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["get_Qtotal"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"is_pp_reaction" = "crates/flexmesa-net/src/reaction_synth.rs::is_pp_reaction"
+"is_cno_reaction" = "crates/flexmesa-net/src/reaction_synth.rs::is_cno_reaction"
+"get_Qtotal" = "crates/flexmesa-net/src/reaction_synth.rs::mesa_reaction_qtotal" # partial: returns None for a missing input or output isotope, rn14ag_lite and r1..r9 placeholders where upstream passes the reactant list to reaction_Qtotal unconditionally
 
 [[files]]
 upstream_path = "rates/private/rates_names.f90"

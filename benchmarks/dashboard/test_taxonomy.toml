@@ -465,7 +465,11 @@ routines = [
 reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
 recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
 precision = "exact"
-routines = ["eos/private/ion_offset.f90::compute_ion_offset"]
+routines = [
+  "eos/private/ideal.f90::get_ideal_eos_results",
+  "eos/private/ideal.f90::get_ideal_for_eosdt",
+  "eos/private/ion_offset.f90::compute_ion_offset",
+]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs"
@@ -481,6 +485,15 @@ precision = "print"
 tolerance = "1e-13"
 routines = [
   "eos/private/eos_helm_eval.f90::get_helm_for_eosdt",
+  "eos/private/helm.f90::helmeos2",
+  "eos/public/eos_lib.f90::helmeos2_eval",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = [
   "eos/private/helm.f90::helmeos2",
   "eos/public/eos_lib.f90::helmeos2_eval",
 ]
@@ -510,6 +523,12 @@ routines = [
   "eos/private/eospc_eval.f90::get_PC_for_eosdt",
   "eos/public/eos_lib.f90::eosDT_get",
 ]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/eospc_eval.f90::Get_PC_alfa"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
@@ -552,6 +571,12 @@ routines = [
   "eos/public/eos_lib.f90::eosPT_get",
   "eos/public/eos_lib.f90::eos_gamma_DE_get",
 ]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/skye.f90::Get_Skye_alfa_simple"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3b1_full_tables_tests.rs"
@@ -597,7 +622,9 @@ routines = [
 reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
 recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
 precision = "exact"
-routines = ["eos/private/eospt_eval.f90::get_Pgas"]
+routines = [
+  "eos/private/eospt_eval.f90::get_Pgas",
+]
 
 [[tests]]
 path = "crates/flexmesa-gyre/tests/g1_vectors.rs"
@@ -2044,6 +2071,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_dashboard_github.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_data.py"
 language = "python"
 module = "utils"
@@ -2356,6 +2389,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_python_inventory.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_reviewed_map_raise.py"
 language = "python"
 module = "tooling"
@@ -2489,6 +2528,12 @@ path = "tests/test_wave5_bench.py"
 language = "python"
 module = "star"
 kind = "regression"
+
+[[tests]]
+path = "tests/test_window_inlist.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
 
 [[tests]]
 path = "tests/unit/test_kap_wave3b2.py"

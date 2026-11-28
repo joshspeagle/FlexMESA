@@ -230,7 +230,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 1 | [#477](https://github.com/joshspeagle/FlexMESA/issues/477) |
 
-- **Open pull requests (3)**: [#765](https://github.com/joshspeagle/FlexMESA/pull/765), [#768](https://github.com/joshspeagle/FlexMESA/pull/768), [#770](https://github.com/joshspeagle/FlexMESA/pull/770).
+- **Open pull requests (3)**: [#765](https://github.com/joshspeagle/FlexMESA/pull/765), [#768](https://github.com/joshspeagle/FlexMESA/pull/768), [#771](https://github.com/joshspeagle/FlexMESA/pull/771).
 - **Deferred upstream-divergence backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `103` open issues (`97` `upstream-bug`, `6` `enhancement`; `8` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
@@ -374,4 +374,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-28` | `7dc49a46` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 35/56 | 103 |
 | `2026-11-28` | `62fa7e02` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 35/56 | 103 |
 | `2026-11-28` | `cd7dd193` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 35/56 | 103 |
+| `2026-11-28` | `e59e923a` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 35/56 | 103 |
 <!-- END GENERATED DASHBOARD -->

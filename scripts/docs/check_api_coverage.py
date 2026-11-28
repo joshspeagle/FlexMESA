@@ -14,9 +14,10 @@ For each collected symbol, checks that its mapped ``docs/api/*.md`` page either
 includes a ``::: flexmesa...`` directive that renders that symbol or has an API
 bullet for it (a list item that starts ``- **`name`**``), or, for a submodule
 name in a package ``__all__``, has a ``::: <package>.<name>`` directive. A
-whole-word mention in prose, a table or a code snippet does not count. Symbols undocumented at the P1.4 baseline are
-tracked in ``docs/api_coverage_allowlist.toml``; ``--check`` fails on any
-undocumented symbol outside the allowlist and on any stale allowlist entry.
+whole-word mention in prose, a table or a code snippet does not count. Symbols
+undocumented at the P1.4 baseline are tracked in
+``docs/api_coverage_allowlist.toml``; ``--check`` fails on any undocumented
+symbol outside the allowlist and on any stale allowlist entry.
 """
 
 from __future__ import annotations

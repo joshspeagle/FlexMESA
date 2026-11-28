@@ -6196,11 +6196,11 @@ routine_map_partial = ["screen_net", "screen_net::screening_pair", "screen_net::
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
 "make_screening_tables" = "crates/flexmesa-net/src/screen.rs::init_screening_tables"
-"screen_net" = "crates/flexmesa-net/src/screen.rs::screen_net" # partial: splits the init pass into init_screening_tables; drops the nrattab > 1 condition on the low-T cutoff factor; takes zbar/abar/z2bar directly instead of screen_set_context; no ierr from screening failures
+"screen_net" = "crates/flexmesa-net/src/screen.rs::screen_net" # partial: splits the init pass into init_screening_tables; drops the nrattab > 1 condition on the low-T cutoff factor; takes zbar/abar/z2bar directly instead of screen_set_context; no ierr from screening failures (#733)
 "screen_net::screening_pair" = "crates/flexmesa-net/src/screen.rs::eval_screening_pair" # partial: non-init path only (init is init_screen_triple/init_az_info); inlines the rates screen_pair early-outs for NoScreening, zbar == 0, z <= 0 and logT < logTcut_lo
 "screen_net::set_rate_screening" = "crates/flexmesa-net/src/screen.rs::set_rate_screening"
 "screen_net::eval_screen_pair" = "crates/flexmesa-net/src/screen.rs::screen_net+eval_screening_pair"
-"screen_net::eval_screen_triple" = "crates/flexmesa-net/src/screen.rs::eval_screen_triple" # partial: an n + n + A reaction returns UNSCREENED (rate_screened = rate_raw) where upstream returns without setting rate_screened(i)
+"screen_net::eval_screen_triple" = "crates/flexmesa-net/src/screen.rs::eval_screen_triple" # partial: an n + n + A reaction returns UNSCREENED (rate_screened = rate_raw) where upstream returns without setting rate_screened(i) (#733)
 "screen_net::set_combo_screen_rates" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates" # partial: the alpha ap/gp branch lists run as two loops instead of interleaved calls (outputs are independent); reactions are found by name; error returns replace mesa_error
 "screen_net::rate_for_alpha_ap" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates"
 "screen_net::rate_for_alpha_gp" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates"

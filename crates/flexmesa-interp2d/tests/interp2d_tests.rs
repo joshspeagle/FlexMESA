@@ -1,12 +1,16 @@
-//! Integration and property-based tests for `flexmesa-interp2d`.
+//! Integration tests for `flexmesa-interp2d`.
 //!
 //! Validates Safe Rust 2D bicubic splines (`interp_mkbicub_db`,
 //! `interp_evbicub_db`, `interp_evbicub_mask_db`), 2D Steffen (1990)
 //! piecewise-monotonic splines (`interp_mkbipm_db`, `interp_evbipm_db`), and
 //! Akima (1996, ACM Algorithm 760) bivariate surface fitting
 //! (`interp_rgbi3p_db`, `interp_rgsf3p_db`, `rgpd3p_db`) against upstream MESA
-//! golden baselines (`test2D_db`, `test_akima_db`) and exact polynomial
-//! calculus identities.
+//! golden baselines (`test2D_db`, `test_akima_db`).
+//!
+//! The bicubic calculus identities hold only for the pure-`f64` basis of
+//! `NumericsMode::Fast`; they live in `interp2d_numerics_mode_test.rs`, a
+//! separate test binary, because switching the process-wide mode here would
+//! leak into concurrently running tests (`issue #210`).
 
 #![allow(
     clippy::approx_constant,
@@ -27,7 +31,7 @@ use flexmesa_interp2d::{
     interp_mkbicub_db, interp_mkbipm_db, interp_rgbi3p_db, interp_rgsf3p_db,
     BicubicBc,
 };
-use proptest::prelude::*;
+use flexmesa_math::{with_numerics_mode, NumericsMode};
 use std::f64::consts::PI;
 
 /// Number of x-grid knots in upstream MESA `test2D_db`.
@@ -69,8 +73,7 @@ fn build_mesa_2d_test_grid() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
 }
 
 /// Verifies `interp_mkbicub_db`, `interp_evbicub_db`, and
-/// `interp_evbicub_mask_db` against upstream MESA `test2D_db(.true.)` and
-/// finite-difference derivative identities.
+/// `interp_evbicub_mask_db` against upstream MESA `test2D_db(.true.)`.
 #[test]
 fn test_mesa_bicubic_spline_matches_golden_output() {
     let (xpts, ypts, z) = build_mesa_2d_test_grid();
@@ -164,60 +167,44 @@ fn test_mesa_bicubic_spline_matches_golden_output() {
     for (i, j, exp_z, exp_dzdx, exp_dzdy) in expected_pts {
         let x = x_min + (i as f64) * dx;
         let y = y_min + (j as f64) * dy;
-        let eval = interp_evbicub_db(x, y, &xpts, &ypts, ilinx, iliny, &f)
-            .expect("bicubic evaluation succeeds");
-        // Upstream MESA fvbicub_db omits `implicit none`, leaving local basis
-        // variables (xp, yp, cx, cy, cxd, cyd, hx2, hy2, z36th) as implicit
-        // 32-bit `real`. Our full `f64` evaluator matches the golden output to
-        // within single-precision basis truncation (~5e-7) while satisfying
-        // exact f64 calculus identities to machine precision.
-        assert!(
-            (eval.f - exp_z).abs() < 5.0e-9,
-            "i={i}, j={j}: eval.f={} vs exp_z={exp_z}",
-            eval.f
-        );
-        assert!(
-            (eval.df_dx - exp_dzdx).abs() < 5.0e-7,
-            "i={i}, j={j}: eval.df_dx={} vs exp_dzdx={exp_dzdx}",
-            eval.df_dx
-        );
-        assert!(
-            (eval.df_dy - exp_dzdy).abs() < 5.0e-7,
-            "i={i}, j={j}: eval.df_dy={} vs exp_dzdy={exp_dzdy}",
-            eval.df_dy
-        );
+        // Upstream MESA `fvbicub_db` omits `implicit none` (#680), leaving
+        // local basis variables as implicit `REAL` (`f32`). Compare MESA
+        // goldens and masked parity in `NumericsMode::Strict`.
+        with_numerics_mode(NumericsMode::Strict, || {
+            let eval = interp_evbicub_db(x, y, &xpts, &ypts, ilinx, iliny, &f)
+                .expect("bicubic evaluation succeeds");
+            assert!(
+                (eval.f - exp_z).abs() < 5.0e-9,
+                "i={i}, j={j}: eval.f={} vs exp_z={exp_z}",
+                eval.f
+            );
+            assert!(
+                (eval.df_dx - exp_dzdx).abs() < 5.0e-7,
+                "i={i}, j={j}: eval.df_dx={} vs exp_dzdx={exp_dzdx}",
+                eval.df_dx
+            );
+            assert!(
+                (eval.df_dy - exp_dzdy).abs() < 5.0e-7,
+                "i={i}, j={j}: eval.df_dy={} vs exp_dzdy={exp_dzdy}",
+                eval.df_dy
+            );
 
-        // Verify exact f64 consistency between value and analytic first/second
-        // derivatives on the cubic polynomial patch.
-        let h = 1.0e-6;
-        let fx_p = interp_evbicub_db(x + h, y, &xpts, &ypts, ilinx, iliny, &f)
-            .unwrap();
-        let fx_m = interp_evbicub_db(x - h, y, &xpts, &ypts, ilinx, iliny, &f)
-            .unwrap();
-        let fy_p = interp_evbicub_db(x, y + h, &xpts, &ypts, ilinx, iliny, &f)
-            .unwrap();
-        let fy_m = interp_evbicub_db(x, y - h, &xpts, &ypts, ilinx, iliny, &f)
-            .unwrap();
-        let fd_dx = (fx_p.f - fx_m.f) / (2.0 * h);
-        let fd_dy = (fy_p.f - fy_m.f) / (2.0 * h);
-        assert!((eval.df_dx - fd_dx).abs() < 1.0e-10);
-        assert!((eval.df_dy - fd_dy).abs() < 1.0e-10);
-
-        let masked = interp_evbicub_mask_db(
-            x,
-            y,
-            &xpts,
-            &ypts,
-            ilinx,
-            iliny,
-            &f,
-            &[1, 1, 1, 0, 0, 0],
-        )
-        .expect("masked bicubic evaluation succeeds");
-        assert!((masked[0] - eval.f).abs() < 1.0e-15);
-        assert!((masked[1] - eval.df_dx).abs() < 1.0e-15);
-        assert!((masked[2] - eval.df_dy).abs() < 1.0e-15);
-        assert_eq!(masked[3], 0.0);
+            let masked = interp_evbicub_mask_db(
+                x,
+                y,
+                &xpts,
+                &ypts,
+                ilinx,
+                iliny,
+                &f,
+                &[1, 1, 1, 0, 0, 0],
+            )
+            .expect("masked bicubic evaluation succeeds");
+            assert!((masked[0] - eval.f).abs() < 1.0e-15);
+            assert!((masked[1] - eval.df_dx).abs() < 1.0e-15);
+            assert!((masked[2] - eval.df_dy).abs() < 1.0e-15);
+            assert_eq!(masked[3], 0.0);
+        });
     }
 }
 
@@ -520,73 +507,5 @@ fn test_renka790_cshep2_cubic_reproduction_and_scattered_2d_db() {
         assert!((dz_dx - exp_dzdx).abs() < 1.0e-12);
         assert!((dz_dy - exp_dzdy).abs() < 1.0e-12);
         assert!((z_scat - z_exact).abs() < 5.0e-4);
-    }
-}
-
-proptest! {
-    /// Property test: 2D bicubic spline reproduces any biquadratic polynomial
-    /// $p(x, y) = a_{00} + a_{10} x + a_{01} y + a_{20} x^2 + a_{11} x y
-    /// + a_{02} y^2$ and its first and second partial derivatives to machine
-    /// precision.
-    #[test]
-    fn prop_bicubic_spline_reproduces_biquadratic_and_derivatives(
-        a00 in -2.0_f64..2.0_f64,
-        a10 in -1.5_f64..1.5_f64,
-        a01 in -1.5_f64..1.5_f64,
-        a20 in -0.5_f64..0.5_f64,
-        a11 in -0.5_f64..0.5_f64,
-        a02 in -0.5_f64..0.5_f64,
-        xq in -0.9_f64..0.9_f64,
-        yq in -0.9_f64..0.9_f64,
-    ) {
-        let nx = 9;
-        let ny = 10;
-        let xs: Vec<f64> = (0..nx)
-            .map(|i| -1.0 + 2.0 * (i as f64) / ((nx - 1) as f64))
-            .collect();
-        let ys: Vec<f64> = (0..ny)
-            .map(|j| -1.0 + 2.0 * (j as f64) / ((ny - 1) as f64))
-            .collect();
-
-        let poly = |x: f64, y: f64| -> f64 {
-            a00 + a10 * x + a01 * y + a20 * x * x + a11 * x * y + a02 * y * y
-        };
-        let mut z = vec![0.0_f64; nx * ny];
-        for (i, &x) in xs.iter().enumerate() {
-            for (j, &y) in ys.iter().enumerate() {
-                z[i * ny + j] = poly(x, y);
-            }
-        }
-        let bc_x = vec![0.0; ny];
-        let bc_y = vec![0.0; nx];
-        let (f, ilinx, iliny) = interp_mkbicub_db(
-            &xs,
-            &ys,
-            &z,
-            BicubicBc::NotAKnot,
-            &bc_x,
-            BicubicBc::NotAKnot,
-            &bc_x,
-            BicubicBc::NotAKnot,
-            &bc_y,
-            BicubicBc::NotAKnot,
-            &bc_y,
-        ).unwrap();
-
-        let ev =
-            interp_evbicub_db(xq, yq, &xs, &ys, ilinx, iliny, &f).unwrap();
-        let exact_f = poly(xq, yq);
-        let exact_df_dx = a10 + 2.0 * a20 * xq + a11 * yq;
-        let exact_df_dy = a01 + a11 * xq + 2.0 * a02 * yq;
-        let exact_d2f_dx2 = 2.0 * a20;
-        let exact_d2f_dy2 = 2.0 * a02;
-        let exact_d2f_dxdy = a11;
-
-        prop_assert!((ev.f - exact_f).abs() < 1.0e-12);
-        prop_assert!((ev.df_dx - exact_df_dx).abs() < 1.0e-11);
-        prop_assert!((ev.df_dy - exact_df_dy).abs() < 1.0e-11);
-        prop_assert!((ev.d2f_dx2 - exact_d2f_dx2).abs() < 1.0e-10);
-        prop_assert!((ev.d2f_dy2 - exact_d2f_dy2).abs() < 1.0e-10);
-        prop_assert!((ev.d2f_dxdy - exact_d2f_dxdy).abs() < 1.0e-10);
     }
 }

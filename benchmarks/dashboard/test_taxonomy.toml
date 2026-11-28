@@ -1243,6 +1243,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/inlist_include_slots_705_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/io_controls_299_test.rs"
 language = "rust"
 module = "star"

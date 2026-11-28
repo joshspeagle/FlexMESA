@@ -7136,7 +7136,10 @@ upstream_lines = 108
 upstream_sha256 = "b99b97f79fe4dd183bfcfdc19d21511d0acf6e16d87bd32281fd51a0b138883c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_screen_set_context"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_screen_set_context" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined per call; the no_screening/zbar == 0 early return is in screen_pair; z1pt58bar, zbar13, ntot and a_e are not stored (a_e and ntot are recomputed in screen_chugunov)
 
 [[files]]
 upstream_path = "rates/private/screen5.f90"

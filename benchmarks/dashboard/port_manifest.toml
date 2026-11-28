@@ -6240,7 +6240,15 @@ upstream_lines = 1210
 upstream_sha256 = "167060f4a53cf6afa708fbd91a41b48031d485862dbd24944043c2d1a5b06bb7"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["net_get", "net_get_symbolic_d_dxdt_dx", "net_get_rates_only", "net_1_zone_burn", "net_1_zone_burn_const_density", "net_1_zone_burn_const_P"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"net_get" = "crates/flexmesa-net/src/lib.rs::net_get" # partial: takes a NetGeneralInfo and fixed use_3a_fl87/use_suzuki_weak_rates from it; there are no caller-supplied reaction_Qs or reaction_neuQs and no handle
+"net_get_symbolic_d_dxdt_dx" = "crates/flexmesa-net/src/lib.rs::net_get_symbolic_d_dxdt_dx" # partial: takes a NetGeneralInfo instead of a handle and returns the flattened (species x species) pattern
+"net_get_rates_only" = "crates/flexmesa-net/src/derivs.rs::eval_net" # partial: reached through eval_net with rates_only = true; no separate entry point and no reaction_Qs arguments
+"net_1_zone_burn" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: input struct instead of argument list; inherits the burn_1_zone departures
+"net_1_zone_burn_const_density" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: input struct instead of argument list; inherits the burn_1_zone_const_density departures
+"net_1_zone_burn_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: input struct instead of argument list; inherits the burn_1_zone_const_P departures
 
 [[files]]
 upstream_path = "neu/plotter/src/neu_plotter.f90"

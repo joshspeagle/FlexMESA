@@ -1208,7 +1208,7 @@ fn test_edot_isotropic_eccentricity_enhancement_and_mdot_redo_boost() {
         &gam_prof,
         false,
         200,
-    );
+    ).expect("Kolb zone search in bounds");
     assert!(edot_enh.is_finite());
 
     let mut c1 = StarControls {

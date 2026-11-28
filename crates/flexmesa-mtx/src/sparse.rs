@@ -217,16 +217,17 @@ pub fn row_sparse_to_dense(
 
 /// Upstream `do_row_sparse_0_based_to_dense`
 /// (`mtx/private/mtx_support.f90:428-447`) declares `rowptr(0:n)`,
-/// `colind(0:nz-1)`, `values(nz)`, and `a(ndim, n)` and loops
-/// `do i = 1, n; do k = rowptr(i), rowptr(i + 1) - 1`, reading `rowptr(n + 1)`
-/// out of bounds on every call with `n >= 1` and indexing 1-based `values` and
-/// `a` with 0-based `k` and `colind(k)` (deferred upstream bug `#674`,
-/// `DECISIONS #43`).
+/// `colind(0:nz-1)`, `values(nz)`, and `a(ndim, n)`, zeroes `a`, and loops
+/// `do i = 1, n; do k = rowptr(i), rowptr(i + 1) - 1`. For `n = 0` the loop is
+/// empty, so the result is a zeroed `a` with `ierr = 0`. For `n >= 1` the
+/// first iteration reads `rowptr(n + 1)` out of bounds at `i = n` (and
+/// indexes 1-based `values` and `a` with 0-based `k` and `colind(k)`), which
+/// has no defined behaviour (deferred upstream bug `#674`, `DECISIONS #43`).
 ///
 /// # Errors
 ///
-/// Always returns [`MtxError::InvalidParameter`] because upstream has no
-/// defined behaviour on any input (`#674`).
+/// Returns [`MtxError::InvalidParameter`] for every `n >= 1` (upstream reads
+/// `rowptr(n + 1)`, `#674`); `n = 0` returns `Ok(())` with `a` zeroed.
 pub fn row_sparse_0_based_to_dense(
     n: usize,
     ndim: usize,
@@ -236,10 +237,16 @@ pub fn row_sparse_0_based_to_dense(
     colind: &[usize],
     values: &[f64],
 ) -> Result<(), MtxError> {
-    let _ = (n, ndim, a, nz, rowptr, colind, values);
+    let _ = (nz, rowptr, colind, values);
+    // `a = 0` (`mtx_support.f90:436`) over `a(ndim, n)`; empty when n = 0.
+    let len = ndim.saturating_mul(n).min(a.len());
+    a[..len].fill(0.0);
+    if n == 0 {
+        return Ok(());
+    }
     // Deferred upstream bug #674 (DECISIONS #43): upstream
     // `mtx/private/mtx_support.f90:428-447` reads `rowptr(n+1)` outside
-    // `rowptr(0:n)` on every call with `n >= 1` and indexes `values(nz)` and
+    // `rowptr(0:n)` for every `n >= 1` and indexes `values(nz)` and
     // `a(ndim, n)` with 0-based `k` and `colind(k)`.
     Err(MtxError::InvalidParameter(
         "row_sparse_0_based_to_dense reads out of bounds upstream \

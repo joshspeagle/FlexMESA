@@ -557,6 +557,19 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
         "out-of-tolerance accretion_species_xa sum must error loudly"
     );
 
+    // `num_accretion_species > 250` indexes `accretion_species_id(251)` past
+    // `max_num_accretion_species` (`adjust_xyz.f90:921-927`; deferred #566,
+    // DECISIONS #43): 250 is accepted and 251 errors.
+    model.controls.accretion_species_xa = vec![0.75, 0.25];
+    model.controls.mix_wind.num_accretion_species = 250;
+    get_xa_for_accretion(&model).expect("250 species is in bounds");
+    model.controls.mix_wind.num_accretion_species = 251;
+    match get_xa_for_accretion(&model) {
+        Err(StarError::InvalidInput(msg)) => assert!(msg.contains("#566")),
+        other => panic!("251 species must error with #566, got {other:?}"),
+    }
+    model.controls.mix_wind.num_accretion_species = 2;
+
     // 3. Standard metals (`accretion_zfracs = 3` GS98) and custom (`accretion_zfracs = 0`).
     model.controls.accrete_given_mass_fractions = false;
     model.controls.accretion_h1 = 0.70;

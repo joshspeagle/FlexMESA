@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Window-test planner and manifest generator for ``#684`` W1.
 
-Implements ``.coordination/triage/window-rules.md`` sections 2, 3 and 4.3:
+Implements ``.coordination/triage/window-rules.md`` sections 2, 3, 4.3 and 4.3a:
 
 * **Pass 1 (no clock yet):** reads ``mesa_stage_steps.json`` plus MESA stage
   inlists / ``rn`` scripts (when ``--mesa-dir`` is provided) and reference
@@ -186,6 +186,10 @@ class StagePlanInput:
     expected_initial_z: float | None = None
     expected_mass_msun: float | None = None
     expected_rotation: bool | None = None
+    # Rule 4.3a: net chain of ``extend_net`` when auto_extend_net grows the
+    # net from ``expected_net_name``; empty when it cannot (off, or
+    # ``change_net`` resets the net every step).
+    net_chain: tuple[str, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -555,6 +559,12 @@ def plan_case_stages(
             )
             else None
         )
+        net_chain: tuple[str, ...] = ()
+        if kv.get("auto_extend_net", True) and not kv.get("change_net"):
+            net_chain = tuple(
+                str(kv.get(key, default))
+                for key, default in _NET_CHAIN_DEFAULTS
+            )
         exp_z = (
             float(kv["new_z"])
             if kv.get("change_initial_z") and "new_z" in kv
@@ -579,6 +589,7 @@ def plan_case_stages(
                 has_relax=has_relax,
                 inlist_name=inlist_name,
                 expected_net_name=exp_net,
+                net_chain=net_chain,
                 expected_initial_z=exp_z,
                 expected_rotation=exp_rot,
             )
@@ -817,6 +828,26 @@ def compute_window_w(
     return w, mesa_window_steps, mean_sec
 
 
+# Defaults of h_he_net, co_net and adv_net (star/defaults/star_job.defaults:
+# 2491-2494). ``extend_net`` (star/job/run_star_support.f90:1804-1848) only
+# moves h_he -> co -> adv. Same chain as ``_NET_CHAIN_DEFAULTS`` in
+# scripts/windows/make_window_inlist.py (a test checks they agree).
+_NET_CHAIN_DEFAULTS = (
+    ("h_he_net", "basic.net"),
+    ("co_net", "co_burn.net"),
+    ("adv_net", "approx21.net"),
+)
+
+
+def net_reachable(chain: tuple[str, ...], start: str, target: str) -> bool:
+    """Whether ``extend_net`` can grow ``start`` into ``target`` (Rule 4.3a)."""
+    return (
+        start in chain
+        and target in chain
+        and chain.index(target) > chain.index(start)
+    )
+
+
 def check_rule43(
     hdr: ModHeader, stage_info: StagePlanInput
 ) -> tuple[bool, list[str]]:
@@ -825,6 +856,9 @@ def check_rule43(
     if (
         stage_info.expected_net_name is not None
         and hdr.net_name != stage_info.expected_net_name
+        and not net_reachable(
+            stage_info.net_chain, stage_info.expected_net_name, hdr.net_name
+        )
     ):
         issues.append(
             f"net_name {hdr.net_name!r} != {stage_info.expected_net_name!r}"

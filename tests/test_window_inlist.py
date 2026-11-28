@@ -592,6 +592,87 @@ def test_rule_4_3_all_failed_checks_are_reported_together(
     assert len(info.value.problems) == 3
 
 
+_NET_STAR_JOB = "change_initial_net = .true.\nnew_net_name = 'co_burn.net'"
+
+
+def test_rule_4_3a_extended_net_is_built_with_change_initial_net_off(
+    tmp_path: pathlib.Path,
+) -> None:
+    """co_burn.net grown to approx21.net by auto_extend_net is accepted."""
+    built = _build(
+        tmp_path,
+        star_job=_NET_STAR_JOB,
+        win=_window(net_name="approx21.net"),
+    )
+    assert _get(built, "star_job", "change_initial_net") == [False]
+    assert _get(built, "star_job", "new_net_name") == ["co_burn.net"]
+    assert _get(built, "star_job", "auto_extend_net") == []
+    assert _diff_rules(built, "change_initial_net") == ["4.3a"]
+
+
+def test_rule_4_3a_explicit_auto_extend_net_on_is_kept(
+    tmp_path: pathlib.Path,
+) -> None:
+    """An explicit ``auto_extend_net = .true.`` stays on."""
+    built = _build(
+        tmp_path,
+        star_job=_NET_STAR_JOB + "\nauto_extend_net = .true.",
+        win=_window(net_name="approx21.net"),
+    )
+    assert _get(built, "star_job", "auto_extend_net") == [True]
+    assert _get(built, "star_job", "change_initial_net") == [False]
+
+
+def test_rule_4_3a_auto_extend_net_off_still_fails(
+    tmp_path: pathlib.Path,
+) -> None:
+    """With auto_extend_net off, a net mismatch is a Rule 4.3 failure."""
+    with pytest.raises(mw.SnapshotMismatchError, match=r"approx21\.net"):
+        _build(
+            tmp_path,
+            star_job=_NET_STAR_JOB + "\nauto_extend_net = .false.",
+            win=_window(net_name="approx21.net"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("new_net", "hdr_net"),
+    [
+        ("approx21.net", "co_burn.net"),  # extend_net never shrinks
+        ("co_burn.net", "other.net"),  # not on the chain
+        ("other.net", "approx21.net"),  # start not on the chain
+    ],
+)
+def test_rule_4_3a_unreachable_net_still_fails(
+    tmp_path: pathlib.Path, new_net: str, hdr_net: str
+) -> None:
+    """Only growth along h_he_net -> co_net -> adv_net is accepted."""
+    with pytest.raises(mw.SnapshotMismatchError):
+        _build(
+            tmp_path,
+            star_job=(
+                f"change_initial_net = .true.\nnew_net_name = '{new_net}'"
+            ),
+            win=_window(net_name=hdr_net),
+        )
+
+
+def test_rule_4_3a_chain_follows_stage_net_names(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A stage that renames co_net and adv_net moves the chain with it."""
+    built = _build(
+        tmp_path,
+        star_job=(
+            "change_initial_net = .true.\nnew_net_name = 'mine.net'\n"
+            "h_he_net = 'mine.net'\nco_net = 'mid.net'\n"
+            "adv_net = 'big.net'"
+        ),
+        win=_window(net_name="big.net"),
+    )
+    assert _get(built, "star_job", "change_initial_net") == [False]
+
+
 # ------------------------------------------------------------------- rule 4.4
 
 

@@ -7,9 +7,9 @@
 
 [metadata]
 schema = "windows_e2e_v1"
-window_count = 339
+window_count = 341
 skipped_case_count = 4
-not_built_window_count = 2
+not_built_window_count = 0
 short_stage_max_models = 60
 target_wall_sec = 60
 min_w = 20
@@ -42,26 +42,6 @@ reason = "window not built (no MESA stage steps)"
 suite = "star"
 case = "rsp_check_2nd_crossing"
 reason = "window not built (no MESA stage steps)"
-
-[[windows_not_built]]
-id = "wd_he_shell_ignition_s1_m884"
-suite = "star"
-case = "wd_he_shell_ignition"
-stage = 1
-start_model = 884
-snapshot_file = "wd_he_shell_ignition_1_884.mod"
-snapshot_sha256 = "393bb68eef9b9981350c9093ef47c05dc8265fa5931510dcf95d1dd8f674393e"
-reason = "window not built (Rule 4.3: net_name 'approx21.net' != 'co_burn.net')"
-
-[[windows_not_built]]
-id = "wd_he_shell_ignition_s1_m1056"
-suite = "star"
-case = "wd_he_shell_ignition"
-stage = 1
-start_model = 1056
-snapshot_file = "wd_he_shell_ignition_1_1056.mod"
-snapshot_sha256 = "7752b16748fa9113dca44b49c4b0fa2055a3135602475604e40c8170bbb0acd9"
-reason = "window not built (Rule 4.3: net_name 'approx21.net' != 'co_burn.net')"
 
 [[windows]]
 id = "1.3M_ms_high_Z_s1_m1"
@@ -7811,6 +7791,54 @@ prev_model = true
 no_prev_model = false
 net_name = "co_burn.net"
 mass_msun = 9.58922532881064993e-01
+initial_z = 2.00000000000000004e-02
+rotation_flag = false
+rule43_ok = true
+
+[[windows]]
+id = "wd_he_shell_ignition_s1_m884"
+suite = "star"
+case = "wd_he_shell_ignition"
+stage = 1
+point_kind = "frac_75"
+seed = 3036232209
+stage_m_first = 1
+stage_m_last = 1112
+start_model = 884
+window_w = 113
+mesa_window_steps = 113
+mesa_stop_reason = "power_he_burn_upper_limit"
+mean_step_sec = 0.532319
+snapshot_file = "wd_he_shell_ignition_1_884.mod"
+snapshot_sha256 = "393bb68eef9b9981350c9093ef47c05dc8265fa5931510dcf95d1dd8f674393e"
+prev_model = true
+no_prev_model = false
+net_name = "approx21.net"
+mass_msun = 1.34628082206267474e+00
+initial_z = 2.00000000000000004e-02
+rotation_flag = false
+rule43_ok = true
+
+[[windows]]
+id = "wd_he_shell_ignition_s1_m1056"
+suite = "star"
+case = "wd_he_shell_ignition"
+stage = 1
+point_kind = "tail_95"
+seed = 3036232209
+stage_m_first = 1
+stage_m_last = 1112
+start_model = 1056
+window_w = 54
+mesa_window_steps = 54
+mesa_stop_reason = "power_he_burn_upper_limit"
+mean_step_sec = 1.118007
+snapshot_file = "wd_he_shell_ignition_1_1056.mod"
+snapshot_sha256 = "7752b16748fa9113dca44b49c4b0fa2055a3135602475604e40c8170bbb0acd9"
+prev_model = true
+no_prev_model = false
+net_name = "approx21.net"
+mass_msun = 1.35819581577569926e+00
 initial_z = 2.00000000000000004e-02
 rotation_flag = false
 rule43_ok = true

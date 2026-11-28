@@ -346,7 +346,9 @@ def test_rule43_net_mismatch_records_window_not_built_instead_of_aborting(
         case: str, steps: list[int], mesa_dir: pathlib.Path | None
     ) -> list[object]:
         return [
-            pw.dataclasses.replace(st, expected_net_name="co_burn.net")
+            pw.dataclasses.replace(
+                st, expected_net_name="co_burn.net", net_chain=()
+            )
             for st in original(case, steps, mesa_dir)
         ]
 
@@ -364,3 +366,62 @@ def test_rule43_net_mismatch_records_window_not_built_instead_of_aborting(
     parsed = pw.tomllib.loads(text)
     assert parsed["metadata"]["not_built_window_count"] == 1
     assert parsed["windows_not_built"][0]["snapshot_file"] == "netcase_1_1.mod"
+
+
+_CHAIN = ("basic.net", "co_burn.net", "approx21.net")
+
+
+def test_rule43a_reachable_net_passes_check() -> None:
+    """co_burn.net -> approx21.net with auto_extend_net on is accepted."""
+    st = pw.StagePlanInput(
+        case="star/x",
+        stage=1,
+        m_first=1,
+        m_last=30,
+        stage_len=30,
+        loads_prev_stage_cleanly=False,
+        has_relax=False,
+        inlist_name="inlist",
+        expected_net_name="co_burn.net",
+        net_chain=_CHAIN,
+    )
+    hdr = pw.ModHeader(
+        file_type=4,
+        prev_model=False,
+        v_flag=False,
+        u_flag=False,
+        rotation_flag=False,
+        rti_flag=False,
+        version_number="r26.4.1",
+        mass_msun=1.0,
+        model_number=1,
+        star_age=0.0,
+        initial_z=0.02,
+        n_shells=100,
+        net_name="approx21.net",
+        species=21,
+        sha256="0" * 64,
+    )
+    assert pw.check_rule43(hdr, st) == (True, [])
+    off = pw.dataclasses.replace(st, net_chain=())
+    ok, issues = pw.check_rule43(hdr, off)
+    assert not ok and "net_name 'approx21.net'" in issues[0]
+    back = pw.dataclasses.replace(st, expected_net_name="approx21.net")
+    shrunk = pw.dataclasses.replace(hdr, net_name="co_burn.net")
+    ok, _ = pw.check_rule43(shrunk, back)
+    assert not ok
+    ok, _ = pw.check_rule43(pw.dataclasses.replace(hdr, net_name="x.net"), st)
+    assert not ok
+
+
+def test_rule43a_chain_is_the_same_in_both_scripts() -> None:
+    """The planner and the W2 constructor define one net chain."""
+    import importlib.util
+
+    path = REPO / "scripts" / "windows" / "make_window_inlist.py"
+    spec = importlib.util.spec_from_file_location("mw_chain", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["mw_chain"] = mod
+    spec.loader.exec_module(mod)
+    assert pw._NET_CHAIN_DEFAULTS == mod._NET_CHAIN_DEFAULTS

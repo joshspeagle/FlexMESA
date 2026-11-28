@@ -38,6 +38,7 @@ on:
         default: false
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -54,9 +55,40 @@ env:
   FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
 
 jobs:
+  decide:
+    name: Decide Whether the Nightly Campaign Needs to Run
+    # DECISIONS #81: the full campaign no longer gates merges. On the daily
+    # schedule it runs only when `main` has moved since the previous
+    # scheduled run, so a day without merges spends no runner time. Manual
+    # dispatches (a train or a branch campaign) always run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Compare main with the commit the previous scheduled run measured
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREV=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/campaign.yml/runs?event=schedule&branch=${{ github.ref_name }}&per_page=20" \
+            --jq '[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.conclusion != "cancelled")][0].head_sha // empty')
+          if [ -n "$PREV" ] && [ "$PREV" = "${{ github.sha }}" ]; then
+            echo "main is still at $PREV, which the previous scheduled run measured; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved (${PREV:-none} -> ${{ github.sha }}); running the campaign."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
   known-gaps-and-hex-gates:
     name: Bijective Known-Gaps & Level-2 Module Hex Gates
-    if: ${{ !inputs.harness_only }}
+    needs: decide
+    if: ${{ needs.decide.outputs.run == 'true' && !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -119,6 +151,8 @@ jobs:
   # jobs.
   full-history-harness-plan:
     name: Plan Full-Harness Shards
+    needs: decide
+    if: ${{ needs.decide.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -210,6 +244,8 @@ jobs:
     if: always() && needs.full-history-harness-shard.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      improvement: ${{ steps.merge.outputs.improvement }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -229,6 +265,7 @@ jobs:
           path: ${{ runner.temp }}/campaign-shards
 
       - name: Merge shards into one case table and baseline candidate, then gate
+        id: merge
         env:
           SHORT_BUDGET: ${{ inputs.short_budget_sec || '' }}
         run: |
@@ -249,7 +286,16 @@ jobs:
             --markdown-out "$OUT_DIR/case_table.md" \
             --json-out "$OUT_DIR/case_table.json" \
             "${CANDIDATE_ARGS[@]}" \
-            --gate
+            --stale-gap-status 3 \
+            --gate || rc=$?
+          # DECISIONS #81: status 3 means the only finding is declared gaps
+          # that now pass. That is an improvement, so the job stays green and
+          # the report asks for a rebaseline instead of a regression alert.
+          if [ "${rc:-0}" -eq 3 ]; then
+            echo "improvement=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "${rc:-0}"
 
       - name: Upload full campaign harness artifacts
         if: always()
@@ -262,9 +308,12 @@ jobs:
 
   rust-ignored-campaign:
     name: Rust --ignored Suite & Anti-Stale-Gap Gate
-    if: ${{ !inputs.harness_only }}
+    needs: decide
+    if: ${{ needs.decide.outputs.run == 'true' && !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    outputs:
+      improvement: ${{ steps.ignored.outputs.improvement }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -280,6 +329,7 @@ jobs:
         run: cargo test --workspace --exclude flexmesa-py --release --no-run
 
       - name: Run Rust --ignored tests and gate outcomes
+        id: ignored
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -304,7 +354,15 @@ jobs:
             --cargo-ignored-log "$LOG_DIR/eos_ignored.log" \
             --cargo-ignored-log "$LOG_DIR/campaign_ignored.log" \
             --markdown-out "$LOG_DIR/ignored_gate.md" \
-            --json-out "$LOG_DIR/ignored_gate.json"
+            --json-out "$LOG_DIR/ignored_gate.json" \
+            --stale-gap-status 3 || rc=$?
+          # Status 3: the only finding is ignored tests that now pass, an
+          # improvement that asks for a ledger update (DECISIONS #81).
+          if [ "${rc:-0}" -eq 3 ]; then
+            echo "improvement=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "${rc:-0}"
 
       - name: Upload Rust --ignored logs and gate report
         if: always()
@@ -317,7 +375,8 @@ jobs:
 
   strict-determinism-uncapped:
     name: Uncapped Strict Determinism (${{ matrix.os }})
-    if: ${{ !inputs.harness_only }}
+    needs: decide
+    if: ${{ needs.decide.outputs.run == 'true' && !inputs.harness_only }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -381,7 +440,8 @@ jobs:
   # 26.4.1 is tracked in #146.
   fortran-harness-check:
     name: Tap Build & Fortran Make-Plan Check (no MESA build)
-    if: ${{ !inputs.harness_only }}
+    needs: decide
+    if: ${{ needs.decide.outputs.run == 'true' && !inputs.harness_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -431,7 +491,8 @@ jobs:
       - strict-determinism-uncapped
       - strict-determinism-cross-arch
       - fortran-harness-check
-    if: always()
+      - decide
+    if: always() && needs.decide.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -454,6 +515,37 @@ jobs:
             echo "| \`strict-determinism-cross-arch\` | \`${{ needs.strict-determinism-cross-arch.result }}\` |"
             echo "| \`fortran-harness-check\` | \`${{ needs.fortran-harness-check.result }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ask for a rebaseline when the campaign only found improvements
+        if: >-
+          always() && github.event_name == 'schedule' &&
+          (needs.full-history-harness.outputs.improvement == 'true' ||
+           needs.rust-ignored-campaign.outputs.improvement == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TITLE_PREFIX="[Campaign] Rebaseline needed"
+          BODY=$(cat <<EOF
+          The nightly campaign on \`${{ github.ref_name }}\` (${{ github.sha }}) found declared known gaps or ignored tests that now pass, and nothing that got worse.
+
+          - Run: ${RUN_URL}
+          - Rebaseline from the run's \`campaign-history-harness-artifacts\` (baseline candidate and case table), and remove the stale gaps from \`known_gaps.toml\`.
+
+          ---
+          _Automated report from Scheduled Verification Campaign._
+          EOF
+          )
+          OPEN_ISSUE=$(gh issue list --repo "${{ github.repository }}" \
+            --state open --search "${TITLE_PREFIX} in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$OPEN_ISSUE" ]; then
+            gh issue comment "$OPEN_ISSUE" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" \
+              --title "${TITLE_PREFIX} ($(date -u +%Y-%m-%d))" \
+              --body "$BODY"
+          fi
 
       - name: Open or comment regression alert on scheduled failure
         # Any result other than success raises the alert: a cancelled

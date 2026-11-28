@@ -21,6 +21,7 @@ from flexmesa.testing import (
     case_report,
     harness_runner,
     history_compare,
+    trace_cli,
 )
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -1935,3 +1936,34 @@ def test_compare_histories_sparse_reference_is_judged_only_at_its_rows(
     )
     assert bad.failed_track_columns == ("log_L",)
     assert bad.first_diverging_step == 21
+
+
+@pytest.mark.parametrize(
+    ("undeclared", "stale", "regressions", "problems", "expected"),
+    [
+        ([], [], False, False, 0),
+        ([], ["star/a"], False, False, 3),
+        (["star/b"], ["star/a"], False, False, 1),
+        ([], ["star/a"], True, False, 1),
+        ([], ["star/a"], False, True, 1),
+        ([], [], True, False, 1),
+    ],
+)
+def test_gate_status_reports_stale_gaps_alone_with_their_own_status(
+    undeclared: list[str],
+    stale: list[str],
+    regressions: bool,
+    problems: bool,
+    expected: int,
+) -> None:
+    """A stale-gaps-only result maps to --stale-gap-status (DECISIONS #81)."""
+    summary = {"undeclared_failures": undeclared, "stale_known_gaps": stale}
+    assert (
+        trace_cli.gate_status(
+            summary,
+            has_regressions=regressions,
+            has_problems=problems,
+            stale_gap_status=3,
+        )
+        == expected
+    )

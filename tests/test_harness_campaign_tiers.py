@@ -13,8 +13,10 @@ import pytest
 
 from flexmesa.testing import (
     baseline_regression,
+    case_budgets,
     case_manifest,
     case_report,
+    harness_budgets,
     harness_runner,
     harness_shards,
     history_compare,
@@ -507,3 +509,24 @@ def test_harness_merge_of_baseline_shards_reproduces_the_baseline(
         )
         == 1
     )
+
+
+def test_canary_preset_is_the_passing_cases_within_the_projected_limit() -> (
+    None
+):
+    """'canary' selects exactly the baseline passes projected <= the limit.
+
+    DECISIONS #81 (T1): a train PR re-runs these cases uncapped.
+    """
+    manifest = case_manifest.load_case_manifest()
+    _, _, base = case_report.build_manifest_inventory_records()
+    passing = harness_budgets.passing_keys(base)
+    projected = case_budgets.load_projected_times(case_budgets.default_path())
+    for limit in (300.0, 600.0):
+        selected = trace_cli._select_entries(
+            manifest, "canary", None, passing, projected, limit
+        )
+        keys = {e.key for e in selected}
+        expected = {k for k in passing if projected.get(k, 1e300) <= limit}
+        assert keys == expected
+        assert keys, "the canary must not be empty"

@@ -87,12 +87,13 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
 | 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
-| 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
+| 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force; merge gate replaced by decision 81 | below |
 | 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
 | 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
 | 78 | When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`) | In force | below |
 | 79 | A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`) | In force | below |
+| 81 | Tiered Testing: Trains Merge on Per-Push CI and a Canary; the Full Campaign Runs Nightly When `main` Moved (`#682`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -1049,3 +1050,19 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keeping the code-edit rule*: the raise then waits for an unrelated code change, or invites no-op edits that satisfy the gate while hiding the actual evidence.
   - *Allowing mapping-only raises up to `ported_unverified`*: that tier claims the whole public interface of the file is ported, which a sampled review cannot establish file by file.
 - **Note**: the first record is the `#610b` review (`notes/audit/routine_map_reviews/610b.md`); its `files` list stays empty until the corrected maps are converted.
+
+## DECISIONS #81: Tiered Testing: Trains Merge on Per-Push CI and a Canary; the Full Campaign Runs Nightly When `main` Moved (`#682`)
+
+- **Date**: 2026-11-28 (project lead)
+- **Decision**:
+  - **T0** (every push and pull request): `ci.yml`. Strict determinism compares 1 and 4 threads on Linux. A pull request whose changes are only Rust library source (`crates/<crate>/src/`, not the PyO3 bridge), Rust tests or docs skips the Python, PyO3 and JAX suites; one that changes a Python test runs them. Rust code reaches Python through the bridge, so such a pull request can break a Python test. The trade-off: that break is caught on the train pull request (T1, which runs every group) and on `main`, not on the component's own pull request (project lead, decision 4 of the 2026-11-28 review).
+  - **T1** (train pull requests, head branch `train-*`, and manual runs): T0, plus macOS bit-identity, plus the canary. The canary (`harness run --preset canary`) is the cases whose committed baseline verdict is pass and whose projected wall time in `case_budgets.toml` is at most 600 s. They run uncapped in 8 shards with step counts enforced and the baseline gate. A train merges on T1.
+  - **T2** (nightly on `main`): the full strict campaign (`campaign.yml`). It runs on the schedule only when `main` has moved since the previous scheduled run, and never gates a merge.
+    - A real failure opens or updates the regression alert: an undeclared failure, a regression against the baseline, an incomplete shard set, or an ignored test that fails unexpectedly.
+    - A run whose only findings are improvements (declared gaps or ignored tests that now pass) exits 3, stays green, and opens a "Rebaseline needed" issue.
+  - The baseline, the gap ledger and the generated case table are regenerated from a T2 run, in a follow-up pull request. The definition of a pass is unchanged: only a full uncapped campaign reports passes, and T0 and T1 never do.
+- **Why**: a train waited more than two hours for the full campaign. A handful of cases run three to five hours each, up to their budget, so no sharding shortens it. Meanwhile the nightly campaign was red on four of five nights (2026-11-23 to 27) only because cases had improved without the ledger being updated, so its alert carried no information.
+- **Alternatives Rejected**:
+  - *Keep the full campaign as the train gate (`DECISIONS #73`)*: it serialises development on the slowest cases.
+  - *A nightly campaign every day regardless of changes*: it spends runner time on an unchanged `main`.
+  - *Treat stale gaps as success*: an improvement must still update the ledger, so it is reported, but not as a regression.

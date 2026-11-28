@@ -12,15 +12,18 @@
 //!
 //! # Contents
 //!
-//! - [`dlangb`] (`SRC/dlangb.f`): norm of a general band matrix.
-//! - [`dgbcon`] (`SRC/dgbcon.f`): reciprocal condition number from the band
-//!   LU factors, calling [`dlatbs`], [`drscl`] and `DLACN2`
+//! - [`dlangb()`] (`SRC/dlangb.f`): norm of a general band matrix.
+//! - [`dgbcon()`] (`SRC/dgbcon.f`): reciprocal condition number from the band
+//!   LU factors, calling [`dlatbs()`], [`drscl()`] and `DLACN2`
 //!   ([`crate::lapack::aux::dlacn2`], already a one-to-one transcription of
 //!   `SRC/dlacn2.f`, re-checked against it for this part).
-//! - [`dlatbs`] (`SRC/dlatbs.f`): scaled banded triangular solve.
-//! - [`drscl`] (`SRC/drscl.f`): `x := x / sa` without overflow.
-//! - [`dtbsv`] (`BLAS/SRC/dtbsv.f`): banded triangular solve, needed by
+//! - [`dlatbs()`] (`SRC/dlatbs.f`): scaled banded triangular solve.
+//! - [`drscl()`] (`SRC/drscl.f`): `x := x / sa` without overflow.
+//! - [`dtbsv()`] (`BLAS/SRC/dtbsv.f`): banded triangular solve, needed by
 //!   `DLATBS`.
+//! - [`dgbmv()`] (`BLAS/SRC/dgbmv.f`), [`dgbrfs()`] (`SRC/dgbrfs.f`) and
+//!   [`dlantb()`] (`SRC/dlantb.f`), and [`dgbsvx_fact_n()`], the
+//!   `DGBSVX(FACT = 'N')` sequence (`SRC/dgbsvx.f`) built from them.
 //!
 //! `DGBTRF`/`DGBTRS` stay in [`crate::band`]; they are not duplicated here.
 //!
@@ -31,6 +34,8 @@
 //! element. `IPIV` is passed 1-based, as `DGBTRF` returns it. Where the
 //! Fortran calls `XERBLA`, the routine returns
 //! [`LapackError::IllegalArgument`] with the same negative `INFO`.
+//!
+//! [`LapackError::IllegalArgument`]: crate::lapack::LapackError::IllegalArgument
 
 #![allow(
     clippy::cast_possible_wrap,
@@ -44,13 +49,21 @@
 )]
 
 pub mod dgbcon;
+pub mod dgbmv;
+pub mod dgbrfs;
+pub mod dgbsvx;
 pub mod dlangb;
+pub mod dlantb;
 pub mod dlatbs;
 pub mod drscl;
 pub mod dtbsv;
 
 pub use dgbcon::dgbcon;
+pub use dgbmv::dgbmv;
+pub use dgbrfs::{dgbrfs, Refinement};
+pub use dgbsvx::{dgbsvx_fact_n, DgbsvxSolution};
 pub use dlangb::dlangb;
+pub use dlantb::dlantb;
 pub use dlatbs::dlatbs;
 pub use drscl::drscl;
 pub use dtbsv::dtbsv;

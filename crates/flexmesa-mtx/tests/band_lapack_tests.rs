@@ -21,9 +21,14 @@
     clippy::too_many_lines
 )]
 
-use flexmesa_mtx::band_lapack::{dgbcon, dlangb, dlatbs, drscl, dtbsv};
-use flexmesa_mtx::dgbtrf;
+use flexmesa_mtx::band_lapack::{
+    dgbcon, dgbmv, dgbrfs, dgbsvx_fact_n, dlangb, dlantb, dlatbs, drscl, dtbsv,
+    Refinement,
+};
 use flexmesa_mtx::lapack::{dlamch, ix, LapackError};
+use flexmesa_mtx::{
+    dgbsvx_banded_from_bands, dgbsvx_block_tridiagonal, dgbtrf, MtxError,
+};
 
 /// Column-major `AB(ldab, n)` from `(i, j, value)` triples; unlisted
 /// entries hold `fill`.
@@ -633,4 +638,417 @@ fn dgbcon_brackets_the_exact_condition_number_for_banded_lu_factors() {
             );
         }
     }
+}
+
+// ----------------------------------------------------------------- dgbmv
+
+#[test]
+fn dgbmv_matches_hand_products_for_both_transposes_and_strides() {
+    // A = [[1,-2,0],[3,4,-5],[0,6,7]], x = [1,2,3]:
+    // A x = [1-4, 3+8-15, 12+21] = [-3,-4,33].
+    let a = dlangb_matrix();
+    let x = [1.0, 2.0, 3.0];
+    // y = 3*y + 2*A x with y = [1,1,1]: [3-6, 3-8, 3+66].
+    let mut y = [1.0, 1.0, 1.0];
+    dgbmv(b'N', 3, 3, 1, 1, 2.0, &a, 3, &x, 1, 3.0, &mut y, 1).unwrap();
+    assert_eq!(y, [-3.0, -5.0, 69.0]);
+    // A^T x = [1+6, -2+8+18, -10+21] = [7,24,11] (beta = 0 overwrites y).
+    let mut yt = [99.0, 99.0, 99.0];
+    dgbmv(b'T', 3, 3, 1, 1, 1.0, &a, 3, &x, 1, 0.0, &mut yt, 1).unwrap();
+    assert_eq!(yt, [7.0, 24.0, 11.0]);
+    // Strided x (2) and y (3), same product A x.
+    let xs = [1.0, -7.0, 2.0, -7.0, 3.0];
+    let mut ys = [0.0, 8.0, 8.0, 0.0, 8.0, 8.0, 0.0];
+    dgbmv(b'N', 3, 3, 1, 1, 1.0, &a, 3, &xs, 2, 0.0, &mut ys, 3).unwrap();
+    assert_eq!(ys, [-3.0, 8.0, 8.0, -4.0, 8.0, 8.0, 33.0]);
+    let mut yts = [0.0, 8.0, 0.0, 8.0, 0.0];
+    dgbmv(b'T', 3, 3, 1, 1, 1.0, &a, 3, &xs, 2, 0.0, &mut yts, 2).unwrap();
+    assert_eq!(yts, [7.0, 8.0, 24.0, 8.0, 11.0]);
+}
+
+#[test]
+fn dgbmv_rectangular_quick_returns_and_argument_errors() {
+    // A = [[1,2,0],[0,3,4]] (m = 2, n = 3, kl = 0, ku = 1).
+    let a = band(
+        2,
+        3,
+        1.0e300,
+        &[(2, 1, 1.0), (1, 2, 2.0), (2, 2, 3.0), (1, 3, 4.0)],
+    );
+    let mut y = [0.0; 2];
+    dgbmv(b'N', 2, 3, 0, 1, 1.0, &a, 2, &[1.0; 3], 1, 0.0, &mut y, 1).unwrap();
+    assert_eq!(y, [3.0, 7.0]);
+    let mut yt = [0.0; 3];
+    dgbmv(b'T', 2, 3, 0, 1, 1.0, &a, 2, &[1.0; 2], 1, 0.0, &mut yt, 1).unwrap();
+    assert_eq!(yt, [1.0, 5.0, 4.0]);
+    // alpha = 0, beta = 1 returns without touching y; alpha = 0 scales only.
+    let mut keep = [5.0, 6.0];
+    dgbmv(
+        b'N', 2, 3, 0, 1, 0.0, &a, 2, &[1.0; 3], 1, 1.0, &mut keep, 1,
+    )
+    .unwrap();
+    assert_eq!(keep, [5.0, 6.0]);
+    dgbmv(
+        b'N', 2, 3, 0, 1, 0.0, &a, 2, &[1.0; 3], 1, 2.0, &mut keep, 1,
+    )
+    .unwrap();
+    assert_eq!(keep, [10.0, 12.0]);
+    let e = |info| {
+        Err(LapackError::IllegalArgument {
+            routine: "DGBMV",
+            info,
+        })
+    };
+    let x = [1.0; 3];
+    assert_eq!(
+        dgbmv(b'X', 2, 3, 0, 1, 1.0, &a, 2, &x, 1, 0.0, &mut y, 1),
+        e(1)
+    );
+    assert_eq!(
+        dgbmv(b'N', 2, 3, 0, 1, 1.0, &a, 1, &x, 1, 0.0, &mut y, 1),
+        e(8)
+    );
+    assert_eq!(
+        dgbmv(b'N', 2, 3, 0, 1, 1.0, &a, 2, &x, 0, 0.0, &mut y, 1),
+        e(10)
+    );
+    assert_eq!(
+        dgbmv(b'N', 2, 3, 0, 1, 1.0, &a, 2, &x, 1, 0.0, &mut y, 0),
+        e(13)
+    );
+}
+
+// ----------------------------------------------------------------- dlantb
+
+#[test]
+fn dlantb_norms_match_hand_values_for_upper_and_lower_triangles() {
+    let mut work = vec![0.0; 3];
+    // Upper U = [[2,1,0],[0,4,1],[0,0,5]], k = 1 (poisoned unused corner).
+    let u = upper3();
+    let mut n = |norm, uplo, diag, a: &[f64]| {
+        dlantb(norm, uplo, diag, 3, 1, a, 2, &mut work).unwrap()
+    };
+    assert_eq!(n(b'M', b'U', b'N', &u), 5.0);
+    assert_eq!(n(b'M', b'U', b'U', &u), 1.0); // unit diagonal: max(1, |off|)
+    assert_eq!(n(b'1', b'U', b'N', &u), 6.0); // columns 2, 5, 6
+    assert_eq!(n(b'1', b'U', b'U', &u), 2.0); // 1, 1+1, 1+1
+    assert_eq!(n(b'I', b'U', b'N', &u), 5.0); // rows 3, 5, 5
+    assert_eq!(n(b'I', b'U', b'U', &u), 2.0); // rows 1+1, 1+1, 1
+                                              // Lower L = [[2,0,0],[1,4,0],[0,1,5]].
+    let l = lower3();
+    assert_eq!(n(b'M', b'L', b'N', &l), 5.0);
+    assert_eq!(n(b'1', b'L', b'N', &l), 5.0); // columns 3, 5, 5
+    assert_eq!(n(b'I', b'L', b'N', &l), 6.0); // rows 2, 5, 6
+    assert_eq!(n(b'1', b'L', b'U', &l), 2.0); // 1+1, 1+1, 1
+    assert_eq!(n(b'I', b'L', b'U', &l), 2.0); // rows 1, 1+1, 1+1
+    assert_eq!(n(b'M', b'L', b'U', &l), 1.0);
+}
+
+#[test]
+fn dlantb_empty_nan_and_unsupported_norms() {
+    let mut work = vec![0.0; 3];
+    assert_eq!(dlantb(b'M', b'U', b'N', 0, 1, &[], 2, &mut work), Ok(0.0));
+    let mut u = upper3();
+    u[ix(2, 2, 2)] = f64::NAN;
+    assert!(dlantb(b'M', b'U', b'N', 3, 1, &u, 2, &mut work)
+        .unwrap()
+        .is_nan());
+    assert_eq!(
+        dlantb(b'F', b'U', b'N', 3, 1, &upper3(), 2, &mut work),
+        Err(LapackError::UnportedPath {
+            routine: "DLANTB",
+            lines: "308-351"
+        })
+    );
+    assert_eq!(
+        dlantb(b'Z', b'U', b'N', 3, 1, &upper3(), 2, &mut work),
+        Err(LapackError::IllegalArgument {
+            routine: "DLANTB",
+            info: -1
+        })
+    );
+}
+
+// ----------------------------------------------------------------- dgbrfs
+
+/// `inv(A)` and `inv(A)^T` of `A = [[1,2],[4,6]]` as `DGBTRS` stand-ins.
+#[allow(clippy::unnecessary_wraps)]
+fn solve_2x2(tr: u8, v: &mut [f64]) -> Result<(), LapackError> {
+    let (a, b) = (v[0], v[1]);
+    if tr == b'N' {
+        v[0] = -3.0 * a + b;
+        v[1] = 2.0 * a - 0.5 * b;
+    } else {
+        v[0] = -3.0 * a + 2.0 * b;
+        v[1] = a - 0.5 * b;
+    }
+    Ok(())
+}
+
+#[test]
+fn dgbrfs_exact_solution_has_zero_backward_error_and_eps_sized_ferr() {
+    // A = diag(2,4,8), exact x = [1,1,1]: residual 0, berr 0. With NZ =
+    // min(kl+ku+2, n+1) = 2 the weights are NZ*eps*(|b|+|A||x|), so
+    // ||inv(A) diag(W)||_1 = 2*NZ*eps = 4*eps and ferr = 4*eps / 1.
+    let ab = [2.0, 4.0, 8.0];
+    let b = [2.0, 4.0, 8.0];
+    let mut x = [1.0, 1.0, 1.0];
+    let mut solve = |_tr: u8, v: &mut [f64]| -> Result<(), LapackError> {
+        v[0] /= 2.0;
+        v[1] /= 4.0;
+        v[2] /= 8.0;
+        Ok(())
+    };
+    let r = dgbrfs(b'N', 3, 0, 0, &ab, 1, &b, &mut x, &mut solve).unwrap();
+    assert_eq!(r.berr, 0.0);
+    assert_eq!(x, [1.0, 1.0, 1.0]);
+    let four_eps = 4.0 * dlamch::EPS;
+    assert!((r.ferr - four_eps).abs() <= 1e-14 * four_eps, "{}", r.ferr);
+}
+
+#[test]
+fn dgbrfs_one_refinement_step_recovers_the_exact_solution() {
+    // x0 = [1.5,1,1] for diag(2,4,8) x = [2,4,8]: r = [-1,0,0],
+    // berr = max(1/(2+3), 0, 0) = 0.2 > eps; the step adds inv(A) r =
+    // [-0.5,0,0], so x = [1,1,1] and the second residual is 0.
+    let ab = [2.0, 4.0, 8.0];
+    let b = [2.0, 4.0, 8.0];
+    let mut x = [1.5, 1.0, 1.0];
+    let mut calls = Vec::new();
+    let mut solve = |tr: u8, v: &mut [f64]| -> Result<(), LapackError> {
+        calls.push(tr);
+        v[0] /= 2.0;
+        v[1] /= 4.0;
+        v[2] /= 8.0;
+        Ok(())
+    };
+    let r = dgbrfs(b'N', 3, 0, 0, &ab, 1, &b, &mut x, &mut solve).unwrap();
+    assert_eq!(x, [1.0, 1.0, 1.0]);
+    assert_eq!(r.berr, 0.0);
+    assert_eq!(calls[0], b'N', "the refinement solve uses TRANS");
+}
+
+#[test]
+fn dgbrfs_transposed_refinement_uses_the_transposed_matrix() {
+    // A = [[1,2],[4,6]] band (kl = ku = 1), solve A^T x = [9,14], exact
+    // x = [1,2]. x0 = [1.5,2]: r = [-0.5,-1], inv(A^T) r = [-0.5,0].
+    let ab = band(
+        3,
+        2,
+        0.0,
+        &[(2, 1, 1.0), (3, 1, 4.0), (1, 2, 2.0), (2, 2, 6.0)],
+    );
+    let b = [9.0, 14.0];
+    let mut x = [1.5, 2.0];
+    let mut solve = solve_2x2;
+    let r = dgbrfs(b'T', 2, 1, 1, &ab, 3, &b, &mut x, &mut solve).unwrap();
+    assert_eq!(x, [1.0, 2.0]);
+    assert_eq!(r.berr, 0.0);
+}
+
+#[test]
+fn dgbrfs_argument_errors_and_empty_system() {
+    let mut solve = solve_2x2;
+    let mut x: [f64; 0] = [];
+    let r = dgbrfs(b'N', 0, 0, 0, &[], 1, &[], &mut x, &mut solve).unwrap();
+    assert_eq!((r.ferr, r.berr), (0.0, 0.0));
+    let mut x2 = [0.0; 2];
+    let e: Result<Refinement, LapackError> =
+        dgbrfs(b'X', 2, 1, 1, &[0.0; 6], 3, &[0.0; 2], &mut x2, &mut solve);
+    assert_eq!(
+        e,
+        Err(LapackError::IllegalArgument {
+            routine: "DGBRFS",
+            info: -1
+        })
+    );
+    let e: Result<Refinement, LapackError> =
+        dgbrfs(b'N', 2, 1, 1, &[0.0; 6], 2, &[0.0; 2], &mut x2, &mut solve);
+    assert_eq!(
+        e,
+        Err(LapackError::IllegalArgument {
+            routine: "DGBRFS",
+            info: -7
+        })
+    );
+}
+
+// ------------------------------------------------------------ dgbsvx FACT=N
+
+/// `A = [[1,2],[4,6]]`, `kl = ku = 1`, plain band storage `LDAB = 3`.
+fn pivoted_2x2_ab() -> Vec<f64> {
+    band(
+        3,
+        2,
+        0.0,
+        &[(2, 1, 1.0), (3, 1, 4.0), (1, 2, 2.0), (2, 2, 6.0)],
+    )
+}
+
+#[test]
+fn dgbsvx_fact_n_solves_a_pivoted_system_exactly_and_estimates_rcond() {
+    // b = A*[3,-1] = [1,6]; P A = L U with L21 = 1/4, U = [[4,6],[0,1/2]].
+    // ||A||_1 = 8 and ||inv(A)||_1 = 5 (DLACN2 reaches it, see the DGBCON
+    // test), so rcond = (1/5)/8. rpvgrw = max|A| / max|U| = 6/6 = 1.
+    let ab = pivoted_2x2_ab();
+    let s = dgbsvx_fact_n(b'N', 2, 1, 1, &ab, 3, &[1.0, 6.0]).unwrap();
+    assert_eq!(s.x, [3.0, -1.0]);
+    assert_eq!(s.rcond, (1.0 / 5.0) / 8.0);
+    assert_eq!(s.rpvgrw, 1.0);
+    assert_eq!(s.berr, 0.0);
+    assert_eq!(s.info, 0);
+    assert!(s.ferr > 0.0 && s.ferr < 1e-14, "{}", s.ferr);
+}
+
+#[test]
+fn dgbsvx_fact_n_transposed_uses_the_infinity_norm() {
+    // A^T x = [9,14] has x = [1,2]; ||A||_inf = 10, ||inv(A)||_inf = 4.
+    let ab = pivoted_2x2_ab();
+    let s = dgbsvx_fact_n(b'T', 2, 1, 1, &ab, 3, &[9.0, 14.0]).unwrap();
+    assert_eq!(s.x, [1.0, 2.0]);
+    assert_eq!(s.rcond, (1.0 / 4.0) / 10.0);
+    assert_eq!(s.info, 0);
+}
+
+#[test]
+fn dgbsvx_fact_n_reports_info_n_plus_1_when_rcond_is_below_eps() {
+    // A = diag(1, 1e-17): rcond is about 1e-17 < DLAMCH('E') = 2^-53.
+    let ab = [1.0, 1.0e-17];
+    let s = dgbsvx_fact_n(b'N', 2, 0, 0, &ab, 1, &[1.0, 1.0e-17]).unwrap();
+    assert!(s.rcond < dlamch::EPS, "{}", s.rcond);
+    assert_eq!(s.info, 3);
+    assert_eq!(s.x, [1.0, 1.0], "X is computed even when INFO = N + 1");
+}
+
+#[test]
+fn dgbsvx_fact_n_exactly_singular_matrix_is_an_error() {
+    // A = [[1,2],[2,4]]: the second pivot is exactly zero (INFO = 2).
+    let ab = band(
+        3,
+        2,
+        0.0,
+        &[(2, 1, 1.0), (3, 1, 2.0), (1, 2, 2.0), (2, 2, 4.0)],
+    );
+    assert_eq!(
+        dgbsvx_fact_n(b'N', 2, 1, 1, &ab, 3, &[1.0, 1.0]),
+        Err(MtxError::SingularMatrix(1))
+    );
+}
+
+#[test]
+fn dgbsvx_fact_n_rejects_bad_shapes() {
+    let ab = pivoted_2x2_ab();
+    assert!(matches!(
+        dgbsvx_fact_n(b'N', 0, 1, 1, &ab, 3, &[]),
+        Err(MtxError::InvalidParameter(_))
+    ));
+    assert!(matches!(
+        dgbsvx_fact_n(b'N', 2, 1, 1, &ab, 2, &[1.0, 1.0]),
+        Err(MtxError::InvalidParameter(_))
+    ));
+    assert!(matches!(
+        dgbsvx_fact_n(b'N', 2, 1, 1, &ab, 3, &[1.0]),
+        Err(MtxError::DimensionMismatch(_))
+    ));
+    assert!(matches!(
+        dgbsvx_fact_n(b'X', 2, 1, 1, &ab, 3, &[1.0, 1.0]),
+        Err(MtxError::InvalidParameter(_))
+    ));
+}
+
+// ------------------------------------------------------- block wrapper (#676)
+
+/// `nvar = 1`, `nz = 3` tridiagonal `[[4,1,0],[2,5,1],[0,3,6]]` in block
+/// layout (row `i` of `lblk` couples block `i` to `i-1`; `ublk` row `i`
+/// couples `i` to `i+1`).
+fn tridiagonal_blocks() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    (
+        vec![0.0, 2.0, 3.0],
+        vec![4.0, 5.0, 6.0],
+        vec![1.0, 1.0, 0.0],
+    )
+}
+
+#[test]
+fn block_wrapper_returns_ierr_zero_and_the_solution_for_a_good_system() {
+    let (l, d, u) = tridiagonal_blocks();
+    // x = [1,2,3]: b = [4+2, 2+10+3, 6+18] = [6,15,24].
+    let s =
+        dgbsvx_block_tridiagonal(1, 3, &l, &d, &u, &[6.0, 15.0, 24.0]).unwrap();
+    assert_eq!(s.ierr, 0);
+    assert!(s.rcond > 1e-3 && s.rcond <= 1.0, "{}", s.rcond);
+    for (xi, want) in s.x.iter().zip([1.0, 2.0, 3.0]) {
+        assert!((xi - want).abs() <= 1e-14, "{xi} vs {want}");
+    }
+}
+
+#[test]
+fn block_wrapper_sets_ierr_n_plus_1_when_rcond_is_below_1e_minus_10() {
+    // A = [[1,1],[1,1+1e-12]] (nvar = 1, nz = 2): nonsingular but
+    // rcond is about 1e-13 < 1d-10 (DGBSVX_wrapper.f90:263): ierr = N + 1 = 3
+    // and x is still returned.
+    let l = vec![0.0, 1.0];
+    let d = vec![1.0, 1.0 + 1.0e-12];
+    let u = vec![1.0, 0.0];
+    let s = dgbsvx_block_tridiagonal(1, 2, &l, &d, &u, &[2.0, 2.0 + 1.0e-12])
+        .unwrap();
+    assert_eq!(s.ierr, 3);
+    assert!(s.rcond < 1.0e-10, "{}", s.rcond);
+    assert!(s.x.iter().all(|v| v.is_finite()));
+}
+
+#[test]
+fn block_wrapper_exactly_singular_system_is_an_error_not_an_unset_x() {
+    // A = [[1,1],[1,1]]: DGBTRF finds a zero pivot; upstream leaves x_flat
+    // unset (DGBSVX_wrapper.f90:291), here an explicit error.
+    let l = vec![0.0, 1.0];
+    let d = vec![1.0, 1.0];
+    let u = vec![1.0, 0.0];
+    assert!(matches!(
+        dgbsvx_block_tridiagonal(1, 2, &l, &d, &u, &[1.0, 1.0]),
+        Err(MtxError::SingularMatrix(_))
+    ));
+}
+
+// ------------------------------------------------- DGBSVX banded wrapper #695
+
+#[test]
+fn banded_wrapper_with_kl_at_least_two_returns_the_695_error() {
+    // bands for n = 4, ku = 1, kl = 2 (shape (ku+kl+1, n) = 4 x 4).
+    let bands = [1.0_f64; 16];
+    for kl in [2_usize, 3] {
+        let len = (kl + 2) * 4;
+        match dgbsvx_banded_from_bands(
+            4,
+            kl,
+            1,
+            &bands[..len.min(16)],
+            &[1.0; 4],
+        ) {
+            Err(MtxError::InvalidParameter(msg)) => {
+                assert!(msg.contains("#695"), "{msg}");
+            }
+            other => {
+                panic!("kl = {kl}: expected the #695 error, got {other:?}")
+            }
+        }
+    }
+}
+
+#[test]
+fn banded_wrapper_with_kl_one_matches_a_direct_solve() {
+    // Tridiagonal [[4,-1,0],[-1,5,-1],[0,-1,6]] (ku = kl = 1), n = 3, bands
+    // are upper / diagonal / lower rows aligned on the column index.
+    let bands = [
+        -1.0, -1.0, 0.0, //
+        4.0, 5.0, 6.0, //
+        -1.0, -1.0, 0.0, //
+    ];
+    // x = [1,2,3]: b = [4-2, -1+10-3, -2+18] = [2,6,16].
+    let s =
+        dgbsvx_banded_from_bands(3, 1, 1, &bands, &[2.0, 6.0, 16.0]).unwrap();
+    for (xi, want) in s.x.iter().zip([1.0, 2.0, 3.0]) {
+        assert!((xi - want).abs() <= 1e-14, "{xi} vs {want}");
+    }
+    assert_eq!(s.ierr, 0);
 }

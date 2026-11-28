@@ -117,7 +117,7 @@ fn parse_run(text: &str) -> OracleRun {
 }
 
 /// Chebyquad (Fletcher 1965) in the arithmetic order of
-/// `num/test/src/test_newuoa.f90:44-77`.
+/// `num/test/src/test_newuoa.f90:42-74`.
 fn chebyquad(x: &[f64]) -> f64 {
     let n = x.len();
     // Y(I, J), I = 1..N+1, J = 1..N (1-based, row 0 and column 0 unused).

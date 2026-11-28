@@ -83,7 +83,7 @@ The ceiling is the highest status that the routine evidence of a file supports. 
 
 `case_level_evidence` is never a ceiling because the `exercised` level is not derived. Contained procedures count as routines. A ceiling over the hand-set status is a candidate for review, not a raise: the table reads no status as evidence and changes none, and nothing gates on this section.
 
-### Hand-set status above the ceiling (39 files)
+### Hand-set status above the ceiling (38 files)
 
 Files whose status needs more than the routine evidence gives. Files with no ceiling claim are not listed; 5 files with a ported status have no ceiling claim. Largest ten:
 
@@ -538,7 +538,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/overshoot_exp.f90` | `star` | ported_unverified | ported_unverified | 176 | 1 | 1 | 0 | 0 | 0 / 0 | 143 | 0 | 0 | 0 | 33 |
 | `star/private/overshoot_step.f90` | `star` | ported_unverified | ported_unverified | 162 | 1 | 1 | 0 | 0 | 0 / 0 | 129 | 0 | 0 | 0 | 33 |
 | `star/private/overshoot_utils.f90` | `star` | ported_unverified | ported_unverified | 376 | 4 | 4 | 0 | 0 | 0 / 0 | 334 | 0 | 0 | 0 | 42 |
-| `star/private/paquette_coeffs.f90` | `star` | kernel_reference_vectors | ported_unverified | 721 | 3 | 3 | 0 | 0 | 0 / 3 | 656 | 0 | 0 | 0 | 65 |
+| `star/private/paquette_coeffs.f90` | `star` | ported_unverified | ported_unverified | 721 | 3 | 3 | 0 | 0 | 0 / 3 | 656 | 0 | 0 | 0 | 65 |
 | `star/private/phase_separation.f90` | `star` | kernel_reference_vectors | partial | 400 | 7 | 1 | 0 | 0 | 0 / 1 | 14 | 0 | 0 | 340 | 46 |
 | `star/private/photo_in.f90` | `star` | partial | partial | 320 | 3 | 0 | 1 | 2 | 0 / 0 | 0 | 269 | 19 | 0 | 32 |
 | `star/private/photo_out.f90` | `star` | partial | partial | 179 | 2 | 0 | 1 | 1 | 0 / 0 | 0 | 142 | 5 | 0 | 32 |

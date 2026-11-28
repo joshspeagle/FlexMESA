@@ -39,9 +39,11 @@ fn test_eval_ritter_mdot_thin_gamma_q_uses_pow2_grouping() {
         let q = m_accretor / m_donor;
         let q1 = q.clamp(0.5, 10.0);
         let f1 = 1.23 + 0.5 * log10(q1);
-        let mdot0 = (2.0 * PI / exp(0.5))
-            * (v_th * v_th * v_th)
-            * (rl_donor * rl_donor * rl_donor)
+        // `binary/private/binary_mdot.f90:704-706`: `rl3 = rl*rl*rl` and
+        // `(2.0D0*pi/exp(0.5d0)) * v_th*v_th*v_th * rl3/(G*m) * rho * F1`,
+        // left to right.
+        let rl3 = rl_donor * rl_donor * rl_donor;
+        let mdot0 = (2.0 * PI / exp(0.5)) * v_th * v_th * v_th * rl3
             / (STANDARD_CGRAV * m_donor)
             * rho_surf
             * f1;

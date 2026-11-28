@@ -36,18 +36,57 @@ pub fn eval_ritter_mdot_thin(
     mu_surf: f64,
     is_kolb_scheme: bool,
 ) -> f64 {
-    let grav = STANDARD_CGRAV * m_donor / (r_donor * r_donor);
+    ritter_mdot_thin_kernel(
+        m_donor,
+        m_accretor,
+        r_donor,
+        rl_donor,
+        rho_surf,
+        p_surf,
+        t_surf,
+        mu_surf,
+        is_kolb_scheme,
+        false,
+    )
+}
+
+/// The Ritter thin rate at one Roche radius, with `mdot_thin0` in the
+/// operation order of the routine being reproduced: the circular
+/// `get_info_for_ritter` forms `C*v_th*v_th*v_th*rl3/(G*m)*rho*F1` with
+/// `rl3 = rl*rl*rl` (`binary/private/binary_mdot.f90:704-706`), and
+/// `get_info_for_ritter_eccentric` forms `C*pow3(v_th)*rl*rl*rl/(G*m)*rho*F1`
+/// (`binary_mdot.f90:860-861`), each left to right.
+#[allow(clippy::too_many_arguments)]
+fn ritter_mdot_thin_kernel(
+    m_donor: f64,
+    m_accretor: f64,
+    r_donor: f64,
+    rl_donor: f64,
+    rho_surf: f64,
+    p_surf: f64,
+    t_surf: f64,
+    mu_surf: f64,
+    is_kolb_scheme: bool,
+    eccentric_order: bool,
+) -> f64 {
+    let grav = STANDARD_CGRAV * m_donor / pow2(r_donor);
     let hp = p_surf / (grav * rho_surf);
     let v_th = (KERG * t_surf / (MP * mu_surf)).sqrt();
     let q = m_accretor / m_donor;
     let q1 = q.clamp(0.5, 10.0);
     let f1 = 1.23 + 0.5 * log10(q1);
-    let mdot0 = (2.0 * PI / exp(0.5))
-        * (v_th * v_th * v_th)
-        * (rl_donor * rl_donor * rl_donor)
-        / (STANDARD_CGRAV * m_donor)
-        * rho_surf
-        * f1;
+    let c = 2.0 * PI / exp(0.5);
+    let mdot0 = if eccentric_order {
+        c * pow3(v_th) * rl_donor * rl_donor * rl_donor
+            / (STANDARD_CGRAV * m_donor)
+            * rho_surf
+            * f1
+    } else {
+        let rl3 = rl_donor * rl_donor * rl_donor;
+        c * v_th * v_th * v_th * rl3 / (STANDARD_CGRAV * m_donor)
+            * rho_surf
+            * f1
+    };
 
     let q2 = q.clamp(0.04, 20.0);
     let log_q2 = log10(q2);
@@ -111,7 +150,7 @@ pub fn eval_ritter_mdot_eccentric(
     for i in 0..n {
         let rl_i = rl_donor * one_m_e2
             / (1.0 + eccentricity * flexmesa_math::cos(theta_co[i]));
-        let mdot_i = eval_ritter_mdot_thin(
+        let mdot_i = ritter_mdot_thin_kernel(
             m_donor,
             m_accretor,
             r_donor,
@@ -121,6 +160,7 @@ pub fn eval_ritter_mdot_eccentric(
             t_surf,
             mu_surf,
             is_kolb_scheme,
+            true,
         );
         if i > 0 {
             dm += 0.5 * (mdot_prev + mdot_i) * (time_co[i] - time_co[i - 1]);
@@ -135,8 +175,10 @@ pub fn eval_ritter_mdot_eccentric(
 #[inline]
 #[must_use]
 pub fn kolb_f3(gamma1: f64) -> f64 {
-    let g = gamma1.max(1.0001);
-    g.sqrt() * pow(2.0 / (g + 1.0), (g + 1.0) / (2.0 * (g - 1.0)))
+    // `F3 = sqrt(G1) * pow(2d0/(G1+1d0), (G1+1d0)/(2d0*G1-2d0))`
+    // (`binary/private/binary_mdot.f90:744, 750`), with no floor on `G1`.
+    let g = gamma1;
+    g.sqrt() * pow(2.0 / (g + 1.0), (g + 1.0) / (2.0 * g - 2.0))
 }
 
 /// Evaluates the Kolb & Ritter (1990, A&A 236, 385) optically thick Roche-lobe
@@ -178,17 +220,18 @@ pub fn eval_kolb_mdot_thick(
     let f3_last = kolb_f3(gamma1_profile[index_r]);
     let v_th_last =
         (KERG * t_profile[index_r] / (MP * mu_profile[index_r])).sqrt();
-    let dr_frac = (r_profile[index_r] - rl_donor)
-        / (r_profile[index_r] - r_profile[index_r + 1]).max(1.0e-30);
-    integral += f3_last
-        * v_th_last
-        * dr_frac
+    // `d_P = (r(indexR) - rl_d)/(r(indexR) - r(indexR+1))*(Peos(i+1) - Peos(i))`
+    // and `mdot_thick + F3*sqrt(...)*d_P` (`binary_mdot.f90:751-753`).
+    let d_p = (r_profile[index_r] - rl_donor)
+        / (r_profile[index_r] - r_profile[index_r + 1])
         * (p_profile[index_r + 1] - p_profile[index_r]);
+    integral += f3_last * v_th_last * d_p;
 
     let q_temp = (m_accretor / m_donor).clamp(0.5, 10.0);
     let f1 = 1.23 + 0.5 * log10(q_temp);
-    -2.0 * PI * f1 * (rl_donor * rl_donor * rl_donor)
-        / (STANDARD_CGRAV * m_donor)
+    // `-2.0D0*pi*F1*rl_d*rl_d*rl_d/(standard_cgrav*m)*mdot_thick`, left to
+    // right (`binary_mdot.f90:760`).
+    -2.0 * PI * f1 * rl_donor * rl_donor * rl_donor / (STANDARD_CGRAV * m_donor)
         * integral
 }
 
@@ -452,7 +495,9 @@ pub fn eval_edot_enhancement_isotropic(
     for i in 0..n {
         let cos_th = flexmesa_math::cos(theta_co[i]);
         let rl_i = rl_donor * one_m_e2 / (1.0 + eccentricity * cos_th);
-        let mut mdot_i = eval_ritter_mdot_thin(
+        // `mdot_donor_theta` comes from `get_info_for_ritter_eccentric`
+        // (`binary_mdot.f90:860-861, 886`), so the eccentric order applies.
+        let mut mdot_i = ritter_mdot_thin_kernel(
             m_donor,
             m_accretor,
             r_donor,
@@ -462,6 +507,7 @@ pub fn eval_edot_enhancement_isotropic(
             t_surf,
             mu_surf,
             is_kolb_scheme,
+            true,
         );
         if include_kolb_thick {
             mdot_i += eval_kolb_mdot_thick(

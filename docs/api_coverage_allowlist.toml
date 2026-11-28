@@ -1,0 +1,1949 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# GENERATED VIA python scripts/docs/check_api_coverage.py --write-allowlist (P1.4).
+# API symbols undocumented as of 2026-11-28 (P1.4). The gate fails on
+# any missing symbol outside this file and on any stale entry here,
+# so this file only shrinks.
+
+[counts]
+python = 0
+rust_pyi = 277
+total = 277
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_gyre_py"
+name = "AsteroGyre"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_gyre_py"
+name = "StarModelHandle"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_acoustic_profile"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_chi2"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_delta_nu_asymptotic"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_delta_nu_radius_scaling"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_delta_nu_scaling"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_delta_pg"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_glitch_acoustic_depths"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_nu_ac"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_nu_max"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_radial_delta_nu_ols"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_ratios_r01_r10"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_ratios_r02"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_eval_surface_correction"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_match_modes_by_degree"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_nelder_mead_minimize"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_powell_quadratic_minimize"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "astero_py"
+name = "astero_scan_cartesian_grid"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "gyre_mesa_py"
+name = "GyreMesa"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/astero.md"
+source = "rust_pyi"
+group = "gyre_mesa_py"
+name = "GyreMesaMode"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "RustBinarySystem"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_build_anomaly_grid"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_accreted_material_j"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_arras_mdot_thin"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_bh_spin_and_edd"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_j_orb"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_jdot_gr"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_jdot_ls"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_jdot_mb"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_jdot_ml"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_kolb_mdot_thick"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_l2_mass_loss_fraction"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_l2_overflow_limit"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_ritter_mdot_thin"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_rl_relative_gap"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_rlobe"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_tides_hut"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_eval_wind_transfer"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_period_from_separation"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_pick_next_timestep_rl"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_separation_from_j_orb"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "binary_py"
+name = "binary_separation_from_period"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/binary.md"
+source = "rust_pyi"
+group = "extras_py"
+name = "binary_extras_snapshot"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_helm_py"
+name = "eos_eval_helm"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_helm_py"
+name = "eos_eval_helm_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_helm_py"
+name = "eos_helm_cell_data"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_helm_py"
+name = "eos_helm_cells_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_helm_py"
+name = "eos_opal_scvh_cells_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_eval_pc"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_eval_pc_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_eval_skye"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_eval_skye_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_get_pc_alfa"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_get_skye_alfa"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_pc_skye_py"
+name = "eos_get_skye_alfa_simple"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_basic_result_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_blend_results"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_compute_ion_offset"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_compute_ion_offset_from_za"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_dfermi"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_dfermi_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_eval_ideal"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_eval_ideal_from_weights"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_eval_ideal_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_is_contained"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_min_distance_to_polygon"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_py"
+name = "eos_quintic_blend"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_cms_slice_coeffs"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_dt_slice_coeffs"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_cms"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_dt_get"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_dt_get_rho"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_dt_get_t"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_free_eos"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_gamma_de_get"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_opal_scvh"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_opal_scvh_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_pt_get"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_pt_get_pgas"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/eos.md"
+source = "rust_pyi"
+group = "eos_solver_py"
+name = "eos_eval_pt_get_t"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "trace_py"
+name = "mesa_read_log_file"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "trace_py"
+name = "trace_astero_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "trace_py"
+name = "trace_binary_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "trace_py"
+name = "trace_star_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "wave5_bench_py"
+name = "w5_eval_astero_seism"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "wave5_bench_py"
+name = "w5_eval_binary_rlof_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "wave5_bench_py"
+name = "w5_eval_diff_rot_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/io-plotting-bench.md"
+source = "rust_pyi"
+group = "wave5_bench_py"
+name = "w5_eval_riemann_rsp2_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_ag89_namsol"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_ag89_yesol"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_ag89_zsol"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_category_id"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_category_name"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_element_long_name"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_element_main_iso_name"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_element_name"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_generate_long_nuclide_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_generate_nuclide_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_composition_info"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_composition_info_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_element_id"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_nuclide_index"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_partition_fcn_indx"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_solar"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_get_stable_mass_frac"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_lodders03_atom_percent"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_m_div_h"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_nuclide_info"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_reaction_qtotal"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_solar_cno_fraction"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_solar_element_zfrac"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_species_props"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "chem_py"
+name = "py_chem_xsol"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_builtin_cell_grid"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_charge_of_fe56_in_he4"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_charge_of_fe56_in_he4_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_chi_effective"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_chi_info"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_eval_ionization"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_eval_ionization_dual"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_eval_ionization_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_eval_typical_charge"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_fe56_he4_grid"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_potentials_table"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "ionization_py"
+name = "py_ion_result_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_burn_1_zone"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_burn_1_zone_const_density"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_burn_1_zone_const_p"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_eval"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_eval_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "net_py"
+name = "net_list_networks"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "neu_py"
+name = "neu_get_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "neu_py"
+name = "neu_get_full_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_compute_rev_ratio_coeff1"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_coulomb"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_ecapture_pair"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_fl_epsnuc_3alf"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_rate_table"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_reaclib_handle"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_reaclib_screen_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_weak_pair"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_eval_weak_table_index"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_reaclib_terms"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_reaction_id_by_name"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_reaction_info"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_reaction_name_by_id"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_screen_pair"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_screen_pair_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_set_raw_rate"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_set_raw_rates"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_set_raw_rates_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/nuclear.md"
+source = "rust_pyi"
+group = "rates_py"
+name = "rates_weak_info_by_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "interp_2d"
+name = "interp_evbicub_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_hex_probe"
+name = "auto_diff_test_suite_values"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_hex_probe"
+name = "math_test_suite_eval"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "crmath_cos"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "crmath_exp"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "crmath_sin"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "eval_autodiff_order2_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "eval_autodiff_order2_zone"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "exp10_array"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "mtx_solve_dense"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "safe_log10_array"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "safe_log_array"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_solvers"
+name = "safe_sqrt_array"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_vec_audit"
+name = "compare_fast_vs_strict_vectors"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_vec_audit"
+name = "measure_dispatch_overhead_ns"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "math_vec_audit"
+name = "strict_math_vectors_sha256"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "tier_a_data"
+name = "const_probe_values"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "tier_a_parse"
+name = "is_fortran_float_token"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "tier_a_parse"
+name = "parse_fortran_float"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "turb_py"
+name = "set_mlt_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "turb_py"
+name = "set_mlt_f64"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "turb_py"
+name = "set_tdc_batch"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/numerics.md"
+source = "rust_pyi"
+group = "turb_py"
+name = "turb_set_tdc_f64"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_e2"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_irradiated"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_paczynski_gradr"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_t_tau"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_t_tau_atm"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_t_tau_dq_dtau"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_t_tau_uniform"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_t_tau_varying"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_table"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_table_atm"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_eval_table_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_get_t_tau_base"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_get_t_tau_id"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_get_table_alfa_beta"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_get_table_base"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_get_table_id"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "atm_py"
+name = "atm_table_photosphere_zsol_spline"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_builtin_grid"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_calculate_bolometric_phot"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_calculate_synthetic"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_column_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_compute_ab_zero_point"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_compute_st_zero_point"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_compute_vega_zero_point"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_dilute_flux"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_eval_colors"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_eval_colors_dual"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_eval_colors_zones"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_eval_sed"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_filter_curve"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_filter_names"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_interpolate_array"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_simpson_integration"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "colors_py"
+name = "py_colors_trapezoidal_integration"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_build_full_tables_bin"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_aesopus_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_co_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_compton_opacity_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_elect_cond_opacity_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_fixed_metal_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_kapcn_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_results_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_results_zones_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/opacity-atm-colors.md"
+source = "rust_pyi"
+group = "kap_py"
+name = "kap_get_zones_rust"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "extras_py"
+name = "PyRspBuildContext"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "extras_py"
+name = "star_apply_extras_updates"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "extras_py"
+name = "star_extras_snapshot"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "extras_py"
+name = "star_solve_gyre_mesa_modes_full"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "binary_run_test_suite_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_build_rsp_envelope_model"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_copy_cleaned_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_eval_astero_scaling_dnu_numax_uhz"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_eval_linear_oscillation_modes"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_eval_rsp_lina_modes"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_eval_target_mode_frequency_and_growth"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_parse_inlist_bundle"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_parse_rn_stages"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_run_astero_test_suite_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_run_test_suite_case"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_e2e_py"
+name = "star_verify_photo_restart"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_lib_py"
+name = "StarLibModel"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_lib_py"
+name = "atm_teff"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_lib_py"
+name = "crmath_log"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_py"
+name = "RustStarModel"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_py"
+name = "star_interp_q"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_py"
+name = "star_yrs_for_init_timestep"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_build_pulse_points"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_center_parabolic"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_hllc_face"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_hllc_surface_face"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_riemann_momentum_residual"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_riemann_profile"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_rsp2_face"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_eval_rsp2_zone"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_cafein"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_fgong"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_gr1d"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_gsm"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_gyre"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_osc"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_pulse_by_format"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_saio"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_export_stella_pair"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_run_stella_from_hyd_abn"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_solve_adipls_fgong_modes"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_solve_gyre_mesa_modes"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_2_py"
+name = "star_solve_stationary_rsp2_w"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_add_predictive_mixing"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_do_conv_premix"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_do_element_diffusion"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_do_phase_separation"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_burgers_velocities"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_caplan_ocp_dstar"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_omega_crit"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_phase_separation_shift"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_radiative_levitation_accel"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_rotation_fp_ft"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_rotational_mixing_zone"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_eval_wd_sedimentation_heating"
+reason = "undocumented as of 2026-11-28 (P1.4)"
+
+[[allow]]
+page = "docs/api/star.md"
+source = "rust_pyi"
+group = "star_wave5_py"
+name = "star_set_rotation_mixing_info"
+reason = "undocumented as of 2026-11-28 (P1.4)"

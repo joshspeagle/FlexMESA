@@ -1,9 +1,9 @@
 //! Dense-to-sparse (CSR/CSC, 1-based and 0-based) conversions (`mtx`).
 //!
 //! Matches upstream `mtx/public/mtx_formats.dek:34-429` and
-//! `mtx/private/mtx_support.f90:36-468` while fixing the upstream 0-based
-//! index bounds bug in `row_sparse_0_based_to_dense`
-//! (`mtx/private/mtx_support.f90:428-447`, `DECISIONS #43`).
+//! `mtx/private/mtx_support.f90:36-606`; `row_sparse_0_based_to_dense` returns
+//! an explicit error where upstream reads out of bounds
+//! (`mtx/private/mtx_support.f90:428-447`, deferred bug `#674`, `DECISIONS #43`).
 //!
 //! # Storage Conventions
 //!
@@ -215,11 +215,18 @@ pub fn row_sparse_to_dense(
     compressed_to_dense_impl(n, ndim, a, nz, rowptr, colind, values, true, 1)
 }
 
-/// Converts a 0-based CSR matrix into a row-major dense matrix `a`.
+/// Upstream `do_row_sparse_0_based_to_dense`
+/// (`mtx/private/mtx_support.f90:428-447`) declares `rowptr(0:n)`,
+/// `colind(0:nz-1)`, `values(nz)`, and `a(ndim, n)` and loops
+/// `do i = 1, n; do k = rowptr(i), rowptr(i + 1) - 1`, reading `rowptr(n + 1)`
+/// out of bounds on every call with `n >= 1` and indexing 1-based `values` and
+/// `a` with 0-based `k` and `colind(k)` (deferred upstream bug `#674`,
+/// `DECISIONS #43`).
 ///
 /// # Errors
 ///
-/// Returns [`MtxError::InvalidParameter`] or [`MtxError::DimensionMismatch`].
+/// Always returns [`MtxError::InvalidParameter`] because upstream has no
+/// defined behaviour on any input (`#674`).
 pub fn row_sparse_0_based_to_dense(
     n: usize,
     ndim: usize,
@@ -229,7 +236,15 @@ pub fn row_sparse_0_based_to_dense(
     colind: &[usize],
     values: &[f64],
 ) -> Result<(), MtxError> {
-    compressed_to_dense_impl(n, ndim, a, nz, rowptr, colind, values, true, 0)
+    let _ = (n, ndim, a, nz, rowptr, colind, values);
+    // Deferred upstream bug #674 (DECISIONS #43): upstream
+    // `mtx/private/mtx_support.f90:428-447` reads `rowptr(n+1)` outside
+    // `rowptr(0:n)` on every call with `n >= 1` and indexes `values(nz)` and
+    // `a(ndim, n)` with 0-based `k` and `colind(k)`.
+    Err(MtxError::InvalidParameter(
+        "row_sparse_0_based_to_dense reads out of bounds upstream \
+         (mtx/private/mtx_support.f90:428-447; deferred bug #674)",
+    ))
 }
 
 /// Converts a dense matrix `a` into 1-based CSC format.

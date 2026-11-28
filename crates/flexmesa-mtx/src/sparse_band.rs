@@ -11,8 +11,10 @@
 //! column `j`.
 //! - [`band_to_row_sparse`] and [`band_to_col_sparse`] emit 1-based CSR/CSC
 //!   index arrays matching upstream MESA (`mtx/private/mtx_support.f90:525-680`).
-//! - [`find_loc_in_sparse`] matches `mtx/public/mtx_formats.dek:261-280` across
-//!   both 0-based and 1-based sparse layouts with checked bounds (`DECISIONS #43`).
+//! - [`find_loc_in_sparse`] matches `mtx/public/mtx_formats.dek:237-345` across
+//!   both 0-based and 1-based sparse layouts, returning explicit errors where
+//!   `find_loc_in_column_0_based` reads out of bounds (deferred bug `#674`,
+//!   `DECISIONS #43`).
 
 use crate::{MtxError, SparseFormat};
 
@@ -263,15 +265,92 @@ pub fn row_sparse_to_band(
     )
 }
 
+/// Reproduces upstream `find_loc_in_column_0_based`
+/// (`mtx/public/mtx_formats.dek:261-280`): checks the `hint > 0` fast path,
+/// then searches `colptr(j) - 1 ..= colptr(j + 1)`, returning an explicit error
+/// wherever that search reads outside `colptr(0:n)` or `rowind(0:nz-1)`
+/// (deferred upstream bug `#674`, `DECISIONS #43`) and preserving upstream's
+/// neighbouring-column matches where the reads stay in bounds.
+fn find_loc_in_column_0_based(
+    n: usize,
+    nz: usize,
+    colptr: &[usize],
+    rowind: &[usize],
+    row_idx: usize,
+    col_idx: usize,
+    hint: Option<usize>,
+) -> Result<Option<usize>, MtxError> {
+    if col_idx >= n {
+        // Deferred upstream bug #674 (DECISIONS #43): `j = n` reads
+        // `colptr(n + 1)` outside `colptr(0:n)` (`mtx_formats.dek:263,273`).
+        return Err(MtxError::InvalidParameter(
+            "find_loc_in_column_0_based reads colptr out of bounds upstream \
+             (mtx/public/mtx_formats.dek:263,273; deferred bug #674)",
+        ));
+    }
+    if row_idx >= n {
+        return Err(MtxError::InvalidParameter("row/col index out of bounds"));
+    }
+    let start = colptr[col_idx];
+    let end = colptr[col_idx + 1];
+    if end > nz || start > end {
+        return Err(MtxError::InvalidParameter("ia pointer out of bounds"));
+    }
+    if let Some(h) = hint {
+        if h > 0 {
+            if let Some(next_0) = h.checked_add(1) {
+                if next_0 >= start && next_0 < end && rowind[next_0] == row_idx
+                {
+                    return Ok(Some(next_0));
+                }
+            }
+        }
+    }
+    if start == 0 {
+        // Deferred upstream bug #674 (DECISIONS #43): `colptr(j) = 0` makes
+        // `do k = colptr(j) - 1, colptr(j + 1)` read `rowind(-1)` outside
+        // `rowind(0:nz-1)` (`mtx_formats.dek:273`).
+        return Err(MtxError::InvalidParameter(
+            "find_loc_in_column_0_based reads rowind(-1) out of bounds \
+             upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)",
+        ));
+    }
+    for (offset, &val) in rowind[(start - 1)..end].iter().enumerate() {
+        if val == row_idx {
+            return Ok(Some(start - 1 + offset));
+        }
+    }
+    if end >= nz {
+        // Deferred upstream bug #674 (DECISIONS #43): reaching
+        // `k = colptr(j + 1) == nz` reads `rowind(nz)` outside
+        // `rowind(0:nz-1)` (`mtx_formats.dek:273`).
+        return Err(MtxError::InvalidParameter(
+            "find_loc_in_column_0_based reads rowind(nz) out of bounds \
+             upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)",
+        ));
+    }
+    if rowind[end] == row_idx {
+        return Ok(Some(end));
+    }
+    Ok(None)
+}
+
 /// Finds the position of entry `(row_idx, col_idx)` in a sparse matrix (`ia`,
 /// `ja`) using the index convention of `format` (1-based for
 /// `CompressedColumnSparse` / `CompressedRowSparse`, 0-based for
 /// `CompressedColSparse0Based` / `CompressedRowSparse0Based`).
 ///
+/// For `CompressedColSparse0Based`, reproduces upstream's
+/// `colptr(j) - 1 ..= colptr(j + 1)` search range
+/// (`mtx/public/mtx_formats.dek:261-280`) and returns an explicit error
+/// wherever that search leaves `colptr(0:n)` or `rowind(0:nz-1)` (deferred
+/// upstream bug `#674`, `DECISIONS #43`).
+///
 /// # Errors
 ///
 /// Returns [`MtxError::DimensionMismatch`] or [`MtxError::InvalidParameter`] if
-/// pointer arrays or indices are out of bounds.
+/// pointer arrays or indices are out of bounds, or if `CompressedColSparse0Based`
+/// reaches an upstream out-of-bounds read (`#674`).
 pub fn find_loc_in_sparse(
     format: SparseFormat,
     n: usize,
@@ -290,7 +369,11 @@ pub fn find_loc_in_sparse(
     let (base, outer, inner) = match format {
         SparseFormat::CompressedColumnSparse => (1usize, col_idx, row_idx),
         SparseFormat::CompressedRowSparse => (1usize, row_idx, col_idx),
-        SparseFormat::CompressedColSparse0Based => (0usize, col_idx, row_idx),
+        SparseFormat::CompressedColSparse0Based => {
+            return find_loc_in_column_0_based(
+                n, nz, ia, ja, row_idx, col_idx, hint,
+            );
+        }
         SparseFormat::CompressedRowSparse0Based => (0usize, row_idx, col_idx),
     };
     let outer_0 = outer

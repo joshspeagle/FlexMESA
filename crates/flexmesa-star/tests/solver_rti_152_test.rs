@@ -703,19 +703,26 @@ fn test_rti_boost_masses_read_from_controls() {
 }
 
 #[test]
-fn test_rti_c_x_factor_scales_c_with_hydrogen_excess() {
+fn test_rti_c_x_factor_nonzero_errors_until_surface_h1_is_report_state() {
+    // `RTI_C_X_factor != 0` needs `s% surface_h1` from the previous report
+    // (`mix_info.f90:2010-2011`, `report.f90:260`), which is not ported
+    // (#742).
     let mut model = rti_eta_model();
-    model.controls.rti_log_max_boost = 0.0;
     model.controls.rti_c_x_factor = 2.0;
     model.controls.rti_c_x0_frac = 0.0;
-    model.xh_mass = vec![0.5; 6];
-    // `x0_frac = 0` removes the surface-hydrogen term: f = X = 0.5.
-    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
-    let factor = 1.0 + 0.5 * 0.5 * 2.0;
+    let err = set_rti_mixing_info(&mut model).expect_err("must error");
+    assert!(format!("{err}").contains("#742"), "{err}");
+
+    // With the factor 0 (the default and ccsn_IIp's value) the hydrogen term
+    // is exactly `RTI_C`, whatever `RTI_C_X0_frac` and `X` are.
+    let mut zero = rti_eta_model();
+    zero.controls.rti_log_max_boost = 0.0;
+    zero.controls.rti_c_x0_frac = 0.5;
+    zero.xh_mass = vec![0.9; 6];
+    set_rti_mixing_info(&mut zero).expect("factor 0");
     for k in 1..6 {
-        let expected =
-            0.2 * factor * 0.4 * csound_face_at(&model, k) * model.r[k];
-        let got = model.aux.eta_rti[k];
+        let expected = 0.2 * 0.4 * csound_face_at(&zero, k) * zero.r[k];
+        let got = zero.aux.eta_rti[k];
         assert!((got - expected).abs() <= 1.0e-12 * expected, "k={k}");
     }
 }

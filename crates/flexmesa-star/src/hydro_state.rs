@@ -687,6 +687,17 @@ pub struct HydroAuxState {
     /// (`star/private/hydro_vars.f90:334`). Length `nz`.
     #[serde(default)]
     pub dxh_v: Vec<f64>,
+    /// Newton change of cell velocity `u` this step, `solver_dx(i_u, k)` as
+    /// `set_vars_for_solver` stores it (`dxh_u`,
+    /// `star/private/solver_support.f90:1246`); zero after `unpack_xh`
+    /// (`star/private/hydro_vars.f90:339`). Length `nz`.
+    #[serde(default)]
+    pub dxh_u: Vec<f64>,
+    /// Face acceleration removed by `drag_coefficient` in the last momentum
+    /// equation evaluation (`dvdt_drag`, `star/private/hydro_momentum.f90:400,427`;
+    /// `hydro_eqns.f90:750-755`). Output only; nothing in FlexMESA reads it.
+    #[serde(default)]
+    pub dvdt_drag: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
@@ -957,6 +968,8 @@ impl HydroAuxState {
             dxh_lnd: vec![0.0; nz],
             dxh_lnt: vec![0.0; nz],
             dxh_v: vec![0.0; nz],
+            dxh_u: vec![0.0; nz],
+            dvdt_drag: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             have_j_rot: false,
@@ -1077,6 +1090,8 @@ impl HydroAuxState {
             &mut self.hp_face_old,
             &mut self.csound_start,
             &mut self.dxh_v,
+            &mut self.dxh_u,
+            &mut self.dvdt_drag,
             &mut self.mlt_vc_old,
             &mut self.eta_rti,
             &mut self.etamid_rti,

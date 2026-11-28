@@ -802,6 +802,9 @@ fn test_do1_riemann_momentum_eqn_uses_m_not_m_grav_and_time_centered_area() {
     m.u[1] += 5.0e3;
     sync_ideal_gas_eos(&mut m);
     do_uface_and_pface(&mut m).expect("do_uface_and_pface");
+    // `s% dxh_u(k) = solver_dx(i_u,k)`: the Newton change of `u` this step
+    // (`solver_support.f90:1246`), here `u - u_start`.
+    m.aux.dxh_u = (0..m.nz).map(|k| m.u[k] - m.u_start[k]).collect();
 
     let mut sys_base = new_sys(&m);
     do1_riemann_momentum_eqn(&m, 1, None, &mut sys_base);
@@ -852,6 +855,7 @@ fn test_do1_riemann_momentum_eqn_uses_m_not_m_grav_and_time_centered_area() {
                 mp.ln_r[k_var] += sgn * step;
             } else {
                 mp.u[k_var] += sgn * step;
+                mp.aux.dxh_u[k_var] += sgn * step;
             }
             sync_ideal_gas_eos(&mut mp);
             do_uface_and_pface(&mut mp).expect("fd uface_pface");
@@ -998,6 +1002,134 @@ fn test_brunt_disabled_returns_nan_and_eval_surf_bc_rsp_and_irrad_uses_m() {
         m_irr.controls.tau_factor,
         expected_irr.tau / (2.0 / 3.0),
         1.0e-14,
+        0.0,
+    );
+}
+
+/// Builds the `u_flag` synthetic model of the Riemann `du/dt` tests with a
+/// nonzero velocity profile and returns it with `dxh_u = u - u_start`.
+fn build_u_flag_model(controls: StarControls) -> StarModel {
+    let ctrl = StarControls {
+        u_flag: true,
+        ..controls
+    };
+    let mut m = build_synthetic_model(ctrl);
+    m.u = vec![1.0e5, 2.0e5, 3.0e5];
+    m.save_start_values().expect("save_start_values");
+    m.u[1] += 5.0e3;
+    sync_ideal_gas_eos(&mut m);
+    do_uface_and_pface(&mut m).expect("do_uface_and_pface");
+    m.aux.dxh_u = (0..m.nz).map(|k| m.u[k] - m.u_start[k]).collect();
+    m
+}
+
+fn riemann_residual(m: &StarModel, k: usize) -> f64 {
+    let mut sys = new_sys(m);
+    do1_riemann_momentum_eqn(m, k, None, &mut sys);
+    sys.equ[k * sys.nvar + m.layout.i_dv_dt]
+}
+
+/// `dudt_actual_ad%val = s% dxh_u(k)/dt` (`hydro_riemann.f90:167`): changing
+/// `dxh_u` alone changes the residual by `-scal*d(dxh_u)/dt`, while `u` and
+/// `u_start` stay fixed.
+#[test]
+fn test_riemann_dudt_actual_reads_dxh_u_not_u_minus_u_start() {
+    let m = build_u_flag_model(StarControls::default());
+    let base = riemann_residual(&m, 1);
+    let mut m2 = m.clone();
+    let delta = 1.0e3;
+    m2.aux.dxh_u[1] += delta;
+    let shifted = riemann_residual(&m2, 1);
+    let ie_ke = m.energy_start[1] + 0.5 * flexmesa_math::pow2(m.u_start[1]);
+    let scal = m.dt * m.u_start[1].abs().max(m.aux.csound_start[1]) / ie_ke;
+    assert_close(
+        "residual change from dxh_u",
+        shifted - base,
+        -scal * delta / m.dt,
+        1.0e-12,
+        0.0,
+    );
+}
+
+/// Drag of `hydro_riemann.f90:139-158` with `q` between the full-off and
+/// full-on bounds (linear `drag_fraction`), `u > v_drag`, then `u < -v_drag`,
+/// then `|u| <= v_drag` (no drag), then a factor of zero.
+#[test]
+fn test_riemann_v_drag_branches_and_linear_drag_fraction() {
+    let mut m = build_u_flag_model(StarControls::default());
+    let k = 1;
+    let base = riemann_residual(&m, k);
+    let ie_ke = m.energy_start[k] + 0.5 * flexmesa_math::pow2(m.u_start[k]);
+    let scal = m.dt * m.u_start[k].abs().max(m.aux.csound_start[k]) / ie_ke;
+    // Zone 2 has q between its bounds: place the bounds around it.
+    let q = m.q[k];
+    m.controls.q_for_v_drag_full_off = q - 0.1;
+    m.controls.q_for_v_drag_full_on = q + 0.3;
+    m.controls.v_drag_factor = 2.0e-3;
+    m.controls.v_drag = 1.0e5;
+    let frac = 0.1 / 0.4;
+    let factor = m.controls.v_drag_factor * frac;
+
+    // `u(k) = 2.05e5 > v_drag`: expected acceleration decreases.
+    let u = m.u[k];
+    assert!(u > m.controls.v_drag);
+    let expected =
+        -scal * (-factor * flexmesa_math::pow2(u - m.controls.v_drag) / m.r[k]);
+    assert_close(
+        "positive branch",
+        riemann_residual(&m, k) - base,
+        expected,
+        1.0e-10,
+        0.0,
+    );
+
+    // `u(k) < -v_drag`: expected acceleration increases.
+    let mut mn = m.clone();
+    mn.u[k] = -2.05e5;
+    let base_n = {
+        let mut b = mn.clone();
+        b.controls.v_drag_factor = 0.0;
+        riemann_residual(&b, k)
+    };
+    let expected_n = -scal
+        * (factor * flexmesa_math::pow2(mn.u[k] + mn.controls.v_drag)
+            / mn.r[k]);
+    assert_close(
+        "negative branch",
+        riemann_residual(&mn, k) - base_n,
+        expected_n,
+        1.0e-10,
+        0.0,
+    );
+
+    // `|u| <= v_drag`: no drag.
+    let mut mi = m.clone();
+    mi.controls.v_drag = 5.0e5;
+    assert_close(
+        "inside v_drag",
+        riemann_residual(&mi, k),
+        base,
+        1.0e-14,
+        0.0,
+    );
+
+    // Below `q_for_v_drag_full_off` the fraction is 0; above `full_on` it is 1.
+    let mut mo = m.clone();
+    mo.controls.q_for_v_drag_full_off = q + 0.1;
+    mo.controls.q_for_v_drag_full_on = q + 0.2;
+    assert_close("full off", riemann_residual(&mo, k), base, 1.0e-14, 0.0);
+    let mut mf = m.clone();
+    mf.controls.q_for_v_drag_full_off = q - 0.2;
+    mf.controls.q_for_v_drag_full_on = q - 0.1;
+    let expected_f = -scal
+        * (-mf.controls.v_drag_factor
+            * flexmesa_math::pow2(u - mf.controls.v_drag)
+            / mf.r[k]);
+    assert_close(
+        "full on",
+        riemann_residual(&mf, k) - base,
+        expected_f,
+        1.0e-10,
         0.0,
     );
 }

@@ -421,6 +421,24 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
     non_hse
 }
 
+/// Value `expected_non_hse_term` stores in `s% dvdt_drag(k)`
+/// (`hydro_momentum.f90:400,424-428`): `drag%val` with
+/// `drag = -drag_coefficient*v_00/dt` where `v_flag`, `q(k) > min_q_for_drag`
+/// and `drag_coefficient > 0`, and 0 otherwise.
+#[must_use]
+pub fn dvdt_drag_value(model: &StarModel, k: usize) -> f64 {
+    let c = &model.controls;
+    if c.v_flag
+        && model.dt > 0.0
+        && model.q[k] > c.min_q_for_drag
+        && c.drag_coefficient > 0.0
+    {
+        -c.drag_coefficient * model.v[k] / model.dt
+    } else {
+        0.0
+    }
+}
+
 /// `calc_Ptot_ad_tw` with `skip_mlt_Pturb = .true.`
 /// (`star/private/star_utils.f90:3375-3438`, called from
 /// `get_dPtot_face_info`, `hydro_momentum.f90:470-478`) for cell `cell`,

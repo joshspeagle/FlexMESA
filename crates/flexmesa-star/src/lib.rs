@@ -293,8 +293,8 @@ pub use hydro_eqns::{
     eval_henyey_equations, HenyeySystem,
 };
 pub use hydro_momentum::{
-    calc_ptot_ad_tw, eval_cell_peos_time_centered_ad, eval_face_dm_bar,
-    expected_hse_grav_term, expected_non_hse_term,
+    calc_ptot_ad_tw, dvdt_drag_value, eval_cell_peos_time_centered_ad,
+    eval_face_dm_bar, expected_hse_grav_term, expected_non_hse_term,
 };
 pub use hydro_rotation::{
     eval_fp_ft_single, eval_i_rot, get1_am_sig, get_rotation_sigmas,
@@ -434,6 +434,9 @@ pub use relax::{
     apply_uniform_rotation, excise_core_by_temperature,
     set_uniform_initial_composition,
 };
+pub use remove_center::{
+    do_remove_center, do_remove_center_by_entropy, do_remove_inner_fraction_q,
+};
 pub use report_utils::{
     center_avg_x_by_name, center_value, center_value_by,
     eval_conv_and_mx_summary, eval_conv_time_scale_zone, eval_conv_time_scales,
@@ -450,9 +453,6 @@ pub use report_utils::{
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,
-};
-pub use remove_center::{
-    do_remove_center, do_remove_center_by_entropy, do_remove_inner_fraction_q,
 };
 pub use riemann_ad::{
     calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,

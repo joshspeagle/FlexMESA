@@ -848,6 +848,39 @@ pub(crate) fn check_start_of_step_arrays(
     Ok(())
 }
 
+/// Stores `s% dvdt_drag` as the momentum equations leave it. Upstream writes
+/// it only inside `expected_non_HSE_term`, so a `u_flag` model (Riemann rows)
+/// never touches it; row 1 is zeroed when `drag_coefficient > 0`
+/// (`hydro_eqns.f90:750-755`) and then set only if `set_momentum_BC` runs the
+/// momentum equation for it (`hydro_eqns.f90:728-745`).
+fn store_dvdt_drag(model: &mut StarModel) {
+    let nz = model.nz;
+    model.aux.dvdt_drag.resize(nz, 0.0);
+    if model.controls.u_flag {
+        return;
+    }
+    let c = &model.controls;
+    if c.drag_coefficient > 0.0 && nz > 0 {
+        model.aux.dvdt_drag[0] = 0.0;
+    }
+    let row0_runs = if c.use_compression_outer_bc {
+        false
+    } else if c.use_zero_pgas_outer_bc || c.use_fixed_psurf_outer_bc {
+        true
+    } else if c.use_fixed_vsurf_outer_bc {
+        false
+    } else {
+        c.use_momentum_outer_bc
+    };
+    for k in 0..nz {
+        if k == 0 && !row0_runs {
+            continue;
+        }
+        model.aux.dvdt_drag[k] =
+            crate::hydro_momentum::dvdt_drag_value(model, k);
+    }
+}
+
 /// Assembles the coupled 1D Henyey residual vector and scaled block-tridiagonal
 /// Jacobian blocks into `sys` from the current microphysical and [`StarAdOrder1`]
 /// fields on `model` without re-running `set_hydro_vars` or `eval_eps_grav`.
@@ -879,6 +912,8 @@ pub fn assemble_henyey_system(
     check_unported_eval_equ_switches(model)?;
     crate::hydro_energy::capture_pvsc_start(model);
     do_surf_bc_eqns(model, sys)?;
+
+    store_dvdt_drag(model);
 
     model.aux.ergs_error.resize(nz, 0.0);
     let mut tot_e_equ_err = 0.0_f64;

@@ -427,6 +427,9 @@ impl StarModel {
         if self.layout.i_v.is_some() && self.aux.dxh_v.len() != self.nz {
             self.aux.dxh_v.resize(self.nz, 0.0);
         }
+        if self.layout.i_u.is_some() && self.aux.dxh_u.len() != self.nz {
+            self.aux.dxh_u.resize(self.nz, 0.0);
+        }
         for k in 0..self.nz {
             let base = k * nvar;
             self.lnd[k] = self.xh[base + self.layout.i_lnd];
@@ -439,6 +442,8 @@ impl StarModel {
             }
             if let Some(iu) = self.layout.i_u {
                 self.u[k] = self.xh[base + iu];
+                // `s% dxh_u(k) = 0` (`star/private/hydro_vars.f90:339`).
+                self.aux.dxh_u[k] = 0.0;
             }
             if let Some(iw) = self.layout.i_w {
                 let mut w = self.xh[base + iw];

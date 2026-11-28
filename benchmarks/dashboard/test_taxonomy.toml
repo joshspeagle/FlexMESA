@@ -909,6 +909,7 @@ recipe = "benchmarks/fortran_mesa/neu_oracles/gen_neu_oracles.f90"
 precision = "exact"
 routines = [
   "neu/private/mod_neu.f90::ifermi12",
+  "neu/private/mod_neu.f90::neutrinos",
   "neu/private/mod_neu.f90::zfermim12",
   "neu/public/neu_lib.f90::neu_get",
 ]

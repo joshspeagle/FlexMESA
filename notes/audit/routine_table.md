@@ -53,7 +53,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `kap` | 38 | 311 | 0 | 0 | 0 | 311 | 0 / 0 | 22,430 | 0 | 0 | 0 | 19,985 | 2,445 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `net` | 16 | 195 | 3 | 9 | 0 | 183 | 0 / 0 | 13,452 | 90 | 688 | 0 | 11,441 | 1,233 | 0.7% | 5.1% | 0.7% | 0.0% / 0.0% | 0.0% |
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 / 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
-| `neu` | 4 | 15 | 12 | 0 | 0 | 3 | 1 / 1 | 2,184 | 1,653 | 0 | 0 | 361 | 170 | 75.7% | 0.0% | 75.7% | 1.6% / 11.8% | 83.9% |
+| `neu` | 4 | 15 | 12 | 0 | 0 | 3 | 2 / 0 | 2,184 | 1,653 | 0 | 0 | 361 | 170 | 75.7% | 0.0% | 75.7% | 13.3% / 0.0% | 83.9% |
 | `atm` | 19 | 93 | 0 | 0 | 0 | 93 | 0 / 0 | 6,853 | 0 | 0 | 0 | 5,350 | 1,503 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `turb` | 6 | 25 | 23 | 2 | 0 | 0 | 6 / 0 | 2,033 | 1,191 | 236 | 0 | 0 | 606 | 58.6% | 11.6% | 58.6% | 17.5% / 0.0% | 66.5% |
 | `chem` | 7 | 67 | 0 | 0 | 0 | 67 | 0 / 0 | 4,195 | 0 | 0 | 0 | 3,330 | 865 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
@@ -95,7 +95,7 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | `star/private/diffusion.f90` | kernel_reference_vectors | partial | 2,050 | 30 | 13 | 5 | 0 | 0 / 1 |
 | `star/private/star_solver.f90` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 / 0 |
 | `star/private/diffusion_support.f90` | kernel_reference_vectors | partial | 1,800 | 16 | 11 | 5 | 0 | 0 / 1 |
-| `neu/private/mod_neu.f90` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 0 / 1 |
+| `neu/private/mod_neu.f90` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 1 / 0 |
 | `star/private/conv_premix.f90` | ported_unverified | partial | 1,561 | 16 | 1 | 0 | 0 | 0 / 0 |
 | `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 / 0 |
 | `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 / 0 |
@@ -394,7 +394,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `net/public/burner_finish_substep.inc` | `net` | partial | - | 7 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 7 | 0 |
 | `net/public/net_def.f90` | `net` | partial | - | 625 | 11 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 276 | 349 |
 | `net/public/net_lib.f90` | `net` | partial | - | 1,210 | 45 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 1,063 | 147 |
-| `neu/private/mod_neu.f90` | `neu` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 0 / 1 | 1,619 | 0 | 0 | 9 | 87 |
+| `neu/private/mod_neu.f90` | `neu` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 1 / 0 | 1,619 | 0 | 0 | 9 | 87 |
 | `neu/public/neu_def.f90` | `neu` | ported_unverified | - | 46 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 46 |
 | `neu/public/neu_lib.f90` | `neu` | ported_unverified | kernel_reference_vectors | 71 | 1 | 1 | 0 | 0 | 1 / 0 | 34 | 0 | 0 | 0 | 37 |
 | `num/private/decomc.dek` | `num` | partial | - | 429 | 2 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 425 | 4 |

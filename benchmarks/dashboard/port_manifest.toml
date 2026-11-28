@@ -7679,18 +7679,47 @@ upstream_lines = 1460
 upstream_sha256 = "f779283daa37ed7a74c712cd5620e72c1fd0b56f467a6e71adf9f5f2197a1f32"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_temperature.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/hydro_work.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/star_ad.rs"]
-routine_map_partial = ["get_RSP2_conv_velocity"]
+routine_map_partial = ["get_RSP2_conv_velocity", "get_face_weights_ad_support", "wrap_ChiRho_m1", "wrap_ChiT_m1", "wrap_Cp_m1", "wrap_Hp_00", "wrap_Hp_p1", "wrap_grad_ad_m1", "wrap_opt_time_center_v_00", "wrap_opt_time_center_v_m1", "wrap_opt_time_center_v_p1", "wrap_v_00", "wrap_v_m1", "wrap_v_p1", "wrap_w_00", "wrap_w_m1"]
 notes = "seeded from coverage-map.md (partial): quick. 3/118 wrapper names; Rust builds stencil duals ad hoc"
 [files.routine_map]
+"get_etrb" = "crates/flexmesa-star/src/cell_energy.rs::cell_rsp2_eturb"
+"get_face_weights_ad_support" = "crates/flexmesa-star/src/mesh.rs::StarModel::get_face_weights" # partial: returns (1.0, 0.0) at k == 0 instead of mesa_error and guards denom <= 0 -> (0.5, 0.5)
 "get_RSP2_conv_velocity" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info_with_skip"
 "shift_m1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_m1"
 "shift_p1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_p1"
+"wrap_ChiRho_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_ChiRho_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_ChiT_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_ChiT_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_Cp_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_Cp_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
 "wrap_d_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_00"
 "wrap_d_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_m1"
 "wrap_e_00" = "crates/flexmesa-star/src/hydro_energy.rs::wrap_e_cell_00"
+"wrap_grad_ad_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_grad_ad_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_Hp_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp" # partial: returns constant when layout.i_hp is None
+"wrap_Hp_p1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp" # partial: returns constant when layout.i_hp is None; omits internal k < nz zero-return guard
+"wrap_opt_time_center_r_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_00"
+"wrap_opt_time_center_r_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_m1"
+"wrap_opt_time_center_r_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_p1"
+"wrap_opt_time_center_u_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_u_00"
+"wrap_opt_time_center_u_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_u_m1"
+"wrap_opt_time_center_v_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_00" # partial: v_flag branch only; omits u_flag/u_face_start branch
+"wrap_opt_time_center_v_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_m1" # partial: v_flag branch only; omits u_flag/u_face_start branch
+"wrap_opt_time_center_v_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_p1" # partial: v_flag branch only; omits u_flag/u_face_start branch
 "wrap_Peos_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_00"
 "wrap_Peos_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_m1"
 "wrap_r_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_r_00"
+"wrap_r_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_r_m1"
+"wrap_r_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_r_p1"
+"wrap_u_00" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_u_00"
+"wrap_u_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_u_m1"
+"wrap_v_00" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_00" # partial: v_flag branch only; omits u_flag wrap_u_face_00 dispatch
+"wrap_v_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_m1" # partial: v_flag branch only; omits u_flag wrap_u_face_m1 dispatch
+"wrap_v_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_p1" # partial: v_flag branch only; omits u_flag wrap_u_face_p1 dispatch
+"wrap_w_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_w" # partial: computes w = et_rsp.max(0.0).sqrt() and returns constant when layout.i_w is None
+"wrap_w_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_w" # partial: computes w = et_rsp.max(0.0).sqrt(), returns constant when layout.i_w is None, and omits internal k > 0 guard
 
 [[files]]
 upstream_path = "star/private/brunt.f90"
@@ -8291,7 +8320,20 @@ upstream_lines = 1232
 upstream_sha256 = "02eefaece9c8c88115a7d2eb5c5cf3c8312b22eaaf2a8ce932478b095313a3f6"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["alloc_star_data", "create_RSP_model", "create_initial_model", "create_pre_ms_model", "load_restart_photo", "load_saved_model", "load_zams_model", "model_builder", "set_starting_star_data"]
 notes = "seeded from coverage-map.md (stub): deep (C1-1). Case-name branching and sub-grid ZAMS rescaling removed (#148); remaining `do_star_init`, `do_load1_star`, `do_relax_to_radiative_core`, and envelope initialization parity tracked under #154"
+[files.routine_map]
+"alloc_star_data" = "crates/flexmesa-star/src/model.rs::StarModel::new" # partial: allocates StarModel arrays and defaults; omits Fortran star_handles table and callback pointers
+"create_initial_model" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches build_initial_model and initial_model_relax_num_steps inside init_or_update_model_impl; omits standalone wrapper
+"create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches build_pre_ms_model_with_configs and relax_after_create_pre_ms_model inside init_or_update_model_impl; omits standalone wrapper
+"create_RSP_model" = "crates/flexmesa-star/src/rsp_driver.rs::init_rsp_model_from_bundle" # partial: dispatches RSP model build/load inside init_rsp_model_from_bundle; omits standalone wrapper
+"load_restart_photo" = "crates/flexmesa-star/src/photo_io.rs::read_photo_bytes" # partial: reads FlexMESA binary photo format rather than MESA Fortran unformatted photo; omits model_builder restart dispatch
+"load_saved_model" = "crates/flexmesa-star/src/star_job_init.rs::load_saved_mod" # partial: reads .mod file via read_mod_str_with_dir; finish_load_model runs in caller init_or_update_model_impl
+"load_zams_model" = "crates/flexmesa-star/src/zams.rs::load_zams_model" # partial: loads built-in ZAMS catalog model; finish_load_model and star_job startup run in star_job_init.rs
+"model_builder" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches saved/pre-MS/initial/ZAMS/RSP builders, initial_y default, and post-build relaxes; omits create_RSP2_model, restart photo branch, and pgstar
+"model_builder::done_relax_after_create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::relax_after_create_pre_ms_model"
+"model_builder::setup_for_relax_after_create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::relax_after_create_pre_ms_model"
+"set_starting_star_data" = "crates/flexmesa-star/src/model.rs::StarModel::new" # partial: initializes model defaults and counters in StarModel::new; omits Fortran star_info pointer nullification and unused scalar resets
 
 [[files]]
 upstream_path = "star/private/init_model.f90"
@@ -9182,7 +9224,83 @@ upstream_lines = 4340
 upstream_sha256 = "6e7a58a2c8beaf3f3fd7ac144b195f537e48360fded25e00cd1bfec0e105dc98"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/relax.rs", "crates/flexmesa-star/src/relax_comp.rs"]
+routine_map_partial = ["angular_momentum_relax_other_torque", "do1_relax_L_center", "do1_relax_R_center", "do_internal_evolve", "do_internal_evolve::restore_stuff", "do_internal_evolve::save_stuff", "do_relax_angular_momentum", "do_relax_tau_factor", "do_relax_uniform_omega", "relax_angular_momentum_check_model", "relax_angular_momentum_check_model::adjust_angular_momentum", "relax_entropy_check_model::adjust_entropy"]
 notes = "seeded from coverage-map.md (stub): deep (C1-2, C1-3, C1-4). 11/126 routine names; no `do_internal_evolve`-driven relaxations"
+[files.routine_map]
+"angular_momentum_relax_other_torque" = "crates/flexmesa-star/src/relax_mass_comp.rs::eval_relax_extra_jdot" # partial: omits j_rot_flag branch using j_rot_start(k); uses model.j_rot[k] only
+"before_evolve_relax_angular_momentum" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxAngularMomentum::before_evolve"
+"before_evolve_relax_composition" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::before_evolve"
+"before_evolve_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxCore::before_evolve"
+"before_evolve_relax_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropy::before_evolve"
+"before_evolve_relax_irradiation" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxIrradiation::before_evolve"
+"before_evolve_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMCenter::before_evolve"
+"before_evolve_relax_mass" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMass::before_evolve"
+"before_evolve_relax_mass_scale" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMassScale::before_evolve"
+"before_evolve_relax_num_steps" = "crates/flexmesa-star/src/relax_driver.rs::RelaxNumSteps::before_evolve"
+"before_evolve_relax_omega" = "crates/flexmesa-star/src/relax_driver.rs::RelaxOmega::before_evolve"
+"before_evolve_relax_tau_factor" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxTauFactor::before_evolve"
+"before_evolve_relax_to_radiative_core" = "crates/flexmesa-star/src/relax_driver.rs::RelaxToRadiativeCore::before_evolve"
+"before_evolve_relax_Y" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxY::before_evolve"
+"before_evolve_relax_Z" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxZ::before_evolve"
+"do1_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_core"
+"do1_relax_L_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_l_center" # partial: updates model.lum directly rather than xh(i_lum, k); relies on caller sync_mesh_and_pack
+"do1_relax_R_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_r_center" # partial: updates model.ln_r/r directly rather than store_lnR_in_xh; relies on caller sync_mesh_and_pack
+"do_internal_evolve" = "crates/flexmesa-star/src/relax_driver.rs::do_internal_evolve+override_controls_for_relax" # partial: omits pgstar updates, finish_relax_step/finished_relax callbacks, and warning_limit_for_max_residual/recent_log_header
+"do_internal_evolve::restore_stuff" = "crates/flexmesa-star/src/relax_driver.rs::SavedStuff::restore" # partial: omits terminal-only warning_limit_for_max_residual and recent_log_header
+"do_internal_evolve::save_stuff" = "crates/flexmesa-star/src/relax_driver.rs::SavedStuff::save" # partial: omits terminal-only warning_limit_for_max_residual and recent_log_header
+"do_relax_angular_momentum" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_angular_momentum" # partial: adds input validation and resets star_age/time_old_sec in SavedScalarRelaxState
+"do_relax_angular_momentum::store_rpar" = "crates/flexmesa-star/src/relax_comp.rs::RelaxScalarInterpolant::from_slices"
+"do_relax_composition" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_composition"
+"do_relax_composition::store_rpar" = "crates/flexmesa-star/src/relax_comp.rs::RelaxCompositionInterpolants::from_profile"
+"do_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_core"
+"do_relax_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::do_relax_entropy"
+"do_relax_entropy::store_rpar" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::new"
+"do_relax_irradiation" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_irradiation"
+"do_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_m_center"
+"do_relax_mass" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_mass"
+"do_relax_mass_scale" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_mass_scale"
+"do_relax_num_steps" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_num_steps"
+"do_relax_tau_factor" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_tau_factor" # partial: omits setting force_tau_factor at exit (photo restart field)
+"do_relax_to_radiative_core" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_to_radiative_core"
+"do_relax_uniform_omega" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_uniform_omega" # partial: omits zeroing s% D_omega(1:nz) at exit
+"do_relax_Y" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_y"
+"do_relax_Z" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_z"
+"entropy_relax_other_energy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::apply_other_energy"
+"null_finish_model" = "crates/flexmesa-star/src/relax_driver.rs::finish_model"
+"relax_angular_momentum_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_angular_momentum_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxAngularMomentum::check_model" # partial: errors on non-finite interpolated target rather than only checking interp_values ierr; omits terminal avg_err print
+"relax_angular_momentum_check_model::adjust_angular_momentum" = "crates/flexmesa-star/src/relax_comp.rs::RelaxScalarInterpolant::interpolate_to_model" # partial: interpolates target angular momentum onto cell centers; omits terminal-only avg_err calculation
+"relax_composition_adjust_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::adjust_model"
+"relax_composition_adjust_model::adjust_xa" = "crates/flexmesa-star/src/relax_comp.rs::RelaxCompositionInterpolants::apply_step+RelaxCompositionInterpolants::interpolate_target_to_model"
+"relax_composition_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::check_model"
+"relax_core_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_core_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxCore::check_model"
+"relax_entropy_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_entropy_check_model" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropy::check_model"
+"relax_entropy_check_model::adjust_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::at_cell_centers" # partial: interpolates target entropy onto cell centers for error check; omits terminal-only avg_err calculation
+"relax_irradiation_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_irradiation_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxIrradiation::check_model"
+"relax_M_center_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_M_center_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMCenter::check_model"
+"relax_mass_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_mass_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMass::check_model"
+"relax_mass_scale_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_mass_scale_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMassScale::check_model"
+"relax_num_steps_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_num_steps_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxNumSteps::check_model"
+"relax_omega_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_omega_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxOmega::check_model"
+"relax_tau_factor_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_tau_factor_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxTauFactor::check_model"
+"relax_to_radiative_core_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_to_radiative_core_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxToRadiativeCore::check_model"
+"relax_Y_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_Y_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxY::check_model"
+"relax_Z_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_Z_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxZ::check_model"
+"set_new_mass_for_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::set_new_mass_for_relax_m_center"
+"setup_before_relax" = "crates/flexmesa-star/src/relax_driver.rs::setup_before_relax"
+"turn_off_winds" = "crates/flexmesa-star/src/relax_driver.rs::turn_off_winds"
 
 [[files]]
 upstream_path = "star/private/remove_shells.f90"
@@ -9250,14 +9368,26 @@ upstream_lines = 1030
 upstream_sha256 = "481a1207fc939f2cf293cb3e71aacaeebdb906a69fec793ef6790545622e518e"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_build.rs", "crates/flexmesa-star/src/rsp_driver.rs", "crates/flexmesa-star/src/rsp_stats.rs"]
+routine_map_partial = ["begin_calculation", "calculate_work_integrals", "check_cycle_completed", "do1_step", "gather_pulse_statistics", "get_LINA_info", "read_map_specs", "rsp_one_step::add_to_map"]
 notes = "seeded from coverage-map.md (ported): quick. 14/19 names"
 [files.routine_map]
+"begin_calculation" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model" # partial: sets num_periods = 0 before set_star_vars_rsp and omits post-set_star_vars EKDEL reset
 "build_rsp_model" = "crates/flexmesa-star/src/rsp_build.rs::do_rsp_build_model"
+"calculate_work_integrals" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals" # partial: adds dm_ext.max(1e-99), work_period > 0 guard, and non-finite grpdv -> 0.0 guard
+"check_cycle_completed" = "crates/flexmesa-star/src/rsp_stats.rs::check_cycle_completed" # partial: omits is_bad(rsp_period) error and per-cycle step/iter/retry counter updates
 "do1_rsp_build" = "crates/flexmesa-star/src/rsp_build.rs::build_rsp_envelope_model"
+"do1_step" = "crates/flexmesa-star/src/rsp_driver.rs::do1_step" # partial: clamps rsp_target_steps_per_cycle.max(1); omits stop_for_bad_nums abort and pre-max_dt is_bad(dt) check
+"do1_step::dt_for_radiative_diffusion" = "crates/flexmesa-star/src/rsp_driver.rs::do1_step"
+"gather_pulse_statistics" = "crates/flexmesa-star/src/rsp_stats.rs::gather_pulse_statistics" # partial: guards lmax > 0.0 && lmin > 0.0 before log10(lmax/lmin)
+"get_GRPDV" = "crates/flexmesa-star/src/rsp_stats.rs::get_grpdv"
+"get_LINA_info" = "crates/flexmesa-star/src/rsp_driver.rs::get_lina_info" # partial: stores only first 3 modes, clamps nmodes.max(1), and uses .get(mode_idx).unwrap_or
+"read_map_specs" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_after_step_map" # partial: delegates to mesa_profile::parse_rsp_map_columns without max_map_cols cap
 "rsp_one_step" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_one_step"
+"rsp_one_step::add_to_map" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_after_step_map" # partial: checks ip < npch2 vs IP+1 <= NPCH2, guards period == 0.0, and omits star_history_name switch
 "rsp_setup_part1" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model"
 "rsp_setup_part2" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model"
 "rsp_total_energy_integrals" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_total_energy_integrals"
+"set_random_velocities" = "crates/flexmesa-star/src/rsp_driver.rs::set_random_velocities"
 
 [[files]]
 upstream_path = "star/private/rsp_build.f90"
@@ -9266,9 +9396,26 @@ upstream_lines = 986
 upstream_sha256 = "4337e53418e6dea0d053beb8f5a89ccbbceda393579567fb3f70268ee6044f12"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_build.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/rsp_stah.rs"]
+routine_map_partial = ["CFLUX", "STAH", "STAH::eval_T_residual", "STAH::failed", "STAH::get_T", "STAH::get_T_estimate", "STAH::get_V"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
+"CFLUX" = "crates/flexmesa-star/src/rsp_stah.rs::StahStepVars::cflux" # partial: clamps w_0 with .max(0.0) before .sqrt()
 "do_rsp_build" = "crates/flexmesa-star/src/rsp_build.rs::do_rsp_build_model"
+"STAH" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: clamps r^3 - 3*V*dm/P4 with .max(0.0) and sets r_center = s.r_1 without recomputing from r(1)
+"STAH::change_NZN" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::eval_T_residual" = "crates/flexmesa-star/src/rsp_stah.rs::StahStepVars::eval_t_residual" # partial: guards dlnt4 == 0.0 -> 0.0
+"STAH::failed" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: omits adjusting_dmN/dmN_cnt > 1/IG > 54 stop guard
+"STAH::get_T" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t" # partial: runs Prad < P_0 reduction loop unconditionally in fallback instead of only under RSP_testing
+"STAH::get_T_estimate" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t" # partial: guards lnt_max > lnt_min and caps brent_safe_zero at 200 iterations
+"STAH::get_T_residual" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t"
+"STAH::get_V" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: omits if (Lc_0 >= L) stop
+"STAH::next_dmN" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::next_H" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::prepare_for_new_H" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::setup_next_zone" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::setup_outer_zone" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::store_N" = "crates/flexmesa-star/src/rsp_stah.rs::store_stah_zone"
+"ZNVAR" = "crates/flexmesa-star/src/rsp_stah.rs::znvar"
 
 [[files]]
 upstream_path = "star/private/rsp_def.f90"
@@ -9361,13 +9508,18 @@ upstream_lines = 3834
 upstream_sha256 = "f0fc12b02bbe0c7eb3673648fcf582c89cb69a7c6afc6d548956b3ba05e4e6ba"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_eqns.rs", "crates/flexmesa-star/src/rsp_eqns_cell.rs", "crates/flexmesa-star/src/rsp_hyd.rs", "crates/flexmesa-star/src/rsp_hyd_flux.rs", "crates/flexmesa-star/src/rsp_hyd_turb.rs", "crates/flexmesa-star/src/rsp_hyd_vars.rs", "crates/flexmesa-star/src/rsp_hyd_work.rs"]
+routine_map_partial = ["HYD::doing_retry", "HYD::set_min_k_for_turbulent_flux", "apply_corrections", "check_omega", "rsp_calc_XP", "solve_for_corrections"]
 notes = "seeded from coverage-map.md (ported): quick. 36/53 names; Rust ~3.2k lines vs 3.8k"
 [files.routine_map]
-"HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd"
-"T_form_of_calc_Fr" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::t_form_of_calc_fr"
 "acceleration_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::acceleration_eqn"
+"apply_corrections" = "crates/flexmesa-star/src/rsp_hyd.rs::apply_corrections" # partial: omits s% Lr(k) update and DXXE/DXXL tracking
+"calc_cell_equations" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn+turbulent_energy_eqn+t_form_of_erad_eqn"
+"calc_cell_equations::get_Lt" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
+"calc_cell_equations::inner_boundary_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_Chi" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_chi"
 "calc_Eq" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_eq"
+"calc_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
+"calc_face_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_Fr" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
 "calc_Hp_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_hp_face"
 "calc_Lc" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::calc_lc"
@@ -9376,20 +9528,34 @@ notes = "seeded from coverage-map.md (ported): quick. 36/53 names; Rust ~3.2k li
 "calc_Prad" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_prad"
 "calc_Pturb" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_pturb"
 "calc_Pvsc" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_pvsc"
-"calc_Y_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_y_face"
-"calc_cell_equations" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn+turbulent_energy_eqn+t_form_of_erad_eqn"
-"calc_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_source_sink" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_source_sink"
+"calc_Y_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_y_face"
 "calculate_energies" = "crates/flexmesa-star/src/rsp_hyd.rs::calculate_energies"
+"check_omega" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::check_omega" # partial: clamps ibot = dc.ibotom.max(1)
 "do1_eos_and_kap" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::do1_eos_and_kap"
 "do1_specific_volume" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::do1_specific_volume"
+"erad_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::t_form_of_erad_eqn"
 "eval_eqns" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "eval_vars" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::eval_vars"
+"Fr_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
 "get_Psurf" = "crates/flexmesa-star/src/rsp_hyd.rs::get_psurf"
+"HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd"
+"HYD::doing_retry" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd" # partial: omits max_number_retries check and model.num_retries increment inside hyd
+"HYD::set_min_k_for_turbulent_flux" = "crates/flexmesa-star/src/rsp_hyd.rs::set_min_k_for_turbulent_flux" # partial: returns 0 early when dc.alfat <= 0.0
 "init_HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::init_hyd"
+"restore_start_vars" = "crates/flexmesa-star/src/rsp_hyd.rs::restore_start_vars"
+"rsp_calc_XP" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::rsp_calc_xp" # partial: omits d_XP_dVol_00 and call_is_bad check
 "rsp_set_Teff" = "crates/flexmesa-star/src/rsp_hyd.rs::rsp_set_teff"
 "save_start_vars" = "crates/flexmesa-star/src/rsp_hyd.rs::save_start_vars"
+"set_1st_iter_R_using_v_start" = "crates/flexmesa-star/src/rsp_hyd.rs::set_1st_iter_r_using_v_start"
 "set_f_Edd" = "crates/flexmesa-star/src/rsp_hyd.rs::set_f_edd"
+"solve_for_corrections" = "crates/flexmesa-star/src/rsp_eqns.rs::solve_for_corrections" # partial: omits call_is_bad check on DX
+"T_form_of_calc_Fr" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::t_form_of_calc_fr"
+"T_form_of_erad_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::t_form_of_erad_eqn"
+"T_form_of_Fr_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
+"total_energy_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn"
+"turbulent_energy_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::turbulent_energy_eqn"
+"zero_boundaries" = "crates/flexmesa-star/src/rsp_hyd_work.rs::zero_boundaries"
 
 [[files]]
 upstream_path = "star/private/set_flags.f90"
@@ -9398,7 +9564,19 @@ upstream_lines = 806
 upstream_sha256 = "8d819fdbcc6b5510d84d75c1c638a5f9e1dc09704a5e3fc8ba7267bc7d175e31"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["set_D_omega_flag", "set_RSP2_flag", "set_RSP_flag", "set_RTI_flag", "set_am_nu_rot_flag", "set_rotation_flag", "set_u_flag", "set_v_flag"]
 notes = "seeded from coverage-map.md (stub): quick. 1/16 names; no remap of state when a flag changes (e.g. `set_v_flag` initialisation, `set_RSP2_flag` conversion beyond rsp2_remesh.rs)"
+[files.routine_map]
+"set_am_nu_rot_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and aux.am_nu_rot zeroing only; omits mid-run star_set_am_nu_rot_flag
+"set_D_omega_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and aux.rotmix.d_omega zeroing only; omits mid-run star_set_D_omega_flag
+"set_rotation_flag" = "crates/flexmesa-star/src/job_rotation.rs::set_rotation_flag_on" # partial: enables rotation and zeroes j_rot/omega/am_nu_*/fp_rot/ft_rot only; omits turning rotation off and D_ST/D_DSI/D_SH/D_SSI/D_ES/D_GSF/prev_mesh_* zeroing
+"set_RSP2_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup toggle, VarLayout rebuild, w seeding, and hp_face init only; omits mid-run xh column insert/remove and teardown
+"set_RSP_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup rsp_flag toggle only; omits RSP_w/RSP_Et xh column insert/remove and RSP2_flag teardown
+"set_RTI_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and VarLayout/alpha_rti resize only; omits mid-run xh column shift and alloc_rti_arrays
+"set_u_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and VarLayout/u resize only; omits mid-run xh/u_face_ad/P_face_ad column shift and v_flag teardown
+"set_v_flag" = "crates/flexmesa-star/src/model.rs::StarModel::set_v_flag" # partial: omits set_var_info name strings and zeroing of xh_older/v_older
+"set_v_flag::del" = "crates/flexmesa-star/src/model.rs::shift_del_hydro_col"
+"set_v_flag::insert" = "crates/flexmesa-star/src/model.rs::shift_insert_hydro_col"
 
 [[files]]
 upstream_path = "star/private/solve_omega_mix.f90"
@@ -9443,11 +9621,18 @@ upstream_lines = 981
 upstream_sha256 = "34d97fd656c01c95f0a5de29c9cd722670c65d5571b8758ae2abe0698031b4cd"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-mtx/src/bcyclic.rs"]
+routine_map_partial = ["bcyclic_factor", "bcyclic_solve", "cycle_onestep", "cycle_rhs", "dense_factor", "dense_solve", "dense_solve1"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
-"bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
-"bcyclic_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
+"bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_factor+solve_block_tridiag_bcyclic" # partial: omits use_DGESVX_in_bcyclic
+"bcyclic_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_solve+solve_block_tridiag_bcyclic" # partial: omits use_DGESVX_in_bcyclic
 "clear_storage" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
+"cycle_onestep" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix+update_even_matrix+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic, bcyclic_odd_storage reuse, and factored(k) guard; zeroes u_j when !has_right
+"cycle_rhs" = "crates/flexmesa-mtx/src/bcyclic.rs::update_even_rhs+bcyclic_solve+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic
+"cycle_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::back_substitute_bcyclic"
+"dense_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrf directly; omits DGESVX and n4/n5 dispatch
+"dense_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrs_multi directly; omits DGESVX
+"dense_solve1" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_row+bcyclic_solve" # partial: calls dgetrs directly; omits DGESVX
 
 [[files]]
 upstream_path = "star/private/star_history_def.f90"
@@ -9518,7 +9703,7 @@ upstream_lines = 4149
 upstream_sha256 = "66d1c0f237d3e885d44cd820b994058e699677f21e9205fbcde639b905db8d12"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-astero/src/scaling.rs", "crates/flexmesa-star/src/adjust_net.rs", "crates/flexmesa-star/src/cell_energy.rs", "crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/eps_mdot.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/job_rotation.rs", "crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/mesh_remap.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/pulse_gyre_data.rs", "crates/flexmesa-star/src/relax_comp.rs", "crates/flexmesa-star/src/report_utils.rs", "crates/flexmesa-star/src/rotation_mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/rsp2_eqns.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/solver_support.rs", "crates/flexmesa-star/src/star_utils.rs", "crates/flexmesa-star/src/termination.rs", "crates/flexmesa-star/src/zams.rs"]
-routine_map_partial = ["calc_Ptot_ad_tw", "calc_Ptrb_ad_tw", "cell_start_specific_PE_qp", "e00", "em1", "ep1", "get_Lrad_div_Ledd", "get_Pvsc_ad", "get_area_info_opt_time_center", "get_delta_Pg_bildsten2012", "get_delta_Pg_traditional", "get_dke_dt_dpe_dt", "get_grada_face", "get_gradr_face", "get_rho_face", "get_scale_height_face", "get_scale_height_face_val", "get_string_for_model_number", "get_tau", "min_dr_div_cs", "save_eqn_residual_info", "set_abs_du_div_cs", "set_m_and_dm", "set_m_grav_and_grav", "set_phot_info", "set_rmid", "set_scale_height", "set_xqs", "store_partials", "unpack_residual_partials"]
+routine_map_partial = ["calc_Ptot_ad_tw", "calc_Ptrb_ad_tw", "cell_start_specific_KE", "cell_start_specific_PE", "cell_start_specific_PE_qp", "e00", "em1", "ep1", "get_Lrad_div_Ledd", "get_Pvsc_ad", "get_area_info_opt_time_center", "get_delta_Pg_bildsten2012", "get_delta_Pg_traditional", "get_dke_dt_dpe_dt", "get_grada_face", "get_gradr_face", "get_rho_face", "get_scale_height_face", "get_scale_height_face_val", "get_string_for_model_number", "get_tau", "min_dr_div_cs", "save_eqn_residual_info", "set_abs_du_div_cs", "set_m_and_dm", "set_m_grav_and_grav", "set_phot_info", "set_rmid", "set_scale_height", "set_xqs", "store_partials", "unpack_residual_partials"]
 notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 [files.routine_map]
 "after_C_burn" = "crates/flexmesa-star/src/job_rotation.rs::after_c_burn"
@@ -9531,7 +9716,9 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "cell_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_pe_qp"
 "cell_specific_rotational_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_rotational_energy"
 "cell_specific_total_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_total_energy"
+"cell_start_specific_KE" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_ke_qp" # partial: inlined inside get_dke_dt_dpe_dt via specific_ke_qp(...).ke.to_f64(); no standalone f64 wrapper
 "cell_start_specific_KE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_ke_qp"
+"cell_start_specific_PE" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_pe_qp" # partial: inlined inside get_dke_dt_dpe_dt; uses current m_grav/mass_correction rather than _start
 "cell_start_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_pe_qp"
 "center_avg_x" = "crates/flexmesa-star/src/report_utils.rs::center_avg_x_slot+center_avg_x_by_name"
 "center_value" = "crates/flexmesa-star/src/report_utils.rs::center_value+center_value_by"
@@ -9575,6 +9762,7 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "get_Lrad_div_Ledd" = "crates/flexmesa-star/src/mix_info.rs::eval_lrad_div_ledd"
 "get_name_for_restart_file" = "crates/flexmesa-star/src/inlist_runner.rs::photo_restart_filename"
 "get_Peos_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_Peos_face_val" = "crates/flexmesa-star/src/mesh.rs::StarModel::face_value_alfa_beta"
 "get_phot_info" = "crates/flexmesa-star/src/report_utils.rs::eval_photosphere_info"
 "get_Prad_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
 "get_Pvsc_ad" = "crates/flexmesa-star/src/hydro_energy.rs::eval_pvsc_cell_ad"
@@ -9584,6 +9772,7 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "get_remnant_mass" = "crates/flexmesa-star/src/termination.rs::get_remnant_mass"
 "get_rho_and_lnd_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
 "get_rho_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_rho_face_val" = "crates/flexmesa-star/src/mesh.rs::StarModel::face_value_alfa_beta"
 "get_rho_start_face" = "crates/flexmesa-star/src/hydro_vars.rs::face_dv_and_energy"
 "get_scale_height_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
 "get_scale_height_face_val" = "crates/flexmesa-star/src/rsp2_eqns.rs::get_scale_height_face_val"

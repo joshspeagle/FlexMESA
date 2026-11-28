@@ -342,7 +342,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # DECISIONS #81: macOS bit-identity runs on train PRs and manual
+        # runs; the nightly campaign checks it uncapped on main. Other
+        # pushes compare 1 and 4 threads on Linux only.
+        os: ${{ fromJSON((startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -373,6 +376,7 @@ jobs:
   strict-cross-machine-gate:
     name: Strict x86_64 vs aarch64 Bit-Identity Gate
     needs: strict-determinism
+    if: startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -394,3 +398,100 @@ jobs:
       - name: Verify identical strict SHA-256 across x86_64 and aarch64
         run: |
           python scripts/check_strict_determinism.py --compare "${{ runner.temp }}"/strict-digests/strict_*.json
+
+  # DECISIONS #81 (T1): a train PR re-runs the passing cases projected to
+  # finish within 600 s, uncapped, with step counts enforced and the
+  # baseline gate. The full campaign is the nightly run on main.
+  train-canary-shard:
+    name: Train Canary (shard ${{ matrix.shard }}/8)
+    needs: changes
+    if: >-
+      needs.changes.outputs.engine_runs == 'true' &&
+      (startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
+
+      - name: Run one canary shard
+        run: |
+          OUT_DIR="${{ runner.temp }}/canary-shard"
+          mkdir -p "$OUT_DIR"
+          flexmesa harness run \
+            --preset canary \
+            --numerics-mode strict \
+            --enforce-step-counts \
+            --shard "${{ matrix.shard }}/8" \
+            --jobs 2 \
+            --timeout-sec 1200 \
+            --case-budgets benchmarks/history_harness/case_budgets.toml \
+            --max-rss-gb 5.5 \
+            --work-dir "$OUT_DIR/logs" \
+            --json-out "$OUT_DIR/shard_${{ matrix.shard }}.json"
+
+      - name: Upload canary shard report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: train-canary-shard-${{ matrix.shard }}
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/canary-shard/
+
+  train-canary:
+    name: Train Canary (merge and gate)
+    needs: train-canary-shard
+    if: always() && needs.train-canary-shard.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
+
+      - name: Download canary shard reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: train-canary-shard-*
+          path: ${{ runner.temp }}/canary-shards
+
+      - name: Merge canary shards and gate against the baseline
+        run: |
+          OUT_DIR="${{ runner.temp }}/canary"
+          mkdir -p "$OUT_DIR"
+          shopt -s nullglob
+          REPORTS=("${{ runner.temp }}"/canary-shards/*/shard_*.json)
+          if [ "${#REPORTS[@]}" -ne 8 ]; then
+            echo "expected 8 canary shard reports, found ${#REPORTS[@]}" >&2
+            exit 1
+          fi
+          flexmesa harness merge "${REPORTS[@]}" \
+            --markdown-out "$OUT_DIR/case_table.md" \
+            --json-out "$OUT_DIR/case_table.json" \
+            --gate
+          cat "$OUT_DIR/case_table.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload canary case table
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: train-canary-artifacts
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/canary/

@@ -411,7 +411,10 @@ def _select_entries(
     preset: str,
     cases_filter: list[str] | None,
     passing: frozenset[tuple[str, str]] = frozenset(),
+    projected: Mapping[tuple[str, str], float] | None = None,
+    canary_max_sec: float = 600.0,
 ) -> list[case_manifest.CaseManifestEntry]:
+    projected = projected or {}
     if cases_filter:
         wanted = set(cases_filter)
         selected = [
@@ -426,6 +429,15 @@ def _select_entries(
         return [e for e in manifest.cases if e.pr_ci]
     if preset == "passes":
         return [e for e in manifest.cases if e.key in passing]
+    if preset == "canary":
+        # DECISIONS #81 (T1): the passing cases expected to finish within
+        # the canary limit, so a train PR re-runs them uncapped in minutes.
+        return [
+            e
+            for e in manifest.cases
+            if e.key in passing
+            and projected.get(e.key, float("inf")) <= canary_max_sec
+        ]
     if preset == "has-reference":
         return [
             e
@@ -474,12 +486,22 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--mesa-dir", default=None)
     p_run.add_argument(
         "--preset",
-        choices=("pr-ci", "has-reference", "passes", "all"),
+        choices=("pr-ci", "has-reference", "passes", "canary", "all"),
         default="pr-ci",
         help=(
             "Cases to run: 'pr-ci', 'has-reference', 'passes' (the cases "
-            "whose committed baseline verdict is pass), or 'all'. "
-            "--cases overrides it."
+            "whose committed baseline verdict is pass), 'canary' (the "
+            "passing cases projected to finish within --canary-max-sec, "
+            "DECISIONS #81), or 'all'. --cases overrides it."
+        ),
+    )
+    p_run.add_argument(
+        "--canary-max-sec",
+        type=float,
+        default=600.0,
+        help=(
+            "Projected wall-time limit (s) of the 'canary' preset, read from "
+            "benchmarks/history_harness/case_budgets.toml (default 600)."
         ),
     )
     p_run.add_argument(
@@ -1556,11 +1578,20 @@ def harness_main(argv: list[str] | None = None) -> int:
     manifest = case_manifest.load_case_manifest(ns.manifest)
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
     base_records = _baseline_records(ns)
+    projected: dict[tuple[str, str], float] = {}
+    if ns.preset == "canary" and not ns.cases:
+        projected = case_budgets.load_projected_times(
+            case_budgets.default_path()
+            if ns.case_budgets is None
+            else ns.case_budgets
+        )
     selected = _select_entries(
         manifest,
         ns.preset,
         ns.cases,
         harness_budgets.passing_keys(base_records),
+        projected,
+        float(ns.canary_max_sec),
     )
     if ns.case_budgets is not None:
         try:

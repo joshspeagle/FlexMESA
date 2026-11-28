@@ -22,6 +22,7 @@ __all__ = [
     "USABLE_JOB_SEC",
     "default_path",
     "load_case_budgets",
+    "load_projected_times",
 ]
 
 #: Wall-clock limit assumed for one hosted job, in minutes (``min``).
@@ -77,4 +78,35 @@ def load_case_budgets(
         if key in out:
             raise ValueError(f"{path}: {key[0]}/{key[1]} appears twice")
         out[key] = budget
+    return out
+
+
+def load_projected_times(
+    path: pathlib.Path | str,
+) -> dict[tuple[str, str], float]:
+    """Read each case's projected wall time from a budget table.
+
+    Args:
+        path: A ``case_budgets.toml`` file whose ``[[cases]]`` rows carry
+            ``projected_sec``.
+
+    Returns:
+        ``{(suite, case): projected_sec}`` in seconds (``s``).
+
+    Raises:
+        ValueError: If the file has no ``cases`` list or a row is malformed.
+    """
+    with pathlib.Path(path).open("rb") as fh:
+        data = tomllib.load(fh)
+    rows = data.get("cases")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError(f"{path}: no 'cases' list")
+    out: dict[tuple[str, str], float] = {}
+    for row in rows:
+        try:
+            out[(str(row["suite"]), str(row["case"]))] = float(
+                row["projected_sec"]
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"{path}: malformed row {row!r}") from exc
     return out

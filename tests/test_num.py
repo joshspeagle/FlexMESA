@@ -20,6 +20,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
+import pytest
 from hypothesis import strategies as st
 
 from flexmesa import num
@@ -218,15 +219,66 @@ def test_safe_root_matches_mesa_golden_sin_root() -> None:
         epsy=1e-6,
     )
     assert abs(r_mesa - 0.7480061088059349) < 1e-14
-    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, -10.0, 10.0, _fn_sin)
+    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, _fn_sin)
     r_exact, f_exact = num.safe_root_with_brackets(
         _fn_sin, x1, x3, y1, y3, epsx=1e-14, epsy=1e-14
     )
     assert abs(r_exact - 0.7480061107481244) < 1e-13 and abs(f_exact) < 1e-13
+    r_brent, _ = num.eval_brent_safe_zero(
+        0.0,
+        10.0,
+        1e-14,
+        1e-6,
+        1e-6,
+        lambda x: _fn_sin(x)[0],
+        _fn_sin(0.0)[0],
+        _fn_sin(10.0)[0],
+    )
+    assert abs(r_brent - 0.7480061088059349) <= 1e-14
     r_guess, _ = num.safe_root_without_brackets(
         _fn_sin, 0.1, 0.25, epsx=1e-13, epsy=1e-13
     )
     assert abs(r_guess - r_exact) < 1e-12
+
+
+def test_look_for_brackets_and_tanh_match_rust_667() -> None:
+    """Verifies #667 and #669 look_for_brackets and safe_root_with_brackets."""
+
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:312-335 (test_root2).
+    def fn_tanh(x: float) -> tuple[float, float]:
+        t = math.tanh(x)
+        c = math.cosh(x)
+        return t - 0.462_117_157_260_009_8, 1.0 / (c * c)
+
+    (r2_x1, r2_x3), (r2_y1, r2_y3) = num.look_for_brackets(
+        -1.0, 0.1, fn_tanh, 50
+    )
+    assert abs(r2_x1 - (-1.2)) <= 1e-15
+    assert abs(r2_x3 - 2.0) <= 1e-15
+    r2_root, _ = num.safe_root_with_brackets(
+        fn_tanh, r2_x1, r2_x3, r2_y1, r2_y3, 50, 1e-10, 1e-10
+    )
+    assert abs(r2_root - 5.000_000_000_000_001e-1) <= 1e-14
+
+    # Mirrors crates/flexmesa-num/src/root.rs::tests::
+    # look_for_brackets_errors_at_i_31_where_upstream_overflows (#669).
+    calls = 0
+
+    def fn_pos(x: float) -> tuple[float, float]:
+        nonlocal calls
+        calls += 1
+        return 1.0 + x * x, 0.0
+
+    with pytest.raises(ValueError, match="#669"):
+        num.look_for_brackets(0.0, 0.01, fn_pos, 100)
+    assert calls == 2 + 29
+
+    # Mirrors look_for_brackets_follows_upstream_steps.
+    (bx1, bx3), (by1, by3) = num.look_for_brackets(
+        0.0, 0.5, lambda x: (x - 2.5, 1.0), 10
+    )
+    assert (bx1, bx3) == (-1.0, 3.0)
+    assert by1 < 0.0 < by3
 
 
 def test_nm_simplex_all_six_upstream_benchmarks_and_newuoa_bobyqa() -> None:

@@ -25,76 +25,73 @@ from flexmesa.num import brent as _brent
 def look_for_brackets(
     x: float,
     dx: float,
-    xmin: float,
-    xmax: float,
     func: Callable[[float], tuple[float, float]],
-    ntry: int = 50,
+    imax: int = 50,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Searches outward from ``x`` in steps of $\\pm 2^k \\,\\mathrm{dx}$.
+    """Brackets a root outward from ``x`` matching ``do_look_for_brackets``.
+
+    Mirrors ``num/private/mod_root.f90:168-256``: starts from ``x1 = x3 = x``
+    and widens by ``jump = 2**i * dx`` for ``i = 1..imax`` (moving both ends
+    at ``i = 1`` and then whichever endpoint value is closer to zero) until
+    ``y1 * y3 <= 0``. No bounds, no finiteness checks, and signed ``dx``.
 
     Args:
-        x: Initial center point clamped to ``[xmin, xmax]``.
-        dx: Initial step increment ($\\ne 0$).
-        xmin: Lower domain bound ($\\mathrm{xmin} < \\mathrm{xmax}$).
-        xmax: Upper domain bound.
+        x: Initial center point (arbitrary units).
+        dx: Initial step increment (used with its sign).
         func: Callable returning ``(f(x), df_dx(x))``.
-        ntry: Maximum outward expansion steps.
+        imax: Maximum outward expansion steps.
 
     Returns:
-        Nested tuple ``((x1, x3), (y1, y3))`` bracketing a sign change.
+        Nested tuple ``((x1, x3), (y1, y3))`` bracketing a root.
 
     Raises:
-        ValueError: If ``dx == 0`` or ``xmin >= xmax``.
-        RuntimeError: If no sign change is found within ``ntry`` expansions.
+        ValueError: If ``i >= 31`` where upstream's 32-bit integer ``2**i``
+            overflows (``num/private/mod_root.f90:199``, ``#669``), or if no
+            bracket is found within ``imax`` steps.
     """
-    if (
-        not (
-            np.isfinite(x)
-            and np.isfinite(dx)
-            and np.isfinite(xmin)
-            and np.isfinite(xmax)
-        )
-        or dx == 0.0
-        or xmin >= xmax
-    ):
-        raise ValueError("require finite arguments, dx != 0, and xmin < xmax")
-    x1 = min(max(float(x), float(xmin)), float(xmax))
-    x3 = x1
     y1 = 0.0
     y3 = 0.0
-    step0 = abs(float(dx))
-    limit = 50 if ntry <= 0 else ntry
-
-    for i in range(1, limit + 1):
-        if x1 <= xmin and x3 >= xmax and i > 1:
-            break
-        jump = float(1 << min(i, 50)) * step0
+    x1 = float(x)
+    x3 = x1
+    dx_f = float(dx)
+    for i in range(1, imax + 1):
+        # `jump = (2**i)*dx` (`mod_root.f90:199`): `2**i` overflows the
+        # default 32-bit integer for `i >= 31` (#669, `DECISIONS #43`).
+        if i >= 31:
+            raise ValueError(
+                "look_for_brackets reached i = 31, where upstream's integer "
+                "2**i overflows (num/private/mod_root.f90:199, #669)"
+            )
+        jump = float(1 << i) * dx_f
         if i == 1:
-            x1 = max(float(xmin), x1 - jump)
-            x3 = min(float(xmax), x3 + jump)
-            move_x1, move_x3 = True, True
-        else:
-            prefer_left = (y1 < y3) if y1 > 0.0 else (y1 > y3)
-            if (prefer_left and x1 > xmin) or x3 >= xmax:
-                x1 = max(float(xmin), x1 - jump)
-                move_x1, move_x3 = True, False
+            x1 -= jump
+            x3 += jump
+            move_x1 = True
+            move_x3 = True
+        elif y1 > 0.0:
+            if y1 < y3:
+                x1 -= jump
+                move_x1 = True
+                move_x3 = False
             else:
-                x3 = min(float(xmax), x3 + jump)
-                move_x1, move_x3 = False, True
-
+                x3 += jump
+                move_x3 = True
+                move_x1 = False
+        elif y1 > y3:
+            x1 -= jump
+            move_x1 = True
+            move_x3 = False
+        else:
+            x3 += jump
+            move_x3 = True
+            move_x1 = False
         if move_x1:
-            f1, _ = func(x1)
-            if not np.isfinite(f1):
-                raise ValueError("non-finite f(x) in look_for_brackets")
-            y1 = float(f1)
+            y1 = float(func(x1)[0])
         if move_x3:
-            f3, _ = func(x3)
-            if not np.isfinite(f3):
-                raise ValueError("non-finite f(x) in look_for_brackets")
-            y3 = float(f3)
+            y3 = float(func(x3)[0])
         if y1 * y3 <= 0.0:
             return (x1, x3), (y1, y3)
-    raise RuntimeError("failed to bracket root in look_for_brackets")
+    raise ValueError("failed to bracket root in look_for_brackets")
 
 
 def safe_root_with_brackets(
@@ -107,36 +104,34 @@ def safe_root_with_brackets(
     epsx: float = 1e-12,
     epsy: float = 1e-12,
 ) -> tuple[float, float]:
-    """Finds a root $x \\in [x_1, x_3]$ via Brent (`mod_root.f90:27-45`).
+    """Finds a root via ``eval_brent_safe_zero`` (``mod_root.f90:27-45``).
 
     Args:
         func: Callable returning ``(f(x), df_dx(x))``.
         x1_in: First bracket endpoint.
         x3_in: Second bracket endpoint.
-        y1_in: Function value $f(x_1)$.
-        y3_in: Function value $f(x_3)$ (opposite sign to $f(x_1)$).
-        imax: Maximum iterations allowed.
+        y1_in: Function value ``f(x1_in)``.
+        y3_in: Function value ``f(x3_in)``.
+        imax: Ignored, matching ``do_safe_root_with_brackets``
+            (``num/private/mod_root.f90:42-43``).
         epsx: Abscissa convergence tolerance.
-        epsy: Residual convergence tolerance on $|f(x)|$.
+        epsy: Residual convergence tolerance on ``|f(x)|``.
 
     Returns:
         Tuple ``(root_x, f_at_root)`` in ``float64``.
-
-    Raises:
-        ValueError: If ``y1_in`` and ``y3_in`` have the same strict sign.
-        RuntimeError: If iteration fails to converge.
     """
-    max_iter = max(int(imax), 200)
-    return _brent.brent_safe_zero(
+    # `do_safe_root_with_brackets` ignores `imax`
+    # (`num/private/mod_root.f90:42-43`).
+    _ = imax
+    return _brent.eval_brent_safe_zero(
         float(x1_in),
         float(x3_in),
         1.0e-14,
         float(epsx),
         float(epsy),
         lambda xv: float(func(xv)[0]),
-        df_a=float(y1_in),
-        df_b=float(y3_in),
-        max_iter=max_iter,
+        float(y1_in),
+        float(y3_in),
     )
 
 
@@ -219,13 +214,9 @@ def safe_root_with_guess(
             bx1, bx3 = float(x1), float(x3)
             by1, by3 = yv1, yv3
         else:
-            (bx1, bx3), (by1, by3) = look_for_brackets(
-                x_guess, dx, xmin, xmax, func, imax
-            )
+            (bx1, bx3), (by1, by3) = look_for_brackets(x_guess, dx, func, imax)
     else:
-        (bx1, bx3), (by1, by3) = look_for_brackets(
-            x_guess, dx, xmin, xmax, func, imax
-        )
+        (bx1, bx3), (by1, by3) = look_for_brackets(x_guess, dx, func, imax)
     return safe_root_with_brackets(func, bx1, bx3, by1, by3, imax, epsx, epsy)
 
 

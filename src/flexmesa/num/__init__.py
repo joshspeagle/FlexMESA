@@ -52,6 +52,7 @@ newuoa = _newuoa.newuoa
 brent_global_min = brent.brent_global_min
 brent_local_min = brent.brent_local_min
 brent_safe_zero = brent.brent_safe_zero
+eval_brent_safe_zero = brent.eval_brent_safe_zero
 glomin = brent.glomin
 local_min = brent.local_min
 
@@ -120,6 +121,7 @@ __all__ = [
     "dfridr",
     "dop853",
     "dopri5",
+    "eval_brent_safe_zero",
     "find0",
     "find0_quadratic",
     "find_max_quadratic",

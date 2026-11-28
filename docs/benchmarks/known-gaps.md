@@ -3,11 +3,11 @@
 
 `FlexMESA` tracks all **106** end-to-end `test_suite` cases of **MESA release `26.4.1`** (`90` `star`, `8` `binary`, `8` `astero`; Zenodo record `19722306`). An upstream case counts as passing only when unmodified release inlists run uncapped in Rust `strict` mode to upstream's own termination code without in-library case overrides or pulsation scaffolding and match stored real-MESA history tracks within manifest tolerances (`notes/SCOPE.md`, `DECISIONS #17`, `DECISIONS #19`).
 
-Instead of capping steps or loosening checks to force green runs, unfinished or diverging cases are declared in `benchmarks/history_harness/known_gaps.toml` with a linked tracking issue under `#140` (`#144`). CI fails on any undeclared failure and alerts if a declared gap starts passing so its entry can be promoted.
+Instead of capping steps or loosening checks to force passing runs, unfinished or diverging cases are declared in `benchmarks/history_harness/known_gaps.toml` with a linked tracking issue under `#140` (`#144`). CI fails on any undeclared failure and alerts if a declared gap starts passing so its entry can be promoted.
 
 ## Suite Summary
 
-| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
+| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Acceptance Pass (`pass`) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 87 | 3 | 78 | 12 | 75 | 28 | 56 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
@@ -39,10 +39,10 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 3 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 2 | Open #140 parity sub-issue |
-| [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
+| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 2 | Open #140 gap issue |
+| [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 gap issue |
 
-## Complete Known-Gaps Registry (34 Cases)
+## Known-Gaps Registry (34 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -127,7 +127,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,966` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,966` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules with every probed value at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |

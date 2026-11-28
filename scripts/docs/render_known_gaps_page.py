@@ -144,7 +144,7 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
         "within manifest tolerances (`notes/SCOPE.md`, `DECISIONS #17`, "
         "`DECISIONS #19`).",
         "",
-        "Instead of capping steps or loosening checks to force green runs, "
+        "Instead of capping steps or loosening checks to force passing runs, "
         "unfinished or diverging cases are declared in "
         "`benchmarks/history_harness/known_gaps.toml` with a linked tracking "
         "issue under `#140` (`#144`). CI fails on any undeclared failure and "
@@ -155,7 +155,7 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
         "",
         "| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | "
         "Strict-Validated | Diagnostic Runs | Reach Upstream Term | "
-        "Declared Gaps | Verified Pass |",
+        "Declared Gaps | Acceptance Pass (`pass`) |",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
@@ -230,13 +230,13 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
         key=lambda kv: (-kv[1], _common.issue_sort_key(kv[0])),
     ):
         link = _common.issue_link(issue)
-        desc = _ISSUE_FOCUS.get(issue, "Open #140 parity sub-issue")
+        desc = _ISSUE_FOCUS.get(issue, "Open #140 gap issue")
         lines.append(f"| {link} | {count} | {desc} |")
 
     lines.extend(
         [
             "",
-            f"## Complete Known-Gaps Registry ({len(gap_records)} Cases)",
+            f"## Known-Gaps Registry ({len(gap_records)} Cases)",
             "",
             "| Suite | Case | Issue | Expected Term | Baseline Outcome | "
             "Mechanism |",
@@ -299,7 +299,7 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
                 f"`{hex_summary.get('total_values_0_ulp', 0):,}` / "
                 f"`{hex_summary.get('total_values_checked', 0):,}` outputs at "
                 f"`0 ULP` across `{probe_cnt}` probed modules "
-                f"(`{pass_cnt}` modules complete at `0 ULP`; "
+                f"(`{pass_cnt}` modules with every probed value at `0 ULP`; "
                 f"`{hex_summary.get('total_exact_values_captured', 0):,}` "
                 "total captured upstream values).",
                 "",

@@ -340,13 +340,13 @@
   ],
   "open_pull_requests": [
     {
-      "number": 747,
-      "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
+      "number": 757,
+      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
       "draft": false
     },
     {
-      "number": 757,
-      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+      "number": 759,
+      "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
       "draft": false
     }
   ],
@@ -932,7 +932,7 @@
       "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -956,7 +956,7 @@
       "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1004,7 +1004,7 @@
       "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1012,7 +1012,7 @@
       "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1020,7 +1020,7 @@
       "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {

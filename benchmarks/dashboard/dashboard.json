@@ -1289,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 332,
-    "total_tests": 1968,
+    "total_files": 333,
+    "total_tests": 2013,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 197
+        "files": 198
       },
       "regression": {
         "files": 2
@@ -1308,8 +1308,8 @@
         "tests": 1170
       },
       "python": {
-        "files": 100,
-        "tests": 798
+        "files": 101,
+        "tests": 843
       }
     },
     "mislabeled_count": 2,
@@ -1688,10 +1688,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 41,
+        "invariant_files": 42,
         "regression_files": 1,
-        "total_files": 44,
-        "total_tests": 393,
+        "total_files": 45,
+        "total_tests": 438,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2046,13 +2046,23 @@
         "draft": false
       },
       {
-        "number": 749,
-        "title": "windows: W2 window-inlist constructor and tests (#684)",
+        "number": 751,
+        "title": "dashboard: read the deferred register from the children of #727",
         "draft": false
       },
       {
-        "number": 751,
-        "title": "dashboard: read the deferred register from the children of #727",
+        "number": 753,
+        "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
+        "draft": false
+      },
+      {
+        "number": 756,
+        "title": "audit: Python and JAX port inventory (P1.5)",
+        "draft": false
+      },
+      {
+        "number": 757,
+        "title": "docs: replace unmeasured status wording (P1.4 part 3)",
         "draft": false
       }
     ],
@@ -2855,6 +2865,30 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 752,
+        "title": "[Deferred bug] mtx: DGBSVX_tridiagonal_wrapper reads x_flat unset when the matrix is exactly singular",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 754,
+        "title": "[Deferred bug] astero: the NEWUOA workspace is BOBYQA's length, shorter than NEWUOA documents (BIGDEN writes past it)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 755,
+        "title": "[Deferred bug] num: NEWUOA returns X from an unset XOPT when MAXFUN < NPT",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
         "needs_confirmation": false
       }
     ]
@@ -4536,6 +4570,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "100"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "48385686",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
     }
   ]
 }

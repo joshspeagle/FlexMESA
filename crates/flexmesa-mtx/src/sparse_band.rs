@@ -288,12 +288,9 @@ fn find_loc_in_column_0_based(
              (mtx/public/mtx_formats.dek:263,273; deferred bug #674)",
         ));
     }
-    if row_idx >= n {
-        return Err(MtxError::InvalidParameter("row/col index out of bounds"));
-    }
     let start = colptr[col_idx];
     let end = colptr[col_idx + 1];
-    if end > nz || start > end {
+    if end > nz {
         return Err(MtxError::InvalidParameter("ia pointer out of bounds"));
     }
     if let Some(h) = hint {
@@ -315,9 +312,16 @@ fn find_loc_in_column_0_based(
              upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)",
         ));
     }
-    for (offset, &val) in rowind[(start - 1)..end].iter().enumerate() {
+    let lo = start - 1;
+    if lo > end {
+        // Upstream `do k = colptr(j) - 1, colptr(j + 1)`
+        // (`mtx_formats.dek:273`) executes zero iterations when
+        // `start - 1 > end`, returning `ierr = -1`.
+        return Ok(None);
+    }
+    for (offset, &val) in rowind[lo..end].iter().enumerate() {
         if val == row_idx {
-            return Ok(Some(start - 1 + offset));
+            return Ok(Some(lo + offset));
         }
     }
     if end >= nz {

@@ -366,6 +366,37 @@ fn test_format_conversions_match_upstream_golden_output() {
             .unwrap(),
         Some(2)
     );
+    // Out-of-range row_idx with in-bounds search compares `rowind(k) == i`
+    // and returns `Ok(None)` (`ierr = -1`, `mtx_formats.dek:273-279`).
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, n, nz_d0, &ptr, &ind, n, 1, None).unwrap(),
+        None
+    );
+    // `start > end + 1`: `do k = start - 1, end` executes zero iterations -> `None`.
+    let rev_gt_ptr = [0_usize, 3, 1, 3];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_gt_ptr, &diag_ind, 1, 1, None)
+            .unwrap(),
+        None
+    );
+    // `start == end + 1`: single `k = end` iteration (`lo == end`).
+    let rev_eq_ptr = [0_usize, 2, 1, 3];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_eq_ptr, &diag_ind, 1, 1, None)
+            .unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &rev_eq_ptr, &diag_ind, 0, 1, None)
+            .unwrap(),
+        None
+    );
+    // `end > nz`: still rejected with `InvalidParameter`.
+    let oob_end_ptr = [0_usize, 1, 4, 4];
+    assert!(matches!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &oob_end_ptr, &diag_ind, 1, 1, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
 }
 
 /// Verifies banded LU solver `dgbtrf`/`dgbtrs` and `band_multiply_xa` against

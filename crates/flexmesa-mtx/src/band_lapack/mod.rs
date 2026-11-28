@@ -21,6 +21,9 @@
 //! - [`drscl`](fn@drscl) (`SRC/drscl.f`): `x := x / sa` without overflow.
 //! - [`dtbsv`](fn@dtbsv) (`BLAS/SRC/dtbsv.f`): banded triangular solve, needed by
 //!   `DLATBS`.
+//! - [`dgbmv`](fn@dgbmv) (`BLAS/SRC/dgbmv.f`), [`dgbrfs`](fn@dgbrfs) (`SRC/dgbrfs.f`) and
+//!   [`dlantb`](fn@dlantb) (`SRC/dlantb.f`), and [`dgbsvx_fact_n`](fn@dgbsvx_fact_n), the
+//!   `DGBSVX(FACT = 'N')` sequence (`SRC/dgbsvx.f`) built from them.
 //!
 //! `DGBTRF`/`DGBTRS` stay in [`crate::band`]; they are not duplicated here.
 //!
@@ -44,13 +47,21 @@
 )]
 
 pub mod dgbcon;
+pub mod dgbmv;
+pub mod dgbrfs;
+pub mod dgbsvx;
 pub mod dlangb;
+pub mod dlantb;
 pub mod dlatbs;
 pub mod drscl;
 pub mod dtbsv;
 
 pub use dgbcon::dgbcon;
+pub use dgbmv::dgbmv;
+pub use dgbrfs::{dgbrfs, Refinement};
+pub use dgbsvx::{dgbsvx_fact_n, DgbsvxSolution};
 pub use dlangb::dlangb;
+pub use dlantb::dlantb;
 pub use dlatbs::dlatbs;
 pub use drscl::drscl;
 pub use dtbsv::dtbsv;

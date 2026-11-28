@@ -791,6 +791,12 @@ module = "math"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-mtx/tests/band_lapack_tests.rs"
+language = "rust"
+module = "mtx"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-mtx/tests/block_tests.rs"
 language = "rust"
 module = "mtx"

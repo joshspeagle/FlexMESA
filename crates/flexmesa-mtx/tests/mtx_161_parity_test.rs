@@ -306,7 +306,9 @@ fn rcond_banded_and_dense_hager_parity_and_validation() {
 
 #[test]
 fn preconditioners_and_dgbsvx_wrappers_match_upstream() {
-    // 4x4 left-aligned banded system with kl = 2 (> 1 exercises bounded DGBSVX_wrapper:86).
+    // 4x4 left-aligned banded system with kl = 2: the preconditioner is
+    // computed, and dgbsvx_banded_from_bands returns the #695 error because
+    // upstream DGBSVX_wrapper.f90:86 reads out of bounds for kl >= 2.
     const N: usize = 4;
     const KL: usize = 2;
     const KU: usize = 1;
@@ -351,12 +353,12 @@ fn preconditioners_and_dgbsvx_wrappers_match_upstream() {
         rhs[r] = (0..N).map(|c| a_full[r * N + c] * x_true[c]).sum::<f64>();
     }
 
-    let sol_bands =
-        dgbsvx_banded_from_bands(N, KL, KU, &bands, &rhs).expect("from_bands");
-    for i in 0..N {
-        assert!((sol_bands.x[i] - x_true[i]).abs() < 1e-12);
+    match dgbsvx_banded_from_bands(N, KL, KU, &bands, &rhs) {
+        Err(MtxError::InvalidParameter(msg)) => {
+            assert!(msg.contains("#695"), "{msg}");
+        }
+        other => panic!("kl = 2 must return the #695 error, got {other:?}"),
     }
-    assert!(sol_bands.rcond > 0.05);
 
     let ldab: usize = 2 * KL + KU + 1;
     let mut ab = vec![0.0_f64; ldab * N];

@@ -12,6 +12,7 @@
 //!   equilibration via `DGEEQU` / `DLAQGE`)
 
 use crate::band::{dgbtrf, dgbtrs, rcond_banded};
+use crate::band_lapack::dgbsvx_fact_n;
 use crate::block_tridiag::check_blocks;
 use crate::dense::{dgetrf, dgetrs, rcond_dense};
 use crate::MtxError;
@@ -73,6 +74,10 @@ pub struct PreconditionedSolve {
     pub row_scale: Vec<f64>,
     /// Column scale multipliers (`c` or `1.0` when unscaled) applied to $x$.
     pub col_scale: Vec<f64>,
+    /// `ierr` of `DGBSVX_tridiagonal_wrapper`: `0`, or `N + 1` when `DGBSVX`
+    /// reports `INFO /= 0` or `rcond < 1d-10`
+    /// (`DGBSVX_wrapper.f90:229-243`). Always `0` for the other solvers.
+    pub ierr: usize,
 }
 
 /// Decides which equilibration mode (`None`, `Row`, `Col`, `Both`) applies
@@ -327,17 +332,19 @@ pub fn compute_block_left_preconditioner(
 /// `dgbtrs` / `rcond_banded`, matching upstream
 /// `mtx/private/DGBSVX_wrapper.f90:24-126` (`DGBSVX_banded_wrapper`).
 ///
-/// Upstream `DGBSVX_wrapper.f90:86` iterates lower band columns up to
-/// `matrix_size + n_lower_bands - i - 1`, which reads past `matrix_size` when
-/// `kl > 1`; this implementation bounds lower-band column loops strictly to
-/// `0..(n - d)` (`DECISIONS #43`).
+/// Upstream's lower-band loop `do j=1,matrix_size + n_lower_bands - i - 1`
+/// (`DGBSVX_wrapper.f90:84-89`) reads `pre_conditioner(i+j)` past
+/// `matrix_size` for every `kl >= 2` (and writes `AB` past it from
+/// `kl >= 3`). Upstream bug, Deferred bug #695: for `kl >= 2` this returns
+/// [`MtxError::InvalidParameter`] instead of the out-of-bounds access
+/// (DECISIONS #43). For `kl <= 1` the loops match upstream exactly.
 ///
 /// # Errors
 ///
 /// Returns [`MtxError::InvalidParameter`] or [`MtxError::DimensionMismatch`] on
-/// invalid shapes, [`MtxError::NonFiniteInput`] on non-finite inputs, or
-/// [`MtxError::SingularMatrix`] if any preconditioner row is zero or LU
-/// encounters a zero pivot.
+/// invalid shapes or for `kl >= 2` (#695), [`MtxError::NonFiniteInput`] on
+/// non-finite inputs, or [`MtxError::SingularMatrix`] if any preconditioner
+/// row is zero or LU encounters a zero pivot.
 pub fn dgbsvx_banded_from_bands(
     n: usize,
     kl: usize,
@@ -348,6 +355,14 @@ pub fn dgbsvx_banded_from_bands(
     if n == 0 {
         return Err(MtxError::InvalidParameter(
             "n must be >= 1 in dgbsvx_banded_from_bands",
+        ));
+    }
+    if kl >= 2 {
+        // DGBSVX_wrapper.f90:84-89 reads pre_conditioner(i+j) out of bounds
+        // (Deferred bug #695, DECISIONS #43).
+        return Err(MtxError::InvalidParameter(
+            "dgbsvx_banded_from_bands: upstream DGBSVX_wrapper.f90:86 reads \
+             past matrix_size for kl >= 2 (Deferred bug #695)",
         ));
     }
     if b.len() != n {
@@ -393,7 +408,8 @@ pub fn dgbsvx_banded_from_bands(
     }
 
     // Lower bands: subdiagonal d = l + 1, entry (row = col + d, col = col).
-    // Fixed upper column bound n - d replaces upstream OOB bound (DGBSVX_wrapper.f90:86).
+    // For kl <= 1 the column bound n - d is upstream's (DGBSVX_wrapper.f90:86);
+    // kl >= 2 returned above (#695).
     for l in 0..kl {
         let d = l + 1;
         let in_off = (ku + d) * n;
@@ -414,6 +430,7 @@ pub fn dgbsvx_banded_from_bands(
         rcond,
         row_scale: pc,
         col_scale: vec![1.0; n],
+        ierr: 0,
     })
 }
 
@@ -487,20 +504,39 @@ pub fn dgbsvx_banded(
         rcond,
         row_scale: pc,
         col_scale: vec![1.0; n],
+        ierr: 0,
     })
 }
 
 /// Solves a `(nz, nvar, nvar)` block-tridiagonal system via two-sided
-/// block row/column preconditioning and banded LU (`KL = KU = 2 * nvar`),
-/// matching upstream `mtx/private/DGBSVX_wrapper.f90:140-292`
-/// (`DGBSVX_tridiagonal_wrapper`).
+/// block row/column preconditioning and `DGBSVX(FACT = 'N')` with
+/// `KL = KU = 2 * nvar`, matching upstream
+/// `mtx/private/DGBSVX_wrapper.f90:140-292` (`DGBSVX_tridiagonal_wrapper`).
+///
+/// The banded matrix is built as `AB(LDAB,*)` with `LDAB = KL+KU+1`
+/// (`DGBSVX_wrapper.f90:211-239`) and solved by
+/// [`crate::band_lapack::dgbsvx_fact_n`], which follows
+/// `SRC/dgbsvx.f` (`DGBTRF`, `DGBCON`, `DGBTRS`, `DGBRFS`).
+/// [`PreconditionedSolve::ierr`] is the wrapper's `ierr`: `N + 1` when
+/// `DGBSVX` returns `INFO /= 0` (its `INFO = N + 1` for `rcond < eps`) or when
+/// `rcond < 1d-10` (`DGBSVX_wrapper.f90:263`), else `0`; `x` is computed in
+/// every such case, as upstream does. Upstream's side effects on that path
+/// (messages and the `lower.data`, `upper.data`, `diagonal.data` dumps,
+/// `:264-288`) are not reproduced.
+///
+/// Zero or non-finite preconditioner sums are not rejected here: upstream
+/// divides by them and the resulting `Inf`/`NaN` band entries reach
+/// `DGBTRF`. In this crate [`crate::band::dgbtrf`] still returns
+/// [`MtxError::NonFiniteInput`] for them, and
+/// [`compute_block_preconditioner`] / [`compute_block_left_preconditioner`]
+/// keep their own input checks; neither is upstream's behaviour.
 ///
 /// # Errors
 ///
 /// Returns [`MtxError::DimensionMismatch`] on shape mismatches,
-/// [`MtxError::NonFiniteInput`] on non-finite entries, or
-/// [`MtxError::SingularMatrix`] on zero row/column preconditioner sums or
-/// singular LU pivots.
+/// [`MtxError::NonFiniteInput`] on non-finite entries reaching a checked
+/// routine, or [`MtxError::SingularMatrix`] when `DGBTRF` finds an exactly
+/// zero pivot (upstream then leaves `x_flat` unset, `DGBSVX_wrapper.f90:291`).
 pub fn dgbsvx_block_tridiagonal(
     nvar: usize,
     nz: usize,
@@ -516,18 +552,10 @@ pub fn dgbsvx_block_tridiagonal(
             "rhs b length must equal nz * nvar",
         ));
     }
-    if is_bad_slice(b) {
-        return Err(MtxError::NonFiniteInput(
-            "rhs b contains NaN/Inf in dgbsvx_block_tridiagonal",
-        ));
-    }
 
+    // DGBSVX_wrapper.f90:195-196
     let mut row_pc = vec![0.0_f64; n];
     compute_block_preconditioner(nvar, nz, lblk, dblk, ublk, &mut row_pc)?;
-    if let Some((idx, _)) = row_pc.iter().enumerate().find(|&(_, &v)| v == 0.0)
-    {
-        return Err(MtxError::SingularMatrix(idx));
-    }
     let mut col_pc = vec![0.0_f64; n];
     compute_block_left_preconditioner(
         nvar,
@@ -538,74 +566,74 @@ pub fn dgbsvx_block_tridiagonal(
         &row_pc,
         &mut col_pc,
     )?;
-    if let Some((idx, _)) = col_pc.iter().enumerate().find(|&(_, &v)| v == 0.0)
-    {
-        return Err(MtxError::SingularMatrix(idx));
-    }
 
+    // KL = KU = 2*nvar, LDAB = KL+KU+1 (DGBSVX_wrapper.f90:171-181).
     let kl = 2 * nvar;
     let ku = 2 * nvar;
-    let ldab = 2 * kl + ku + 1;
-    let diag = ldab - 1 - kl;
-    let mut ab_orig = vec![0.0_f64; ldab * n];
-
+    let ldab = kl + ku + 1;
+    // 0-based (row, col) of AB(KU+1+d, col+1) is ku + d.
+    let mut ab = vec![0.0_f64; ldab * n];
+    // DGBSVX_wrapper.f90:211-221 (dblk), :223-239 (lblk and ublk).
     for i in 0..nz {
         let blk_off = i * blk_sz;
         let eq_off = i * nvar;
         for r in 0..nvar {
-            let row_m = eq_off + r;
-            let r_scale = row_pc[row_m];
             for c in 0..nvar {
                 let col_m = eq_off + c;
-                let band_row = (diag + r) - c;
-                ab_orig[band_row * n + col_m] =
-                    dblk[blk_off + r * nvar + c] / r_scale / col_pc[col_m];
+                ab[(ku + r - c) + col_m * ldab] = dblk[blk_off + r * nvar + c]
+                    / row_pc[eq_off + r]
+                    / col_pc[col_m];
             }
         }
         if i + 1 < nz {
             let l_off = (i + 1) * blk_sz;
             let u_off = i * blk_sz;
             for r in 0..nvar {
-                let row_l = (i + 1) * nvar + r;
-                let row_u = i * nvar + r;
                 for c in 0..nvar {
                     let col_l = i * nvar + c;
                     let col_u = (i + 1) * nvar + c;
-                    let band_row_l = (diag + nvar + r) - c;
-                    ab_orig[band_row_l * n + col_l] = lblk
+                    ab[(ku + nvar + r - c) + col_l * ldab] = lblk
                         [l_off + r * nvar + c]
-                        / row_pc[row_l]
+                        / row_pc[(i + 1) * nvar + r]
                         / col_pc[col_l];
-                    let band_row_u = (diag + r) - (nvar + c);
-                    ab_orig[band_row_u * n + col_u] = ublk
+                    ab[(ku - nvar + r - c) + col_u * ldab] = ublk
                         [u_off + r * nvar + c]
-                        / row_pc[row_u]
+                        / row_pc[i * nvar + r]
                         / col_pc[col_u];
                 }
             }
         }
     }
 
-    let mut x: Vec<f64> = b
+    // DGBSVX_wrapper.f90:171-175: b_flat(i) = b(i) / pre_conditioner(i).
+    let b_flat: Vec<f64> = b
         .iter()
         .zip(row_pc.iter())
         .map(|(&bi, &ri)| bi / ri)
         .collect();
-    let mut lu = ab_orig.clone();
-    let mut ipiv = vec![0usize; n];
-    dgbtrf(n, kl, ku, &mut lu, ldab, &mut ipiv)?;
-    dgbtrs(n, kl, ku, &lu, ldab, &ipiv, &mut x)?;
-    let rcond = rcond_banded(n, kl, ku, &ab_orig, &lu, ldab, &ipiv)?;
 
-    for (xi, &ci) in x.iter_mut().zip(col_pc.iter()) {
-        *xi /= ci;
-    }
+    // DGBSVX_wrapper.f90:241-243
+    let sol = dgbsvx_fact_n(b'N', n, kl, ku, &ab, ldab, &b_flat)?;
+    // DGBSVX_wrapper.f90:263 and :287
+    let ierr = if sol.info != 0 || sol.rcond < 1.0e-10 {
+        n + 1
+    } else {
+        0
+    };
+    // DGBSVX_wrapper.f90:290-296: x = x_flat / left_pre_conditioner.
+    let x: Vec<f64> = sol
+        .x
+        .iter()
+        .zip(col_pc.iter())
+        .map(|(&xi, &ci)| xi / ci)
+        .collect();
 
     Ok(PreconditionedSolve {
         x,
-        rcond,
+        rcond: sol.rcond,
         row_scale: row_pc,
         col_scale: col_pc,
+        ierr,
     })
 }
 
@@ -920,6 +948,7 @@ fn finish_equilibrated_solve(
         rcond,
         row_scale,
         col_scale,
+        ierr: 0,
     }
 }
 

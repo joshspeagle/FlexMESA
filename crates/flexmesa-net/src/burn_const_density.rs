@@ -429,12 +429,14 @@ mod tests {
                     &xa,
                     &eos_cfg,
                 );
-                any_log_dependence |= shifted.map_or(true, |o| {
-                    base.res
-                        .iter()
-                        .zip(o.res.iter())
-                        .any(|(a, b)| a.to_bits() != b.to_bits())
-                });
+                let o = shifted.expect(
+                    "eos_dt_get_with_logs on the shifted logs must succeed",
+                );
+                any_log_dependence |= base
+                    .res
+                    .iter()
+                    .zip(o.res.iter())
+                    .any(|(a, b)| a.to_bits() != b.to_bits());
             }
         }
         assert!(

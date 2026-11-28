@@ -20,7 +20,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
-import pytest
 from hypothesis import strategies as st
 
 from flexmesa import num
@@ -119,10 +118,37 @@ def test_binary_search_qsort_and_quadratic_helpers() -> None:
 
     x0, y0 = num.find0_quadratic(0.0, -2.0, 1.0, -1.0, 2.0, 2.0)
     assert abs(x0 - math.sqrt(2.0)) < 1e-14 and abs(y0) < 1e-14
-    xmax, ymax = num.find_max_quadratic(0.0, 1.0, 2.0, 5.0, 4.0, -3.0)
+    xmax, ymax, ierr = num.find_max_quadratic(0.0, 1.0, 2.0, 5.0, 4.0, -3.0)
+    assert ierr == 0
     assert abs(xmax - 5.0 / 3.0) < 1e-14 and abs(ymax - 31.0 / 6.0) < 1e-14
-    with pytest.raises(ValueError, match="interior value y2"):
-        num.find_max_quadratic(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:195-221 (#670, #671):
+    # Deferred upstream bug #671 (`num_lib.f90:576` tests `y2 < max(y1, y2)`):
+    # concave parabola with y3 > y2 >= y1 keeps ierr == 0.
+    xm_y3, ym_y3, ierr_y3 = num.find_max_quadratic(0.0, 1.0, 1.0, 5.0, 2.0, 6.0)
+    assert ierr_y3 == 0
+    assert abs(xm_y3 - (11.0 / 6.0)) <= 1e-14
+    assert abs(ym_y3 - (145.0 / 24.0)) <= 1e-14
+    # Concave parabola with y2 < y1 and ymax > y2: (0, 6), (1, 5), (2, 1)
+    # has xmax = 1/6, ymax = 145/24 > y2; only y2 < max(y1, y2) sets -1.
+    xm_y1, ym_y1, ierr_y1 = num.find_max_quadratic(0.0, 6.0, 1.0, 5.0, 2.0, 1.0)
+    assert ierr_y1 == -1
+    assert abs(xm_y1 - (1.0 / 6.0)) <= 1e-14
+    assert abs(ym_y1 - (145.0 / 24.0)) <= 1e-14
+    # Non-monotonic abscissas (0, 1), (3, 10), (1, 8): only ordering sets -1.
+    xm_nm, ym_nm, ierr_nm = num.find_max_quadratic(
+        0.0, 1.0, 3.0, 10.0, 1.0, 8.0
+    )
+    assert ierr_nm == -1
+    assert abs(xm_nm - 2.25) <= 1e-14
+    assert abs(ym_nm - 11.125) <= 1e-14
+    # Collinear points (c = 0): upstream computes without c >= 0 or finiteness
+    # guard; dxmax = -inf, xmax = -inf, ymax = NaN, ierr = 0.
+    xm_lin, ym_lin, ierr_lin = num.find_max_quadratic(
+        0.0, 1.0, 1.0, 2.0, 2.0, 3.0
+    )
+    assert ierr_lin == 0
+    assert math.isinf(xm_lin) and xm_lin < 0.0
+    assert math.isnan(ym_lin)
 
 
 def test_dfridr_and_integrate_match_analytical_values() -> None:

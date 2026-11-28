@@ -4,8 +4,7 @@
 Ports utility solvers from upstream MESA ``num/public/num_lib.f90`` into
 ``float64`` NumPy/Python, including Knuth ``two_sum``, Neumaier compensated
 summation, monotonic ``binary_search``, permutation index sorting
-``qsort_index``, ``find0``, ``find0_quadratic``, and ``find_max_quadratic``
-(with the upstream concavity check bug fixed).
+``qsort_index``, ``find0``, ``find0_quadratic``, and ``find_max_quadratic``.
 """
 
 from __future__ import annotations
@@ -286,36 +285,70 @@ def find_max_quadratic(
     y2: float,
     x3: float,
     y3: float,
-) -> tuple[float, float]:
-    """Finds the maximum ``(xmax, ymax)`` of a concave quadratic interpolant.
+) -> tuple[float, float, int]:
+    """Finds the extremum ``(xmax, ymax, ierr)`` of a 3-point quadratic.
 
-    Fixes the upstream ``num_lib.f90`` line 581 typo (``y2 < max(y1, y2)``) by
-    enforcing ``y2 >= max(y1, y3)`` and strict concavity ``c < 0``.
+    Mirrors ``find_max_quadratic`` in ``num/public/num_lib.f90:558-578`` in
+    upstream's exact expression order and error tests: computes ``dx1``,
+    ``dx2``, ``a``, ``b``, ``c``, ``dxmax``, ``xmax``, and ``ymax`` without
+    a concavity or finiteness guard, then tests ``ymax < y2``,
+    ``y2 < max(y1, y2)`` (deferred upstream bug ``#671``), and strict
+    monotonicity of ``(x1, x2, x3)``, returning ``ierr = -1`` when any check
+    fails while still returning ``(xmax, ymax)``.
 
     Args:
         x1: First abscissa (arbitrary units).
         y1: Function value at ``x1`` (arbitrary units).
-        x2: Interior abscissa strictly between ``x1`` and ``x3``.
-        y2: Function value at ``x2`` (must satisfy ``y2 >= max(y1, y3)``).
+        x2: Interior abscissa between ``x1`` and ``x3``.
+        y2: Function value at ``x2`` (arbitrary units).
         x3: Third abscissa.
         y3: Function value at ``x3``.
 
     Returns:
-        Tuple ``(xmax, ymax)`` at the stationary maximum of the parabola.
-
-    Raises:
-        ValueError: If abscissas are not monotonic, ``y2 < max(y1, y3)``, or
-            the quadratic is not strictly concave.
+        Tuple ``(xmax, ymax, ierr)`` where ``ierr`` is ``0`` on success or
+        ``-1`` if any upstream validation check fails.
     """
-    dx1, b, c = _quadratic_divided_diffs(x1, y1, x2, y2, x3, y3)
-    if y2 < max(y1, y3):
-        raise ValueError("interior value y2 must be >= max(y1, y3)")
-    if c >= 0.0:
-        raise ValueError("quadratic is not strictly concave (c >= 0)")
-    dxmax = 0.5 * (dx1 - b / c)
-    xmax = float(x1 + dxmax)
-    ymax = float(y1 + dxmax * b + dxmax * (xmax - x2) * c)
-    return xmax, ymax
+    ierr = 0
+    x1_f = np.float64(x1)
+    y1_f = np.float64(y1)
+    x2_f = np.float64(x2)
+    y2_f = np.float64(y2)
+    x3_f = np.float64(x3)
+    y3_f = np.float64(y3)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        dx1 = x2_f - x1_f
+        dx2 = x3_f - x2_f
+        # f(dx) = a + b dx + c dx^2; dx = x - x1
+        # (`num/public/num_lib.f90:568-574`)
+        a = y1_f
+        b = (
+            (y2_f - y1_f) / dx1
+            + (y2_f - y1_f) / (dx1 + dx2)
+            + (dx1 / dx2) * (y2_f - y3_f) / (dx1 + dx2)
+        )
+        c = (dx2 * y1_f - dx1 * y2_f - dx2 * y2_f + dx1 * y3_f) / (
+            dx1 * dx2 * (dx1 + dx2)
+        )
+        dxmax = -(b / (np.float64(2.0) * c))
+        xmax = float(dxmax + x1_f)
+        ymax = float(a + dxmax * (b + dxmax * c))
+    x1_val = float(x1_f)
+    x2_val = float(x2_f)
+    x3_val = float(x3_f)
+    y2_val = float(y2_f)
+    if ymax < y2_val:
+        ierr = -1
+    # Deferred upstream bug #671: `num/public/num_lib.f90:576` tests
+    # `y2 < max(y1, y2)` rather than `y2 < max(y1, y3)`. Reproduce verbatim
+    # until v0.1.0.
+    if y2_val < float(np.fmax(y1_f, y2_f)):
+        ierr = -1
+    if not (
+        (x1_val < x2_val and x2_val < x3_val)
+        or (x1_val > x2_val and x2_val > x3_val)
+    ):
+        ierr = -1
+    return xmax, ymax, ierr
 
 
 def two_piece_linear_coeffs(

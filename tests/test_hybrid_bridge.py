@@ -217,12 +217,19 @@ def test_interp1d_rust_strict_and_jax_consistency() -> None:
         np.testing.assert_allclose(int_rust, int_jax, rtol=1e-13, atol=1e-14)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#295: Rust interp_evbicub_db in strict mode now reproduces MESA "
+        "26.4.1 fvbicub_db implicit-REAL (f32) basis scalars "
+        "(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the "
+        "frozen JAX twin keeps pure f64 basis scalars; measured diffs are "
+        "f rel=1.800e-8 (abs=5.557e-9), df_dx rel=5.789e-10 (abs=4.896e-10), "
+        "df_dy rel=2.034e-8 (abs=3.031e-9) against rtol=1e-12."
+    ),
+)
 def test_interp2d_rust_strict_and_jax_consistency_and_autodiff() -> None:
-    """Verify `interp_2d` consistency across Rust `strict`, JAX, and `"auto"`.
-
-    Checks `interp_mkbicub_db`, `interp_evbicub_db`, and
-    `_rust.interp_evbicub_batch` (parallel vs sequential).
-    """
+    """Verify `interp_2d` consistency across Rust `strict` and JAX."""
     x = np.linspace(-math.pi, math.pi, 16, dtype=np.float64)
     y = np.linspace(-math.pi, math.pi, 18, dtype=np.float64)
     xx, yy = np.meshgrid(x, y, indexing="ij")
@@ -251,6 +258,15 @@ def test_interp2d_rust_strict_and_jax_consistency_and_autodiff() -> None:
         np.testing.assert_allclose(
             float(ev_r.df_dy), float(ev_j.df_dy), rtol=1e-12
         )
+
+
+def test_interp2d_rust_batch_seq_par_and_guards() -> None:
+    """Verify `_rust.interp_evbicub_batch` seq/par parity and error guards."""
+    x = np.linspace(-math.pi, math.pi, 16, dtype=np.float64)
+    y = np.linspace(-math.pi, math.pi, 18, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    z = np.sin(xx) * np.cos(yy)
+    c_rust, _, _ = interp_2d.interp_mkbicub_db(x, y, z, backend="rust")
 
     # Batch 2D bicubic evaluation in sequential vs parallel rayon modes.
     xq = np.linspace(-1.0, 1.0, 128, dtype=np.float64)

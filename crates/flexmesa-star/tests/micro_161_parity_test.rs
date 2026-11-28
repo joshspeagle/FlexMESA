@@ -828,7 +828,52 @@ fn test_check_pulse_atm_model1_z1_aux_and_surf_bc_probe() {
     });
 }
 
-fn assert_probe_point(label: &str, model: &StarModel, exp: [u64; 7]) {
+/// MESA `26.4.1` outputs of `neu::do_neu_for_cell` at this file's mid-run
+/// probe points, written by
+/// `benchmarks/fortran_mesa/micro_neu_oracles/gen_micro_neu_oracles.f90`.
+const MICRO_NEU_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/micro_neu_oracles/mesa_26_4_1_micro_neu_oracles.tsv"
+);
+
+/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
+fn mesa_neu_bits(case: &str, role: &str, field: &str) -> u64 {
+    for line in MICRO_NEU_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[1] == role
+            && cols[2] == field
+            && cols[3] == "val"
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA neu oracle row for {case} {role} {field}");
+}
+
+fn assert_probe_point(label: &str, model: &StarModel, exp: [u64; 6]) {
+    // The Rust zone state must equal the inputs MESA's `do_neu_for_cell` saw.
+    let inputs = [
+        ("lnd", model.lnd[0]),
+        ("lnT", model.ln_t[0]),
+        ("rho", model.rho[0]),
+        ("T", model.t[0]),
+        ("abar", model.abar[0]),
+        ("zbar", model.zbar[0]),
+    ];
+    for (field, got) in inputs {
+        assert_eq!(
+            got.to_bits(),
+            mesa_neu_bits(label, "in", field),
+            "{label}: neu input {field} differs from the MESA oracle input"
+        );
+    }
+    let exp_neu = mesa_neu_bits(label, "out", "non_nuc_neu");
+    let exp = [exp[0], exp[1], exp[2], exp[3], exp[4], exp[5], exp_neu];
     let got = [
         model.peos[0],
         model.opacity[0],
@@ -894,7 +939,6 @@ fn test_midrun_161_regimes_and_pycno_probe() {
             0x3FEE_F93F_D5BD_2C01,
             0x3FF1_CDD3_A0C0_7DBF,
             0x41A8_485E_02B5_28B2,
-            0x4016_B145_ACB1_DDAC,
         ],
     );
 
@@ -935,7 +979,6 @@ fn test_midrun_161_regimes_and_pycno_probe() {
             0x3FF5_5EA4_8F96_3D56,
             0x3F53_9FE0_A18C_8FBD,
             0x416B_B7E6_D649_C648,
-            0x4014_F76C_6E4C_665A,
         ],
     );
 
@@ -968,7 +1011,6 @@ fn test_midrun_161_regimes_and_pycno_probe() {
             0x3FF5_5CCF_F6C7_F7CB,
             0x3F6C_9C5F_697D_A7A9,
             0x416D_0736_5FA0_87BB,
-            0x40D1_E6CE_2BD5_047D,
         ],
     );
 
@@ -1010,7 +1052,6 @@ fn test_midrun_161_regimes_and_pycno_probe() {
             0x3FF9_6F43_6825_F7C2,
             0x3FB7_259C_E817_4002,
             0x4186_5E58_9E54_030B,
-            0x3F4D_A297_70DE_1CF1,
         ],
     );
 
@@ -1040,7 +1081,6 @@ fn test_midrun_161_regimes_and_pycno_probe() {
             0x3FF7_5F59_CEE4_9DE6,
             0x3F48_6771_0C33_D4B6,
             0x4154_81DD_6B39_286C,
-            0x3F09_E933_C4E7_5B15,
         ],
     );
 

@@ -62,6 +62,44 @@ fn assert_dual1_bits(
     );
 }
 
+/// MESA `26.4.1` outputs of `turb::set_semiconvection` and
+/// `turb::set_thermohaline` at this file's operating points, written by
+/// `benchmarks/fortran_mesa/turb_mix_oracles/gen_turb_mix_oracles.f90`.
+const TURB_MIX_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/turb_mix_oracles/mesa_26_4_1_turb_mix_oracles.tsv"
+);
+
+/// Return the MESA value of `field` (`part` = `val` or `d1`) in `case`.
+fn mesa(case: &str, field: &str, part: &str) -> f64 {
+    for line in TURB_MIX_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[2] == field
+            && cols[3] == part
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return f64::from_bits(
+                u64::from_str_radix(hex, 16).expect("hex column"),
+            );
+        }
+    }
+    panic!("no MESA oracle row for {case} {field} {part}");
+}
+
+/// Assert that `actual` (value and slot-1 partial) equals MESA bit for bit.
+fn assert_dual1_mesa(case: &str, field: &str, actual: DualOrder1<1>) {
+    assert_dual1_bits(
+        &format!("{case}.{field}"),
+        actual,
+        mesa(case, field, "val").to_bits(),
+        mesa(case, field, "d1").to_bits(),
+    );
+}
+
 fn assert_star_ad_bits_prefix5(
     name: &str,
     actual: StarAdOrder1,
@@ -439,30 +477,18 @@ fn test_semiconvection_langer85_0_ulp_scalar_and_ad() {
         let out_lg = set_semiconvection(&params_gradr, &inputs_ad)
             .expect("sc Langer85GradTIsGradr");
         assert_eq!(out_lg.mixing_type, MixingType::SemiconvectiveMixing);
-        assert_dual1_bits(
-            "sc_lg.grad_t",
-            out_lg.grad_t,
-            0x3FDA3D70A3D70A3D,
-            0x3FC3333333333333,
-        );
-        assert_dual1_bits(
-            "sc_lg.y_face",
+        assert_dual1_mesa("sc_langer85_gradt_is_gradr", "gradT", out_lg.grad_t);
+        assert_dual1_mesa(
+            "sc_langer85_gradt_is_gradr",
+            "Y_face",
             out_lg.y_face,
-            0x3FC0A3D70A3D70A2,
-            0x3FC0A3D70A3D70A4,
         );
-        assert_dual1_bits(
-            "sc_lg.conv_vel",
+        assert_dual1_mesa(
+            "sc_langer85_gradt_is_gradr",
+            "conv_vel",
             out_lg.conv_vel,
-            0x3F8202EFF7F94C85,
-            0x3FABD6D3696F8C1C,
         );
-        assert_dual1_bits(
-            "sc_lg.d",
-            out_lg.d,
-            0x4160C645234BE916,
-            0x4187D4970B8A5138,
-        );
+        assert_dual1_mesa("sc_langer85_gradt_is_gradr", "D", out_lg.d);
 
         let params_l85 = SemiconvectionParams {
             option: SemiconvectionOption::Langer85,
@@ -471,33 +497,17 @@ fn test_semiconvection_langer85_0_ulp_scalar_and_ad() {
         let out_l85 =
             set_semiconvection(&params_l85, &inputs_ad).expect("sc Langer85");
         assert_eq!(out_l85.mixing_type, MixingType::SemiconvectiveMixing);
-        assert_dual1_bits(
-            "sc_l85.grad_t",
-            out_l85.grad_t,
-            0x3FDFFC21D4F11DAC,
-            0x3F93A20094205DA4,
-        );
-        assert_dual1_bits(
-            "sc_l85.y_face",
-            out_l85.y_face,
-            0x3FCC21396C719780,
-            0xBF4B1C1671B6DAE0,
-        );
-        assert_dual1_bits(
-            "sc_l85.conv_vel",
-            out_l85.conv_vel,
-            0x3F8202EFF7F94C85,
-            0x3FABD6D3696F8C1C,
-        );
-        assert_dual1_bits(
-            "sc_l85.d",
-            out_l85.d,
-            0x4160C645234BE916,
-            0x4187D4970B8A5138,
-        );
+        assert_dual1_mesa("sc_langer85", "gradT", out_l85.grad_t);
+        assert_dual1_mesa("sc_langer85", "Y_face", out_l85.y_face);
+        assert_dual1_mesa("sc_langer85", "conv_vel", out_l85.conv_vel);
+        assert_dual1_mesa("sc_langer85", "D", out_l85.d);
 
         // Edge case: alpha_sc = 0 and gradr == gradL (0/0 => NaN diffusivity)
         // must return Ok with NaN D so the caller's !is_finite() guard resets.
+        // Departure: MESA 26.4.1 does not take the `D%val <= 0` early return
+        // for NaN and reports `mixing_type = 3` (semiconvective) with NaN
+        // `conv_vel` (case `sc_langer85_alpha0_gradr_eq_gradl` of the TSV);
+        // FlexMESA returns `NoMixing` here.
         let inputs_eq_sc = SemiconvectionInputs {
             gradr: gradl,
             ..inputs_ad
@@ -510,6 +520,7 @@ fn test_semiconvection_langer85_0_ulp_scalar_and_ad() {
             .expect("sc alpha_sc=0 eq must not Err");
         assert_eq!(out_alpha0.mixing_type, MixingType::NoMixing);
         assert!(out_alpha0.d.val.is_nan());
+        assert!(mesa("sc_langer85_alpha0_gradr_eq_gradl", "D", "val").is_nan());
     });
 }
 
@@ -536,30 +547,10 @@ fn test_thermohaline_prescriptions_0_ulp_scalar_and_ad() {
         let out_kipp =
             set_thermohaline(&base_params, &inputs).expect("Kippenhahn");
         assert_eq!(out_kipp.mixing_type, MixingType::ThermohalineMixing);
-        assert_dual1_bits(
-            "thrm_kipp.d",
-            out_kipp.d,
-            0x419F5F78D0CE1574,
-            0x0000000000000000,
-        );
-        assert_dual1_bits(
-            "thrm_kipp.grad_t",
-            out_kipp.grad_t,
-            0x3FCEB851EB851EB8,
-            0x3FBC28F5C28F5C29,
-        );
-        assert_dual1_bits(
-            "thrm_kipp.y_face",
-            out_kipp.y_face,
-            0xBFC3333333333334,
-            0x3FB47AE147AE147B,
-        );
-        assert_dual1_bits(
-            "thrm_kipp.conv_vel",
-            out_kipp.conv_vel,
-            0x3FB67526CC073971,
-            0x3F98F3F2380806F0,
-        );
+        assert_dual1_mesa("thrm_kippenhahn", "D", out_kipp.d);
+        assert_dual1_mesa("thrm_kippenhahn", "gradT", out_kipp.grad_t);
+        assert_dual1_mesa("thrm_kippenhahn", "Y_face", out_kipp.y_face);
+        assert_dual1_mesa("thrm_kippenhahn", "conv_vel", out_kipp.conv_vel);
 
         let params_tgs11 = ThermohalineParams {
             option: ThermohalineOption::TraxlerGaraudStellmach11,
@@ -568,18 +559,8 @@ fn test_thermohaline_prescriptions_0_ulp_scalar_and_ad() {
         let out_tgs11 =
             set_thermohaline(&params_tgs11, &inputs).expect("TGS11");
         assert_eq!(out_tgs11.mixing_type, MixingType::ThermohalineMixing);
-        assert_dual1_bits(
-            "thrm_tgs11.d",
-            out_tgs11.d,
-            0x40D711319641864B,
-            0x0000000000000000,
-        );
-        assert_dual1_bits(
-            "thrm_tgs11.conv_vel",
-            out_tgs11.conv_vel,
-            0x3EF0831A307B550D,
-            0x3ED258C7C417420E,
-        );
+        assert_dual1_mesa("thrm_tgs11", "D", out_tgs11.d);
+        assert_dual1_mesa("thrm_tgs11", "conv_vel", out_tgs11.conv_vel);
 
         let params_bgs13 = ThermohalineParams {
             option: ThermohalineOption::BrownGaraudStellmach13,
@@ -591,10 +572,13 @@ fn test_thermohaline_prescriptions_0_ulp_scalar_and_ad() {
         // MESA NR stops at Euclidean step <= 1e-13 using LAPACK dgesvx; Cramer
         // 2x2 matches within ~1.5e-14 (< ACY = 1e-13), while conv_vel = 3*D/L
         // preserves exact div_ad AD propagation.
-        let exp_bgs13_d = f64::from_bits(0x41691E8FA6D30D2A);
+        let exp_bgs13_d = mesa("thrm_bgs13", "D", "val");
         let rel_d = (out_bgs13.d.val - exp_bgs13_d).abs() / exp_bgs13_d;
         assert!(rel_d < 1.0e-13, "BGS13 D rel diff too large: {rel_d}");
-        assert_eq!(out_bgs13.d.d1[0].to_bits(), 0);
+        assert_eq!(
+            out_bgs13.d.d1[0].to_bits(),
+            mesa("thrm_bgs13", "D", "d1").to_bits()
+        );
         let exp_bgs13_vc =
             (DualOrder1::from(3.0) * out_bgs13.d) / inputs.lambda;
         assert_eq!(
@@ -605,11 +589,11 @@ fn test_thermohaline_prescriptions_0_ulp_scalar_and_ad() {
             out_bgs13.conv_vel.d1[0].to_bits(),
             exp_bgs13_vc.d1[0].to_bits()
         );
-        let oracle_bgs13_vc = f64::from_bits(0x3F81FB2CCA7C7D3F);
+        let oracle_bgs13_vc = mesa("thrm_bgs13", "conv_vel", "val");
         let rel_vc =
             (out_bgs13.conv_vel.val - oracle_bgs13_vc).abs() / oracle_bgs13_vc;
         assert!(rel_vc < 1.0e-13, "BGS13 vc rel diff too large: {rel_vc}");
-        let oracle_bgs13_dvc = f64::from_bits(0x3F63FAA38BA6C40D);
+        let oracle_bgs13_dvc = mesa("thrm_bgs13", "conv_vel", "d1");
         let rel_dvc = (out_bgs13.conv_vel.d1[0] - oracle_bgs13_dvc).abs()
             / oracle_bgs13_dvc;
         assert!(

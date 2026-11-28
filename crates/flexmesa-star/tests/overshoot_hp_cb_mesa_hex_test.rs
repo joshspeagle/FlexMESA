@@ -2,10 +2,12 @@
 //! Exact MESA `26.4.1` hexadecimal parity for the convective-boundary radius
 //! and pressure scale height used by exponential overshoot (`#550`).
 //!
-//! The inputs and expected values are IEEE-754 bit patterns written by an
-//! instrumented MESA `26.4.1` build (MESA SDK `x86_64-linux-26.6.1`,
-//! `gfortran 15.2.0`) from `overshoot_exp.f90`, immediately after
+//! The inputs are IEEE-754 bit patterns recorded from an instrumented MESA
+//! `26.4.1` build from `overshoot_exp.f90`, immediately after
 //! `eval_over_bdy_params`, in the upstream test cases named on each vector.
+//! The expected values are read from a committed TSV written by calling the
+//! real `overshoot_utils::eval_conv_bdy_r` and `eval_conv_bdy_Hp` in compiled
+//! MESA `26.4.1` on those inputs (`benchmarks/fortran_mesa/overshoot_cb_oracles/`).
 //! Before `#550`, `two_piece_linear_coeffs` computed the near-node weight
 //! first and missed these `Hp_cb` values by 7 to 20 ULP.
 
@@ -15,12 +17,34 @@
 use flexmesa_star::overshoot::{eval_conv_bdy_hp, eval_conv_bdy_r};
 use flexmesa_star::{StarControls, StarJobControls, StarModel};
 
+/// MESA `26.4.1` oracle rows for the recorded stencils.
+const OVERSHOOT_CB_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/overshoot_cb_oracles/\
+     mesa_26_4_1_overshoot_cb_oracles.tsv"
+);
+
+/// Return the MESA bit pattern of `field` in `case` from the oracle TSV.
+fn mesa(case: &str, field: &str) -> u64 {
+    for line in OVERSHOOT_CB_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5 && cols[0] == case && cols[2] == field {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA oracle row for {case} {field}");
+}
+
 /// One boundary record: `(case, top, cz_bdy_dq, conv_bdy_q, dq[3], lnPeos[3],
 /// lnd[3], cgrav, M_center, xmstar, r_k, r_kp1, want r_cb, want Hp_cb)`,
 /// where the three-element arrays are cells `k-1, k, k+1` around the
 /// boundary cell `k`.
 struct Bdy {
     case: &'static str,
+    tsv_case: &'static str,
     top: bool,
     cz_bdy_dq: u64,
     conv_bdy_q: u64,
@@ -32,14 +56,13 @@ struct Bdy {
     xmstar: u64,
     r_k: u64,
     r_kp1: u64,
-    want_r_cb: u64,
-    want_hp_cb: u64,
 }
 
 const VECTORS: [Bdy; 3] = [
     // `star/5M_cepheid_blue_loop`, model 2112, boundary 2 (bottom), k = 467.
     Bdy {
         case: "5M_cepheid_blue_loop model 2112 bdy 2",
+        tsv_case: "cepheid_2112_bdy2",
         top: false,
         cz_bdy_dq: 0x3F4E5DBF584F5D84,
         conv_bdy_q: 0x3FDA49D7F81A64CD,
@@ -51,12 +74,11 @@ const VECTORS: [Bdy; 3] = [
         xmstar: 0x46FEA2E4E0A40A3D,
         r_k: 0x4270F201E6EE4522,
         r_kp1: 0x42708E61700ECEC8,
-        want_r_cb: 0x4270E2DEC2CC4396,
-        want_hp_cb: 0x425E6EB3A1B32B14,
     },
     // `star/high_z`, model 1, boundary 1 (top), k = 749.
     Bdy {
         case: "high_z model 1 bdy 1",
+        tsv_case: "high_z_1_bdy1",
         top: true,
         cz_bdy_dq: 0x3F41DF208EA52C9C,
         conv_bdy_q: 0x3FD0878AEA0B2A03,
@@ -68,12 +90,11 @@ const VECTORS: [Bdy; 3] = [
         xmstar: 0x470572069D3FA0C4,
         r_k: 0x422B3A4360C8EBED,
         r_kp1: 0x422B1406540622F9,
-        want_r_cb: 0x422B33ECBE997FB3,
-        want_hp_cb: 0x421AF099CA0229C7,
     },
     // `star/high_z`, model 2, boundary 3 (top), k = 165.
     Bdy {
         case: "high_z model 2 bdy 3",
+        tsv_case: "high_z_2_bdy3",
         top: true,
         cz_bdy_dq: 0x3E11F4391BDD032E,
         conv_bdy_q: 0x3FEFFFFFDD1E5B66,
@@ -85,8 +106,6 @@ const VECTORS: [Bdy; 3] = [
         xmstar: 0x470572063D08C39D,
         r_k: 0x4254F6A360DD07FC,
         r_kp1: 0x4254F4FEAE3C97A8,
-        want_r_cb: 0x4254F5FE48D49031,
-        want_hp_cb: 0x41E3A82D152A476B,
     },
 ];
 
@@ -132,21 +151,34 @@ fn model_for(v: &Bdy) -> StarModel {
 fn eval_conv_bdy_r_and_hp_match_mesa_26_4_1_hex_at_recorded_boundaries() {
     for v in &VECTORS {
         let m = model_for(v);
+        let want_r_cb = mesa(v.tsv_case, "r_cb");
+        let want_hp_cb = mesa(v.tsv_case, "Hp_cb");
+        // The TSV inputs are the same bit patterns as the literals above.
+        assert_eq!(mesa(v.tsv_case, "cz_bdy_dq"), v.cz_bdy_dq);
+        assert_eq!(mesa(v.tsv_case, "conv_bdy_q"), v.conv_bdy_q);
+        assert_eq!(mesa(v.tsv_case, "xmstar"), v.xmstar);
+        assert_eq!(mesa(v.tsv_case, "r_k"), v.r_k);
+        assert_eq!(mesa(v.tsv_case, "r_kp1"), v.r_kp1);
+        for j in 0..3 {
+            assert_eq!(mesa(v.tsv_case, &format!("dq{j}")), v.dq[j]);
+            assert_eq!(mesa(v.tsv_case, &format!("lnPeos{j}")), v.ln_peos[j]);
+            assert_eq!(mesa(v.tsv_case, &format!("lnd{j}")), v.lnd[j]);
+        }
         let r_cb = eval_conv_bdy_r(&m, 0).expect("r_cb");
         let hp_cb = eval_conv_bdy_hp(&m, 0).expect("hp_cb");
         assert_eq!(
             r_cb.to_bits(),
-            v.want_r_cb,
+            want_r_cb,
             "{}: r_cb {r_cb:e} vs MESA {:e}",
             v.case,
-            f64::from_bits(v.want_r_cb)
+            f64::from_bits(want_r_cb)
         );
         assert_eq!(
             hp_cb.to_bits(),
-            v.want_hp_cb,
+            want_hp_cb,
             "{}: Hp_cb {hp_cb:e} vs MESA {:e}",
             v.case,
-            f64::from_bits(v.want_hp_cb)
+            f64::from_bits(want_hp_cb)
         );
     }
 }

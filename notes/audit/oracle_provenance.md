@@ -6,10 +6,10 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 
 | Measure | Value |
 | :--- | ---: |
-| Claims (test, reference, routine) | 85 |
-| Claims verified | 69 |
-| Routines claimed | 55 |
-| Routines verified exact (0 ULP) | 20 |
+| Claims (test, reference, routine) | 94 |
+| Claims verified | 78 |
+| Routines claimed | 64 |
+| Routines verified exact (0 ULP) | 29 |
 | Routines verified at print precision only | 29 |
 | Routines not counted | 6 |
 | Not counted only because of `scope` or `precision` | 5 |
@@ -45,10 +45,19 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `star/private/eps_mdot.f90::calculate_eps_mdot` | exact |
 | `star/private/init_model.f90::get_zams_model` | exact |
 | `star/private/mix_info.f90::update_rotation_mixing_info` | exact |
+| `star/private/neu.f90::do_neu_for_cell` | exact |
+| `star/private/overshoot_utils.f90::eval_conv_bdy_Hp` | exact |
+| `star/private/overshoot_utils.f90::eval_conv_bdy_r` | exact |
 | `star/private/solve_omega_mix.f90::do_solve_omega_mix` | exact |
+| `star/private/winds.f90::do_set_mdot` | exact |
+| `star/private/winds.f90::eval_rlo_wind` | exact |
+| `star/private/winds.f90::eval_super_eddington_wind` | exact |
 | `turb/private/mlt.f90::calc_MLT` | exact |
+| `turb/private/semiconvection.f90::calc_semiconvection` | exact |
 | `turb/public/turb.f90::set_MLT` | exact |
 | `turb/public/turb.f90::set_TDC` | exact |
+| `turb/public/turb.f90::set_semiconvection` | exact |
+| `turb/public/turb.f90::set_thermohaline` | exact |
 | `const/public/const_def.f90::do_const_init` | print |
 | `const/public/const_lib.f90::const_init` | print |
 | `eos/private/eos_helm_eval.f90::get_helm_for_eosdt` | print |

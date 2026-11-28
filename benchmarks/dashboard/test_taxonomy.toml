@@ -1306,6 +1306,12 @@ module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/star_utils.f90:1163-1206 & eos/private/eospt_eval.f90:530 microphysics IEEE-754 hex oracles (#161)"
 
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/micro_neu_oracles/mesa_26_4_1_micro_neu_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/micro_neu_oracles/gen_micro_neu_oracles.f90"
+precision = "exact"
+routines = ["star/private/neu.f90::do_neu_for_cell"]
+
 [[tests]]
 path = "crates/flexmesa-star/tests/micro_aux_parity_test.rs"
 language = "rust"
@@ -1393,6 +1399,15 @@ language = "rust"
 module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 (gfortran 15.2.0, SDK x86_64-linux-26.6.1) IEEE-754 hex captures of star/private/overshoot_exp.f90 and star/private/overshoot_utils.f90 eval_over_bdy_params (#550)"
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/overshoot_cb_oracles/mesa_26_4_1_overshoot_cb_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/overshoot_cb_oracles/gen_overshoot_cb_oracles.f90"
+precision = "exact"
+routines = [
+  "star/private/overshoot_utils.f90::eval_conv_bdy_Hp",
+  "star/private/overshoot_utils.f90::eval_conv_bdy_r",
+]
 
 [[tests]]
 path = "crates/flexmesa-star/tests/overshoot_mix_157_test.rs"
@@ -1649,6 +1664,16 @@ module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/turb_support.f90:398-430 & turb/private/mlt.f90:170-179 make_brown_dwarf IEEE-754 hex oracles (#155)"
 
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/turb_mix_oracles/mesa_26_4_1_turb_mix_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/turb_mix_oracles/gen_turb_mix_oracles.f90"
+precision = "exact"
+routines = [
+  "turb/private/semiconvection.f90::calc_semiconvection",
+  "turb/public/turb.f90::set_semiconvection",
+  "turb/public/turb.f90::set_thermohaline",
+]
+
 [[tests]]
 path = "crates/flexmesa-star/tests/tzo_winds_colors_cols_test.rs"
 language = "rust"
@@ -1667,6 +1692,16 @@ language = "rust"
 module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/winds.f90 & star/test_suite/hot_cool_wind IEEE-754 hex oracles (#159)"
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/winds_oracles/mesa_26_4_1_winds_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/winds_oracles/gen_winds_oracles.f90"
+precision = "exact"
+routines = [
+  "star/private/winds.f90::do_set_mdot",
+  "star/private/winds.f90::eval_rlo_wind",
+  "star/private/winds.f90::eval_super_eddington_wind",
+]
 
 [[tests]]
 path = "crates/flexmesa-star/tests/winds_159_v2_test.rs"

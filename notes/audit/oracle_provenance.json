@@ -1,6 +1,6 @@
 {
- "claims": 85,
- "claims_verified": 69,
+ "claims": 94,
+ "claims_verified": 78,
  "not_counted_only_on_scope_or_precision": [
   "eos/private/eospt_eval.f90::get_Pgas",
   "eos/private/ion_offset.f90::compute_ion_offset",
@@ -8,7 +8,7 @@
   "neu/private/mod_neu.f90::zfermim12",
   "star/private/rsp_lina.f90::do_LINA"
  ],
- "routines_claimed": 55,
+ "routines_claimed": 64,
  "routines_exact": [
   "eos/private/eos_blend.f90::is_contained",
   "eos/private/eos_blend.f90::min_distance_to_polygon",
@@ -26,10 +26,19 @@
   "star/private/eps_mdot.f90::calculate_eps_mdot",
   "star/private/init_model.f90::get_zams_model",
   "star/private/mix_info.f90::update_rotation_mixing_info",
+  "star/private/neu.f90::do_neu_for_cell",
+  "star/private/overshoot_utils.f90::eval_conv_bdy_Hp",
+  "star/private/overshoot_utils.f90::eval_conv_bdy_r",
   "star/private/solve_omega_mix.f90::do_solve_omega_mix",
+  "star/private/winds.f90::do_set_mdot",
+  "star/private/winds.f90::eval_rlo_wind",
+  "star/private/winds.f90::eval_super_eddington_wind",
   "turb/private/mlt.f90::calc_MLT",
+  "turb/private/semiconvection.f90::calc_semiconvection",
   "turb/public/turb.f90::set_MLT",
-  "turb/public/turb.f90::set_TDC"
+  "turb/public/turb.f90::set_TDC",
+  "turb/public/turb.f90::set_semiconvection",
+  "turb/public/turb.f90::set_thermohaline"
  ],
  "routines_not_counted": {
   "eos/private/eospt_eval.f90::get_Pgas": [

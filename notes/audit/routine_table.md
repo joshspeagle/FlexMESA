@@ -27,17 +27,17 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Lines in not-applicable routines | 2,550 |
 | Lines in unmapped routines | 44,648 |
 | Lines outside routines | 21,618 |
-| Lines in routines with exact oracle evidence | 793 |
+| Lines in routines with exact oracle evidence | 1,377 |
 | Lines in routines with print-precision oracle evidence only | 1,636 |
 | Line-weighted full-mapping fraction (all lines) | 21.9% |
 | Line-weighted partial-mapping fraction (all lines) | 30.6% |
 | Full-mapping fraction excluding not-applicable lines | 22.3% |
 | Partial-mapping fraction excluding not-applicable lines | 31.1% |
 | Not-applicable fraction of all lines | 1.8% |
-| Line-weighted oracle fraction (exact / print) | 0.5% / 1.1% |
+| Line-weighted oracle fraction (exact / print) | 0.9% / 1.1% |
 | Whole-file ported fraction (existing headline) | 31.1% |
 | Routines (full / partial / N/A / unmapped / total) | 635 / 494 / 107 / 1,352 / 2,588 |
-| Routines with oracle evidence (exact / print) | 4 / 8 |
+| Routines with oracle evidence (exact / print) | 10 / 8 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
 
@@ -45,7 +45,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle (exact / print) | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle (exact / print) | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 4 / 8 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 0.7% / 1.4% | 35.6% |
+| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 10 / 8 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 1.1% / 1.4% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 / 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 / 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% / 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 / 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% / 0.0% | 0.0% |
@@ -55,7 +55,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 / 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `neu` | 4 | 15 | 12 | 0 | 0 | 3 | 1 / 1 | 2,184 | 1,653 | 0 | 0 | 361 | 170 | 75.7% | 0.0% | 75.7% | 1.6% / 11.8% | 83.9% |
 | `atm` | 19 | 93 | 0 | 0 | 0 | 93 | 0 / 0 | 6,853 | 0 | 0 | 0 | 5,350 | 1,503 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
-| `turb` | 6 | 25 | 23 | 2 | 0 | 0 | 3 / 0 | 2,033 | 1,191 | 236 | 0 | 0 | 606 | 58.6% | 11.6% | 58.6% | 11.7% / 0.0% | 66.5% |
+| `turb` | 6 | 25 | 23 | 2 | 0 | 0 | 6 / 0 | 2,033 | 1,191 | 236 | 0 | 0 | 606 | 58.6% | 11.6% | 58.6% | 17.5% / 0.0% | 66.5% |
 | `chem` | 7 | 67 | 0 | 0 | 0 | 67 | 0 / 0 | 4,195 | 0 | 0 | 0 | 3,330 | 865 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `ionization` | 22 | 67 | 0 | 0 | 0 | 67 | 0 / 0 | 3,859 | 0 | 0 | 0 | 3,055 | 804 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `colors` | 10 | 89 | 0 | 0 | 0 | 89 | 0 / 0 | 3,823 | 0 | 0 | 0 | 3,155 | 668 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
@@ -533,11 +533,11 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/mix_info.f90` | `star` | partial | partial | 2,438 | 37 | 14 | 16 | 2 | 1 / 0 | 1,295 | 833 | 74 | 136 | 100 |
 | `star/private/mod_typical_charge.f90` | `star` | ported_unverified | partial | 111 | 4 | 1 | 0 | 0 | 0 / 0 | 11 | 0 | 0 | 40 | 60 |
 | `star/private/net.f90` | `star` | partial | partial | 813 | 10 | 0 | 7 | 1 | 0 / 0 | 0 | 586 | 137 | 31 | 59 |
-| `star/private/neu.f90` | `star` | ported_unverified | ported_unverified | 129 | 2 | 2 | 0 | 0 | 0 / 0 | 93 | 0 | 0 | 0 | 36 |
+| `star/private/neu.f90` | `star` | ported_unverified | ported_unverified | 129 | 2 | 2 | 0 | 0 | 1 / 0 | 93 | 0 | 0 | 0 | 36 |
 | `star/private/overshoot.f90` | `star` | ported_unverified | ported_unverified | 329 | 1 | 1 | 0 | 0 | 0 / 0 | 292 | 0 | 0 | 0 | 37 |
 | `star/private/overshoot_exp.f90` | `star` | ported_unverified | ported_unverified | 176 | 1 | 1 | 0 | 0 | 0 / 0 | 143 | 0 | 0 | 0 | 33 |
 | `star/private/overshoot_step.f90` | `star` | ported_unverified | ported_unverified | 162 | 1 | 1 | 0 | 0 | 0 / 0 | 129 | 0 | 0 | 0 | 33 |
-| `star/private/overshoot_utils.f90` | `star` | ported_unverified | ported_unverified | 376 | 4 | 4 | 0 | 0 | 0 / 0 | 334 | 0 | 0 | 0 | 42 |
+| `star/private/overshoot_utils.f90` | `star` | ported_unverified | ported_unverified | 376 | 4 | 4 | 0 | 0 | 2 / 0 | 334 | 0 | 0 | 0 | 42 |
 | `star/private/paquette_coeffs.f90` | `star` | ported_unverified | ported_unverified | 721 | 3 | 3 | 0 | 0 | 0 / 3 | 656 | 0 | 0 | 0 | 65 |
 | `star/private/phase_separation.f90` | `star` | kernel_reference_vectors | partial | 400 | 7 | 1 | 0 | 0 | 0 / 1 | 14 | 0 | 0 | 340 | 46 |
 | `star/private/photo_in.f90` | `star` | partial | partial | 320 | 3 | 0 | 1 | 2 | 0 / 0 | 0 | 269 | 19 | 0 | 32 |
@@ -577,7 +577,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/timestep.f90` | `star` | ported_unverified | partial | 2,432 | 64 | 58 | 5 | 0 | 0 / 0 | 1,687 | 574 | 0 | 10 | 161 |
 | `star/private/turb_info.f90` | `star` | ported_unverified | partial | 608 | 12 | 6 | 5 | 0 | 0 / 0 | 305 | 240 | 0 | 7 | 56 |
 | `star/private/turb_support.f90` | `star` | ported_unverified | partial | 512 | 5 | 2 | 3 | 0 | 0 / 0 | 71 | 387 | 0 | 0 | 54 |
-| `star/private/winds.f90` | `star` | ported_unverified | partial | 706 | 14 | 4 | 0 | 0 | 0 / 0 | 361 | 0 | 0 | 302 | 43 |
+| `star/private/winds.f90` | `star` | ported_unverified | partial | 706 | 14 | 4 | 0 | 0 | 3 / 0 | 361 | 0 | 0 | 302 | 43 |
 | `star/private/write_model.f90` | `star` | ported_unverified | partial | 281 | 4 | 1 | 0 | 0 | 0 / 0 | 207 | 0 | 0 | 39 | 35 |
 | `star/public/star_def.f90` | `star` | ported_unverified | - | 26 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 26 |
 | `star_data/private/star_controls.inc` | `star_data` | partial | - | 1,412 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 1,412 |
@@ -592,11 +592,11 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star_data/public/star_data_step_input.inc` | `star_data` | partial | - | 208 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 208 |
 | `star_data/public/star_data_step_work.inc` | `star_data` | partial | - | 1,192 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 1,192 |
 | `turb/private/mlt.f90` | `turb` | ported_unverified | kernel_reference_vectors | 183 | 1 | 1 | 0 | 0 | 1 / 0 | 129 | 0 | 0 | 0 | 54 |
-| `turb/private/semiconvection.f90` | `turb` | ported_unverified | ported_unverified | 131 | 1 | 1 | 0 | 0 | 0 / 0 | 75 | 0 | 0 | 0 | 56 |
+| `turb/private/semiconvection.f90` | `turb` | ported_unverified | kernel_reference_vectors | 131 | 1 | 1 | 0 | 0 | 1 / 0 | 75 | 0 | 0 | 0 | 56 |
 | `turb/private/tdc.f90` | `turb` | ported_unverified | partial | 381 | 2 | 1 | 1 | 0 | 0 / 0 | 167 | 150 | 0 | 0 | 64 |
 | `turb/private/tdc_support.f90` | `turb` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 / 0 | 448 | 0 | 0 | 0 | 233 |
 | `turb/private/thermohaline.f90` | `turb` | ported_unverified | partial | 363 | 6 | 5 | 1 | 0 | 0 / 0 | 221 | 86 | 0 | 0 | 56 |
-| `turb/public/turb.f90` | `turb` | ported_unverified | ported_unverified | 294 | 4 | 4 | 0 | 0 | 2 / 0 | 151 | 0 | 0 | 0 | 143 |
+| `turb/public/turb.f90` | `turb` | ported_unverified | kernel_reference_vectors | 294 | 4 | 4 | 0 | 0 | 4 / 0 | 151 | 0 | 0 | 0 | 143 |
 | `utils/private/utils_idict.f90` | `utils` | partial | - | 525 | 20 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 472 | 53 |
 | `utils/private/utils_nan.f90` | `utils` | partial | - | 32 | 0 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 0 | 32 |
 | `utils/private/utils_nan_dp.f90` | `utils` | partial | - | 270 | 8 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 191 | 79 |

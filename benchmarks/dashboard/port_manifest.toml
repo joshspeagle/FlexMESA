@@ -1212,7 +1212,7 @@ module = "astero"
 upstream_lines = 1071
 upstream_sha256 = "0b2eab361494f3bd7901d410364f8a49d794d72b2e4807c2fbd767f289b7c6e8"
 status = "absent"
-notes = "seeded from coverage-map.md (absent): deep-ish. ADIPLS is not called; frequencies come from `scan_star_bvp_eigenmodes` (flexmesa-astero/src/e2e.rs:186)"
+notes = "Not raised: a Rust counterpart exists, crates/flexmesa-astero/src/adipls_support.rs, which bridges flexmesa-star models to the flexmesa-adipls solver (oscillation_code = 'adipls'), selected in crates/flexmesa-astero/src/sample_eval.rs:943-950. No MESA reference vectors or case evidence are recorded for it; routine map not written, so the row stays at absent (a raise needs a reviewed routine map)."
 
 [[files]]
 upstream_path = "astero/private/adipls_support_procs.f90"
@@ -1220,7 +1220,7 @@ module = "astero"
 upstream_lines = 77
 upstream_sha256 = "60b0bfbe1581d1d5d65429d0c0e25b38ece2ab0bca902acee781a9e6fe690379"
 status = "absent"
-notes = "seeded from coverage-map.md aggregate: absent"
+notes = "seeded from coverage-map.md aggregate: absent; no separate Rust counterpart found (the bridge in crates/flexmesa-astero/src/adipls_support.rs is recorded under adipls_support.f90)"
 
 [[files]]
 upstream_path = "astero/private/adipls_support_procs_stub.f90"
@@ -1344,7 +1344,7 @@ module = "astero"
 upstream_lines = 308
 upstream_sha256 = "08bf8143c79870208dcd974ed1daca2254b8de8eaec421efef328aeab1533a51"
 status = "absent"
-notes = "seeded from coverage-map.md (absent): deep-ish. GYRE is not called"
+notes = "Not raised: a Rust counterpart exists, crates/flexmesa-astero/src/gyre_support.rs, which wraps the flexmesa-gyre port (AsteroGyre::init, store_model, get_modes), selected with oscillation_code = 'gyre' in crates/flexmesa-astero/src/sample_eval.rs:951-969. No MESA reference vectors or case evidence are recorded for it; routine map not written, so the row stays at absent (a raise needs a reviewed routine map)."
 
 [[files]]
 upstream_path = "astero/private/gyre_support_stub.f90"

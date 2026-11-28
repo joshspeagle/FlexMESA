@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `98`
 - **Cases rejected by strict `#147` validation**: `8`
-- **Distinct unsupported physics/solver controls encountered**: `34`
+- **Distinct unsupported physics/solver controls encountered**: `23`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 224 | 4 | 3 | 8 | 216 |
 | `&eos` | 102 | 91 | 0 | 0 | 9 | 2 |
 | `&kap` | 51 | 39 | 0 | 0 | 10 | 2 |
-| `&controls` | 1448 | 1245 | 16 | 0 | 19 | 168 |
+| `&controls` | 1448 | 1256 | 16 | 0 | 19 | 157 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 153 | 0 | 0 | 0 | 0 |
@@ -38,17 +38,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::initial_he3` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::op_mono_method` | `unimplemented` | 1 | `star/1.4M_ms_op_mono` |
 | `&controls::op_mono_min_x_to_include` | `unimplemented` | 1 | `star/radiative_levitation` |
-| `&controls::rti_c_x0_frac` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_c_x_factor` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_d_mix_floor` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_dm_for_center_eta_nondecreasing` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_log_max_boost` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_m_full_boost` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_m_no_boost` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_min_dm_behind_shock_for_full_on` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_smooth_fraction` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_smooth_iterations` | `unimplemented` | 1 | `star/ccsn_IIp` |
-| `&controls::rti_smooth_mass` | `unimplemented` | 1 | `star/ccsn_IIp` |
 | `&controls::use_other_eval_fp_ft` | `unimplemented` | 1 | `star/ppisn` |
 | `&controls::use_other_kap` | `unused` | 1 | `star/ppisn` |
 | `&controls::use_other_surface_pt` | `unused` | 1 | `star/conductive_flame` |
@@ -179,7 +168,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `c13_pocket` | `pass` | 0 | 0 | 100 |
 | `star` | `carbon_kh` | `pass` | 0 | 0 | 81 |
 | `star` | `cburn_inward` | `pass` | 0 | 0 | 66 |
-| `star` | `ccsn_IIp` | `fail_unsupported` | 14 | 0 | 100 |
+| `star` | `ccsn_IIp` | `fail_unsupported` | 3 | 0 | 100 |
 | `star` | `check_pulse_atm` | `pass` | 0 | 0 | 0 |
 | `star` | `check_redo` | `pass` | 0 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 1 | 0 | 109 |

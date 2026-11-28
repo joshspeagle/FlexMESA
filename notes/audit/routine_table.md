@@ -27,16 +27,16 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Lines in not-applicable routines | 2,550 |
 | Lines in unmapped routines | 44,648 |
 | Lines outside routines | 21,618 |
-| Lines in routines with oracle evidence | 4,469 |
+| Lines in routines with oracle evidence | 4,586 |
 | Line-weighted full-mapping fraction (all lines) | 21.9% |
 | Line-weighted partial-mapping fraction (all lines) | 30.6% |
 | Full-mapping fraction excluding not-applicable lines | 22.3% |
 | Partial-mapping fraction excluding not-applicable lines | 31.1% |
 | Not-applicable fraction of all lines | 1.8% |
-| Line-weighted oracle fraction | 3.1% |
+| Line-weighted oracle fraction | 3.2% |
 | Whole-file ported fraction (existing headline) | 31.1% |
 | Routines (full / partial / N/A / unmapped / total) | 635 / 494 / 107 / 1,352 / 2,588 |
-| Routines with oracle evidence | 23 |
+| Routines with oracle evidence | 24 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
 
@@ -44,7 +44,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 23 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 3.7% | 35.6% |
+| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 24 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 3.8% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% | 0.0% |
@@ -96,7 +96,7 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | `star/private/diffusion_support.f90` | kernel_reference_vectors | partial | 1,800 | 16 | 11 | 5 | 0 | 1 |
 | `neu/private/mod_neu.f90` | ported_unverified | partial | 1,715 | 12 | 11 | 0 | 0 | 3 |
 | `star/private/conv_premix.f90` | ported_unverified | partial | 1,561 | 16 | 1 | 0 | 0 | 0 |
-| `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 |
+| `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 1 |
 | `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 |
 
 ### `partial` files with every applicable routine mapped in full (57 files)
@@ -566,7 +566,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/rsp_step.f90` | `star` | ported_unverified | partial | 3,834 | 53 | 27 | 0 | 0 | 0 | 2,057 | 0 | 0 | 1,490 | 287 |
 | `star/private/set_flags.f90` | `star` | stub | - | 806 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 755 | 51 |
 | `star/private/solve_omega_mix.f90` | `star` | kernel_reference_vectors | partial | 669 | 7 | 1 | 0 | 0 | 1 | 306 | 0 | 0 | 330 | 33 |
-| `star/private/solver_support.f90` | `star` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 0 | 634 | 0 | 0 | 839 | 74 |
+| `star/private/solver_support.f90` | `star` | ported_unverified | partial | 1,547 | 21 | 7 | 0 | 0 | 1 | 634 | 0 | 0 | 839 | 74 |
 | `star/private/star_bcyclic.f90` | `star` | ported_unverified | partial | 981 | 15 | 3 | 0 | 0 | 0 | 284 | 0 | 0 | 625 | 72 |
 | `star/private/star_job_ctrls_io.f90` | `star` | partial | partial | 1,763 | 9 | 0 | 4 | 0 | 0 | 0 | 591 | 0 | 620 | 552 |
 | `star/private/star_solver.f90` | `star` | ported_unverified | partial | 1,940 | 35 | 4 | 8 | 0 | 0 | 115 | 890 | 0 | 894 | 41 |

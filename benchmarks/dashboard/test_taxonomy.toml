@@ -228,6 +228,17 @@ kind = "oracle"
 provenance = "benchmarks/fortran_mesa/binary_rlof_fixture/instrumented/{first_call_state,solver_calls}_26_4_1.tsv (#363, #372)"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/binary_stepdump_windows_oracle_test.rs"
+language = "rust"
+module = "binary"
+kind = "oracle"
+provenance = "crates/flexmesa-binary/tests/data/stepdump_windows/{wind_fed_bhhmxb_s1_k1_m101_equ,binary_windows_aux}.tsv (MESA 26.4.1 mesa-stepdump-windows-v1: binary/test_suite/wind_fed_bhhmxb & binary/test_suite/star_plus_point_mass_explicit_mdot)"
+routines = [
+  "star/private/micro.f90::do_eos",
+  "star/private/solver_support.f90::sizequ",
+]
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/checkpoint_child_process_restart_test.rs"
 language = "rust"
 module = "binary"
@@ -1415,6 +1426,17 @@ path = "crates/flexmesa-star/tests/set_v_flag_579_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/solver_norms_stepdump_oracle_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "crates/flexmesa-star/tests/data/stepdump_windows/{make_planets_s3_k1_m23_equ,star_windows_aux}.tsv (MESA 26.4.1 mesa-stepdump-windows-v1: star/test_suite/make_planets, star/test_suite/high_z, star/test_suite/hot_cool_wind, star/test_suite/conserve_angular_momentum & star/test_suite/wd_stable_h_burn)"
+routines = [
+  "star/private/micro.f90::do_eos",
+  "star/private/solver_support.f90::sizequ",
+]
 
 [[tests]]
 path = "crates/flexmesa-star/tests/solver_rti_152_test.rs"

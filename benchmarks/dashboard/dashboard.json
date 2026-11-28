@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 23307,
-      "python_testing_bench": 26448
+      "python_testing_bench": 26504
     }
   },
   "numerics": {
@@ -1289,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 333,
-    "total_tests": 2013,
+    "total_files": 335,
+    "total_tests": 2022,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 198
+        "files": 200
       },
       "regression": {
         "files": 2
@@ -1308,8 +1308,8 @@
         "tests": 1170
       },
       "python": {
-        "files": 101,
-        "tests": 843
+        "files": 103,
+        "tests": 852
       }
     },
     "mislabeled_count": 2,
@@ -1327,9 +1327,9 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 2290,
+    "mapped_routines_total": 1623,
     "listed_oracle_routines_total": 64,
-    "listed_oracle_routines_pct": 2.8,
+    "listed_oracle_routines_pct": 3.9,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1405,9 +1405,9 @@
         "total_files": 124,
         "total_tests": 754,
         "mislabeled_files": 2,
-        "mapped_routines": 1197,
+        "mapped_routines": 924,
         "listed_oracle_routines": 20,
-        "listed_oracle_routines_pct": 1.7
+        "listed_oracle_routines_pct": 2.2
       },
       {
         "module": "binary",
@@ -1453,7 +1453,7 @@
         "total_files": 7,
         "total_tests": 34,
         "mislabeled_files": 0,
-        "mapped_routines": 91,
+        "mapped_routines": 0,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1465,7 +1465,7 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 119,
+        "mapped_routines": 12,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,7 +1477,7 @@
         "total_files": 6,
         "total_tests": 27,
         "mislabeled_files": 0,
-        "mapped_routines": 196,
+        "mapped_routines": 0,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1688,10 +1688,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 42,
+        "invariant_files": 44,
         "regression_files": 1,
-        "total_files": 45,
-        "total_tests": 438,
+        "total_files": 47,
+        "total_tests": 447,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2046,18 +2046,8 @@
         "draft": false
       },
       {
-        "number": 751,
-        "title": "dashboard: read the deferred register from the children of #727",
-        "draft": false
-      },
-      {
         "number": 753,
         "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
-        "draft": false
-      },
-      {
-        "number": 756,
-        "title": "audit: Python and JAX port inventory (P1.5)",
         "draft": false
       },
       {
@@ -4574,6 +4564,19 @@
     {
       "date_utc": "2026-11-28",
       "commit": "48385686",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "74c240af",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

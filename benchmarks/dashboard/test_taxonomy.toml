@@ -1975,6 +1975,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_dashboard_github.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_data.py"
 language = "python"
 module = "utils"
@@ -2282,6 +2288,12 @@ kind = "invariant"
 
 [[tests]]
 path = "tests/test_py_bindings_161.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_python_inventory.py"
 language = "python"
 module = "tooling"
 kind = "invariant"

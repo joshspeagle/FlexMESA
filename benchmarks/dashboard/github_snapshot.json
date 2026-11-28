@@ -345,18 +345,8 @@
       "draft": false
     },
     {
-      "number": 751,
-      "title": "dashboard: read the deferred register from the children of #727",
-      "draft": false
-    },
-    {
       "number": 753,
       "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
-      "draft": false
-    },
-    {
-      "number": 756,
-      "title": "audit: Python and JAX port inventory (P1.5)",
       "draft": false
     },
     {

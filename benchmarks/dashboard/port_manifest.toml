@@ -5520,7 +5520,15 @@ upstream_lines = 874
 upstream_sha256 = "c7ddba42f54f7b6fa32969b1e7b802fd76d013ec920613bc52bdcbddf9340d93"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["get_kap_Results", "get_kap_Results_blend_T", "get_kap_highT_Results", "combine_rad_with_conduction"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_kap_Results" = "crates/flexmesa-kap/src/eval.rs::get_kap_results" # partial: adds an up-front non-finite check on log_rho, log_t, x, z and zbar that upstream lacks; use_other_compton_opacity and use_other_radiative_opacity hooks are not wired
+"get_kap_Results_blend_T" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t" # partial: takes log10 of kap1 and kap2 with safe_log10 (floor 1e-99) where upstream uses plain log10; other_* hooks are handled in the caller, not here
+"get_kap_lowT_Results" = "crates/flexmesa-kap/src/blend.rs::get_kap_low_t_results"
+"get_kap_highT_Results" = "crates/flexmesa-kap/src/blend.rs::get_kap_high_t_results" # partial: omits the is_bad(dXC) or is_bad(dXO) ierr = -1 return (kap_eval.f90:593); a missing CO z-table errors where upstream proceeds with frac_Type2 = 1 and no table association check
+"combine_rad_with_conduction" = "crates/flexmesa-kap/src/eval.rs::combine_rad_with_conduction" # partial: use_other_elect_cond_opacity hook not wired; the is_bad(kap_ec), is_bad(kap) and is_bad(dlnkap) mesa_error and ierr = -1 returns are not transcribed
+"Compton_Opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_co.f90"

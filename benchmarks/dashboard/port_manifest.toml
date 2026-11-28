@@ -7009,7 +7009,11 @@ upstream_lines = 346
 upstream_sha256 = "d8afb36a1a82449ebc22762d790fb6188a66cfc6b96038e3ade4050d60b0cb53"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_eval_weak_reaction_info", "do_eval_weaklib_reaction_info"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_eval_weak_reaction_info" = "crates/flexmesa-net/src/derivs_support.rs::eval_single_weak_blended" # partial: one reaction per call instead of the n-array loop; the low-T blend and the optional ecapture dispatch sit in this function (net crate); blend arithmetic matches
+"do_eval_weaklib_reaction_info" = "crates/flexmesa-rates/src/weak.rs::eval_weak_reaction_pair" # partial: one pair per call; ye_rho is clamped at 1e-99 where upstream returns ierr = -1 for a non-finite log10(YeRho), and no non-finite Qneu error (#741)
 
 [[files]]
 upstream_path = "rates/private/load_ecapture.f90"

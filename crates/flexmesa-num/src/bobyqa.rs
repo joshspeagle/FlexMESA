@@ -5,8 +5,8 @@
 //! $m = \mathrm{npt} \in [n + 2, (n + 1)(n + 2) / 2]$ interpolation points and
 //! Frobenius-norm-minimal Hessian updates.
 
-use crate::newuoa::fit_min_frobenius_quad;
 use crate::NumError;
+use flexmesa_mtx::{dgetrf, dgetrs};
 
 /// Result returned by [`bobyqa`].
 #[derive(Debug, Clone)]
@@ -426,4 +426,77 @@ fn trsbox_bounded(
         }
     }
     d
+}
+
+/// Fits the minimum-Frobenius-norm quadratic model around `xpt[kopt]`.
+///
+/// Moved unchanged from the former `newuoa.rs` stand-in (audit `N1-1`) when
+/// `NEWUOA` was transcribed; it remains part of this `BOBYQA` stand-in.
+fn fit_min_frobenius_quad(
+    n: usize,
+    npt: usize,
+    kopt: usize,
+    scale: f64,
+    xpt: &[Vec<f64>],
+    fval: &[f64],
+    h_prev: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
+    let m = npt - 1;
+    let dim = m + n;
+    let inv_s = 1.0 / scale.max(1e-12);
+    let mut s_rows: Vec<Vec<f64>> = Vec::with_capacity(m);
+    let mut rhs = vec![0.0_f64; dim];
+
+    for (k, pt) in xpt.iter().enumerate() {
+        if k == kopt {
+            continue;
+        }
+        let r = s_rows.len();
+        let dx: Vec<f64> = (0..n).map(|j| pt[j] - xpt[kopt][j]).collect();
+        let mut quad_prev = 0.0_f64;
+        for i in 0..n {
+            for j in 0..n {
+                quad_prev += dx[i] * h_prev[i * n + j] * dx[j];
+            }
+        }
+        rhs[r] = (fval[k] - fval[kopt]) - 0.5 * quad_prev;
+        s_rows.push(dx.iter().map(|&v| v * inv_s).collect());
+    }
+
+    let mut kkt = vec![0.0_f64; dim * dim];
+    for r in 0..m {
+        for q in 0..=r {
+            let dot: f64 = (0..n).map(|j| s_rows[r][j] * s_rows[q][j]).sum();
+            let val = 0.5 * dot * dot + if r == q { 1e-11 } else { 0.0 };
+            kkt[r * dim + q] = val;
+            kkt[q * dim + r] = val;
+        }
+        for j in 0..n {
+            kkt[r * dim + (m + j)] = s_rows[r][j];
+            kkt[(m + j) * dim + r] = s_rows[r][j];
+        }
+    }
+    for j in 0..n {
+        kkt[(m + j) * dim + (m + j)] = -1e-12;
+    }
+
+    let mut ipiv = vec![0usize; dim];
+    if dgetrf(dim, &mut kkt, &mut ipiv).is_ok()
+        && dgetrs(dim, &kkt, &ipiv, &mut rhs).is_ok()
+    {
+        let grad: Vec<f64> = (0..n).map(|j| rhs[m + j] * inv_s).collect();
+        let mut h_new = h_prev.to_vec();
+        let inv_s2 = inv_s * inv_s;
+        for r in 0..m {
+            let lam = rhs[r] * inv_s2;
+            for i in 0..n {
+                for j in 0..n {
+                    h_new[i * n + j] += lam * s_rows[r][i] * s_rows[r][j];
+                }
+            }
+        }
+        (grad, h_new)
+    } else {
+        (vec![0.0; n], h_prev.to_vec())
+    }
 }

@@ -6,10 +6,10 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 
 | Measure | Value |
 | :--- | ---: |
-| Claims (test, reference, routine) | 101 |
-| Claims verified | 87 |
-| Routines claimed | 64 |
-| Routines verified exact (0 ULP) | 42 |
+| Claims (test, reference, routine) | 114 |
+| Claims verified | 100 |
+| Routines claimed | 67 |
+| Routines verified exact (0 ULP) | 45 |
 | Routines verified at print precision only | 18 |
 | Routines not counted | 4 |
 | Not counted only because of `scope` or `precision` | 3 |
@@ -49,6 +49,9 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `interp_2d/private/bipm_db.f90::do_mkbipm_db` | exact |
 | `neu/private/mod_neu.f90::neutrinos` | exact |
 | `neu/public/neu_lib.f90::neu_get` | exact |
+| `num/private/mod_newuoa.f::BIGDEN` | exact |
+| `num/private/mod_newuoa.f::do_newuoa` | exact |
+| `num/public/num_newuoa.dek::newuoa` | exact |
 | `star/private/diffusion_support.f90::get_matrix_coeffs` | exact |
 | `star/private/eps_mdot.f90::calculate_eps_mdot` | exact |
 | `star/private/init_model.f90::get_zams_model` | exact |

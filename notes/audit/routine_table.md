@@ -59,7 +59,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `chem` | 7 | 67 | 0 | 0 | 0 | 67 | 0 / 0 | 4,195 | 0 | 0 | 0 | 3,330 | 865 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `ionization` | 22 | 67 | 0 | 0 | 0 | 67 | 0 / 0 | 3,859 | 0 | 0 | 0 | 3,055 | 804 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `colors` | 10 | 89 | 0 | 0 | 0 | 89 | 0 / 0 | 3,823 | 0 | 0 | 0 | 3,155 | 668 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
-| `num` | 66 | 273 | 0 | 0 | 0 | 273 | 0 / 0 | 20,045 | 0 | 0 | 0 | 17,448 | 2,597 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
+| `num` | 66 | 273 | 7 | 0 | 0 | 266 | 3 / 0 | 20,045 | 1,581 | 0 | 0 | 15,867 | 2,597 | 7.9% | 0.0% | 7.9% | 2.2% / 0.0% | 0.0% |
 | `mtx` | 23 | 163 | 0 | 0 | 0 | 163 | 0 / 0 | 5,802 | 0 | 0 | 0 | 5,147 | 655 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `interp_1d` | 11 | 111 | 0 | 0 | 0 | 111 | 0 / 0 | 4,969 | 0 | 0 | 0 | 4,351 | 618 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `interp_2d` | 10 | 82 | 2 | 0 | 0 | 80 | 2 / 0 | 13,565 | 90 | 0 | 0 | 12,965 | 510 | 0.7% | 0.0% | 0.7% | 0.7% / 0.0% | 0.9% |
@@ -100,12 +100,13 @@ Files whose status needs more than the routine evidence gives. Files with no cei
 | `star/private/solver_support.f90` | ported_unverified | partial | 1,547 | 21 | 9 | 3 | 0 | 0 / 0 |
 | `star/private/adjust_mesh_split_merge.f90` | ported_unverified | partial | 1,461 | 22 | 12 | 6 | 0 | 0 / 0 |
 
-### `partial` files with every applicable routine mapped in full (59 files)
+### `partial` files with every applicable routine mapped in full (61 files)
 
 Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 
 | File | Status | Ceiling | Lines | Routines | Full | Partial | N/A | Oracle (exact / print) |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `num/private/mod_newuoa.f` | partial | ported_unverified | 1,583 | 6 | 6 | 0 | 0 | 2 / 0 |
 | `adipls/adipack.c/adipls/setbcs.n.d.f` | partial | ported_unverified | 774 | 1 | 1 | 0 | 0 | 0 / 0 |
 | `turb/private/tdc_support.f90` | partial | ported_unverified | 681 | 11 | 11 | 0 | 0 | 0 / 0 |
 | `star/private/mass_utils.f90` | partial | ported_unverified | 594 | 9 | 9 | 0 | 0 | 0 / 0 |
@@ -115,7 +116,6 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `rates/private/screen5.f90` | partial | ported_unverified | 396 | 2 | 2 | 0 | 0 | 0 / 0 |
 | `eos/private/skye_coulomb_solid.f90` | partial | ported_unverified | 348 | 8 | 8 | 0 | 0 | 0 / 0 |
 | `rates/private/pycno.f90` | partial | ported_unverified | 308 | 1 | 1 | 0 | 0 | 0 / 0 |
-| `adipls/adipack.c/adipls/order.d.f` | partial | ported_unverified | 293 | 1 | 1 | 0 | 0 | 0 / 0 |
 
 ## Per file (files with a non-absent status or a mapped routine)
 
@@ -407,7 +407,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `num/private/mod_dopri5.f` | `num` | partial | - | 645 | 5 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 606 | 39 |
 | `num/private/mod_integrate.f90` | `num` | partial | - | 114 | 2 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 80 | 34 |
 | `num/private/mod_newton.f90` | `num` | partial | - | 1,536 | 24 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 1,500 | 36 |
-| `num/private/mod_newuoa.f` | `num` | partial | - | 1,583 | 6 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 1,568 | 15 |
+| `num/private/mod_newuoa.f` | `num` | partial | ported_unverified | 1,583 | 6 | 6 | 0 | 0 | 2 / 0 | 1,568 | 0 | 0 | 0 | 15 |
 | `num/private/mod_qsort.f90` | `num` | partial | - | 160 | 15 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 138 | 22 |
 | `num/private/mod_random.f90` | `num` | partial | - | 376 | 4 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 341 | 35 |
 | `num/private/mod_root.f90` | `num` | partial | - | 277 | 4 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 244 | 33 |
@@ -438,7 +438,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `num/public/num_lib.f90` | `num` | partial | - | 626 | 21 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 256 | 370 |
 | `num/public/num_mas.dek` | `num` | partial | - | 8 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 8 | 0 |
 | `num/public/num_newton.dek` | `num` | partial | - | 322 | 14 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 283 | 39 |
-| `num/public/num_newuoa.dek` | `num` | partial | - | 64 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 13 | 51 |
+| `num/public/num_newuoa.dek` | `num` | partial | kernel_reference_vectors | 64 | 1 | 1 | 0 | 0 | 1 / 0 | 13 | 0 | 0 | 0 | 51 |
 | `num/public/num_newuoa_proc.dek` | `num` | partial | - | 7 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 7 | 0 |
 | `num/public/num_rk2.dek` | `num` | partial | - | 41 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 38 | 3 |
 | `num/public/num_rk4.dek` | `num` | partial | - | 53 | 1 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 | 50 | 3 |

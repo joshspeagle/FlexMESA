@@ -1,0 +1,45 @@
+# gcov of MESA r26.4.1 num/private/mod_newuoa.f (copy compiled with num/make COMPILE_XTRA flags plus --coverage)
+# compiler: GNU Fortran (GCC) 15.2.0; MESA SDK: x86_64-linux-26.6.1
+# per run: routine, lines executed (counters reset before each run)
+chebyquad_n2 do_newuoa 90.91% of 22
+chebyquad_n2 newuob 82.02% of 356
+chebyquad_n2 bigden 0.00% of 223
+chebyquad_n2 biglag 100.00% of 116
+chebyquad_n2 trsapp 100.00% of 135
+chebyquad_n2 update 71.88% of 64
+chebyquad_n4 do_newuoa 90.91% of 22
+chebyquad_n4 newuob 82.02% of 356
+chebyquad_n4 bigden 0.00% of 223
+chebyquad_n4 biglag 100.00% of 116
+chebyquad_n4 trsapp 100.00% of 135
+chebyquad_n4 update 71.88% of 64
+chebyquad_n6 do_newuoa 90.91% of 22
+chebyquad_n6 newuob 82.87% of 356
+chebyquad_n6 bigden 0.00% of 223
+chebyquad_n6 biglag 100.00% of 116
+chebyquad_n6 trsapp 100.00% of 135
+chebyquad_n6 update 71.88% of 64
+chebyquad_n4_npt6 do_newuoa 90.91% of 22
+chebyquad_n4_npt6 newuob 82.87% of 356
+chebyquad_n4_npt6 bigden 0.00% of 223
+chebyquad_n4_npt6 biglag 100.00% of 116
+chebyquad_n4_npt6 trsapp 100.00% of 135
+chebyquad_n4_npt6 update 62.50% of 64
+quad_rhoend1 do_newuoa 90.91% of 22
+quad_rhoend1 newuob 63.48% of 356
+quad_rhoend1 bigden 0.00% of 223
+quad_rhoend1 biglag 0.00% of 116
+quad_rhoend1 trsapp 70.37% of 135
+quad_rhoend1 update 64.06% of 64
+quad_rhoend1em6 do_newuoa 90.91% of 22
+quad_rhoend1em6 newuob 81.74% of 356
+quad_rhoend1em6 bigden 0.00% of 223
+quad_rhoend1em6 biglag 100.00% of 116
+quad_rhoend1em6 trsapp 70.37% of 135
+quad_rhoend1em6 update 71.88% of 64
+bigden do_newuoa 0.00% of 22
+bigden newuob 0.00% of 356
+bigden bigden 100.00% of 223
+bigden biglag 0.00% of 116
+bigden trsapp 0.00% of 135
+bigden update 0.00% of 64

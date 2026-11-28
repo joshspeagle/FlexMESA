@@ -120,7 +120,7 @@ fn set_param_slot(p: &mut AsteroParamSet, name: &str, value: f64) {
     }
 }
 
-fn active_search_params(
+pub(crate) fn active_search_params(
     ctrl: &AsteroSearchControls,
 ) -> Vec<(usize, AsteroSearchParam)> {
     let all = [

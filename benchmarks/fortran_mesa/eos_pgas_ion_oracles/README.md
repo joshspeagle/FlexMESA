@@ -21,5 +21,7 @@ make -C benchmarks/fortran_mesa/eos_pgas_ion_oracles MESA_DIR=/path/to/mesa MESA
   - `pc_alfa_gamma_c12_2p9_6p5`, `pc_alfa_gamma_c12_3p5_8p35`, `pc_alfa_tlim_c12_3p3_7p65`: `(alfa, d_alfa_dlogT, d_alfa_dlogRho)`.
 - `skye::Get_Skye_alfa_simple` (`crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs`):
   - `skye_alfa_simple_2p35_7p3` (default `eos.defaults` bounds) and `skye_alfa_simple_f64_2p35_7p3` (explicit f64 bounds): `(alfa, d_alfa_dlogT, d_alfa_dlogRho)`.
+- `eosdt_eval::get1_for_eosdt` (`crates/flexmesa-eos/tests/wave3b1_golden_tests.rs`):
+  - `get1_opal_scvh_solar_1em2_1e5` (`eosdt_OPAL_SCVH` at `rho = 1e-2`, `T = 1e5`) and `get1_free_eos_solar_1em2_1e6` (`eosdt_max_FreeEOS` at `rho = 1e-2`, `T = 1e6`) for the 7-species solar mix (`X = 0.70`, `Z = 0.02`), `16 x 3` `val`, `d_dlnd`, `d_dlnT`.
 - `eosPT_eval::get_Pgas` (`crates/flexmesa-eos/tests/wave3b1_golden_tests.rs`):
   - `eospt_get_pgas_solar_15_7p2`: 7-species solar mixture (`X = 0.70`, `Z = 0.02`) at `logT = 7.2`, solving for `logPgas` matching `lnE` from `eosPT_get` at `(logPgas=15.0, logT=7.2)` starting from `logPgas_guess = 14.8` with `logPgas_tol = 1e-6`, `other_tol = ln10 * 1e-6`, `max_iter = 100`.

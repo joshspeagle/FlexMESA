@@ -14,10 +14,12 @@ program gen_eos_pgas_ion_oracles
    use const_lib, only: const_init
    use chem_def, only: num_chem_isos
    use chem_lib, only: chem_init, chem_shutdown, chem_get_iso_id, basic_composition_info
-   use eos_def, only: EoS_General_Info, num_eos_basic_results, num_eos_d_dxa_results, num_helm_results, i_lnPgas, i_lnE
+   use eos_def, only: EoS_General_Info, num_eos_basic_results, num_eos_d_dxa_results, num_helm_results, &
+      i_lnPgas, i_lnE, eosdt_OPAL_SCVH, eosdt_max_FreeEOS
    use eos_lib, only: eos_init, eos_shutdown, alloc_eos_handle, free_eos_handle, eos_ptr, eosPT_get, helmeos2_eval
    use eosPT_eval, only: get_Pgas
    use eos_helm_eval, only: Get_HELMEOS_Results
+   use eosdt_eval, only: get1_for_eosdt
    use eospc_eval, only: Get_PC_alfa
    use ideal, only: get_ideal_for_eosdt
    use ion_offset, only: compute_ion_offset
@@ -67,6 +69,7 @@ program gen_eos_pgas_ion_oracles
    call emit_helm_cases(u, rc)
    call emit_pc_alfa_cases(u, rc)
    call emit_skye_alfa_simple_cases(u, rc)
+   call emit_get1_eosdt_cases(u, rc)
    close(u)
    call eos_shutdown()
    call chem_shutdown()
@@ -467,5 +470,91 @@ contains
 
       call free_eos_handle(eh)
    end subroutine emit_skye_alfa_simple_cases
+
+   subroutine emit_get1_eosdt_one(unit_no, rc, eh, which_eosdt, label, &
+         z_c, x_c, abar_c, zbar_c, cid7, niso7, xa7, rho_in, temp_in)
+      integer, intent(in) :: unit_no, eh, which_eosdt
+      integer, intent(inout) :: rc
+      character(len=*), intent(in) :: label
+      real(dp), intent(in) :: z_c, x_c, abar_c, zbar_c, xa7(7), rho_in, temp_in
+      integer, pointer :: cid7(:), niso7(:)
+
+      real(dp) :: res(num_eos_basic_results), dlnd(num_eos_basic_results), dlnt(num_eos_basic_results)
+      real(dp) :: ddxa_eos(num_eos_basic_results, 7)
+      real(dp) :: lr_in, lt_in
+      logical :: skip
+      integer :: ierr_loc, k
+      character(len=16) :: fld
+
+      lr_in = log10(rho_in)
+      lt_in = log10(temp_in)
+      res = 0.0_dp; dlnd = 0.0_dp; dlnt = 0.0_dp; ddxa_eos = 0.0_dp
+      call get1_for_eosdt(eh, which_eosdt, .false., z_c, x_c, abar_c, zbar_c, &
+         7, cid7, niso7, xa7, rho_in, lr_in, temp_in, lt_in, 1.0_dp, &
+         res, dlnd, dlnt, ddxa_eos, skip, ierr_loc)
+      if (ierr_loc /= 0 .or. skip) stop 'get1_for_eosdt failed'
+
+      call emit(unit_no, rc, trim(label), 'in', 'X', 'val', x_c)
+      call emit(unit_no, rc, trim(label), 'in', 'Z', 'val', z_c)
+      call emit(unit_no, rc, trim(label), 'in', 'rho', 'val', rho_in)
+      call emit(unit_no, rc, trim(label), 'in', 'logRho', 'val', lr_in)
+      call emit(unit_no, rc, trim(label), 'in', 'T', 'val', temp_in)
+      call emit(unit_no, rc, trim(label), 'in', 'logT', 'val', lt_in)
+      do k = 1, 16
+         write(fld, '(A,I0)') 'res_', k - 1
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'val', res(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnd', dlnd(k))
+         call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnT', dlnt(k))
+      end do
+   end subroutine emit_get1_eosdt_one
+
+   subroutine emit_get1_eosdt_cases(unit_no, rc)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      character(len=8), parameter :: names(7) = [ &
+         'h1      ', 'he4     ', 'c12     ', 'n14     ', &
+         'o16     ', 'ne20    ', 'mg24    ']
+      real(dp), parameter :: zfrac_c = 0.173312_dp
+      real(dp), parameter :: zfrac_n = 0.053177_dp
+      real(dp), parameter :: zfrac_o = 0.482398_dp
+      real(dp), parameter :: zfrac_ne = 0.098675_dp
+      real(dp), parameter :: x_in = 0.70_dp, zinit_in = 0.02_dp
+
+      integer, pointer :: cid7(:), niso7(:)
+      real(dp) :: xa7(7), x_c, y_c, z_c, abar_c, zbar_c, z2bar_c, z53bar_c, ye_c, mc_c, sx_c
+      integer :: eh, k, ierr_loc
+
+      allocate(cid7(7), niso7(num_chem_isos))
+      niso7 = 0
+      do k = 1, 7
+         cid7(k) = chem_get_iso_id(names(k))
+         if (cid7(k) <= 0) stop 'get1 7sp isotope not found'
+         niso7(cid7(k)) = k
+      end do
+
+      xa7(1) = x_in
+      xa7(2) = 1.0_dp - (x_in + zinit_in)
+      xa7(3) = zinit_in * zfrac_c
+      xa7(4) = zinit_in * zfrac_n
+      xa7(5) = zinit_in * zfrac_o
+      xa7(6) = zinit_in * zfrac_ne
+      xa7(7) = 1.0_dp - (((((xa7(1) + xa7(2)) + xa7(3)) + xa7(4)) + xa7(5)) + xa7(6))
+
+      call basic_composition_info(7, cid7, xa7, x_c, y_c, z_c, &
+         abar_c, zbar_c, z2bar_c, z53bar_c, ye_c, mc_c, sx_c)
+
+      eh = alloc_eos_handle(ierr_loc)
+      if (ierr_loc /= 0) stop 'get1 alloc_eos_handle failed'
+
+      call emit_get1_eosdt_one(unit_no, rc, eh, eosdt_OPAL_SCVH, &
+         'get1_opal_scvh_solar_1em2_1e5', z_c, x_c, abar_c, zbar_c, cid7, niso7, xa7, &
+         1.0e-2_dp, 1.0e5_dp)
+      call emit_get1_eosdt_one(unit_no, rc, eh, eosdt_max_FreeEOS, &
+         'get1_free_eos_solar_1em2_1e6', z_c, x_c, abar_c, zbar_c, cid7, niso7, xa7, &
+         1.0e-2_dp, 1.0e6_dp)
+
+      call free_eos_handle(eh)
+      deallocate(cid7, niso7)
+   end subroutine emit_get1_eosdt_cases
 
 end program gen_eos_pgas_ion_oracles

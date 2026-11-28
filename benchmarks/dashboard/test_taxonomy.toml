@@ -2422,6 +2422,12 @@ module = "star"
 kind = "regression"
 
 [[tests]]
+path = "tests/test_window_inlist.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/unit/test_kap_wave3b2.py"
 language = "python"
 module = "kap"

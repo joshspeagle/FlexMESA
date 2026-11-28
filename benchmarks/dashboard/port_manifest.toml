@@ -6963,7 +6963,18 @@ upstream_lines = 350
 upstream_sha256 = "a0ded3b7226d3634e2dccb724b08fc17a0d4c856b349333f98e4ad17ad2e94fe"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_mui_coulomb", "do_Vs_coulomb"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_mui_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad" # partial: returns zero for z <= 0 where upstream has no guard; the option is an argument rather than the module variable which_mui_coulomb (#739)
+"mui_coulomb_DGC1973" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_I1993" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009::fii" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009::fie" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"do_Vs_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad" # partial: returns zero for z <= 0 where upstream has no guard (#739)
+"Vs_coulomb_TF" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad"
+"Vs_coulomb_Itoh" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad"
 
 [[files]]
 upstream_path = "rates/private/eval_ecapture.f90"

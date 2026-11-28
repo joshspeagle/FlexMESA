@@ -1131,18 +1131,6 @@ pub(crate) fn execute_adjust_mesh_from_plan_with(
     model.aux.mesh_adjust_pe_conservation = 0.0;
     model.aux.mesh_adjust_eturb_conservation = 0.0;
 
-    if model.controls.rotation_flag
-        && model.j_rot.iter().all(|&j| j == 0.0)
-        && model.omega.iter().any(|&w| w != 0.0)
-    {
-        // Bootstrap `i_rot` and `j_rot` from `(ln_r, omega)` before
-        // `total_angular_momentum` (`star/private/adjust_mesh.f90:108`,
-        // `star/private/hydro_rotation.f90:382-397`).
-        if model.j_rot.len() != model.nz {
-            model.j_rot.resize(model.nz, 0.0);
-        }
-        crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
-    }
     let j_tot1 = total_angular_momentum(model);
 
     // `clean_up_fractions(1, nz, species, nz, s% xa, 10d0, 1d-2, ierr)`

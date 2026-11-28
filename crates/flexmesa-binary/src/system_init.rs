@@ -7,8 +7,7 @@
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
     apply_uniform_rotation, center_avg_x_by_name, eval_total_energy_integrals,
-    set_hydro_vars, set_rotation_info, snapshot_step_history_old,
-    use_xh_to_update_i_rot_and_j_rot, StarError, StarModel,
+    set_hydro_vars, snapshot_step_history_old, StarError, StarModel,
 };
 
 use crate::system::{BinaryCompanion, BinarySystem};
@@ -21,25 +20,16 @@ use crate::system::{BinaryCompanion, BinarySystem};
 pub(crate) fn prep_and_settle_binary_star(
     star: &mut StarModel,
 ) -> Result<(), StarError> {
-    // Upstream `binary/private/run_binary_support.f90:241-244, 319-339`,
-    // `star/public/star_lib.f90:911-912, 1664-1670`,
-    // `star/private/hydro_rotation.f90:382-397, 492-586`.
+    // Upstream `binary/private/run_binary_support.f90:319-339` ->
+    // `star_set_uniform_omega` (`star/public/star_lib.f90:1664-1670`,
+    // `star/private/hydro_rotation.f90:492-535`); there is no other rotation
+    // update at this point.
     if star.controls.rotation_flag {
         let omega_0 = star.omega.first().copied().unwrap_or(0.0);
         if omega_0 > 0.0
             && star.omega.iter().all(|&w| (w - omega_0).abs() == 0.0)
         {
             apply_uniform_rotation(star, omega_0);
-        } else {
-            if star.j_rot.len() != star.nz {
-                star.j_rot.resize(star.nz, 0.0);
-            }
-            if star.j_rot.iter().all(|&j| j == 0.0)
-                && star.omega.iter().any(|&w| w != 0.0)
-            {
-                use_xh_to_update_i_rot_and_j_rot(star);
-            }
-            set_rotation_info(star, false);
         }
     }
 

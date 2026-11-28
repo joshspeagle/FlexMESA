@@ -342,22 +342,11 @@ pub fn eval_rotational_mixing_zone(
     }
 }
 
-/// Bootstraps `j_rot` from `(ln_r, omega)` if `j_rot == 0 && omega != 0`
-/// (`use_xh_to_update_i_rot_and_j_rot`) and recomputes
-/// `(w_div_wc, i_rot, omega, fp_rot, ft_rot)` preserving shell `j_rot`
-/// (`set_rotation_info` in `star/private/hydro_rotation.f90:382-397, 537-586`).
+/// Recomputes `(w_div_wc, i_rot, omega, fp_rot, ft_rot)` preserving shell
+/// `j_rot` (`set_rotation_info` in `star/private/hydro_rotation.f90:537-586`).
 pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
-    let nz = model.nz;
-    if !model.controls.rotation_flag || nz == 0 {
+    if !model.controls.rotation_flag || model.nz == 0 {
         return;
-    }
-    if model.j_rot.len() != nz {
-        model.j_rot.resize(nz, 0.0);
-    }
-    if model.j_rot.iter().all(|&j| j == 0.0)
-        && model.omega.iter().any(|&w| w != 0.0)
-    {
-        crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
     }
     crate::hydro_rotation::set_rotation_info(model, false);
 }
@@ -392,7 +381,7 @@ mod tests {
     use crate::zams::load_zams_model;
 
     #[test]
-    fn test_conserve_shell_j_rot_bootstraps_from_exp_ln_r_not_r() {
+    fn test_conserve_shell_j_rot_preserves_j_rot_and_rebuilds_omega() {
         let ctrl = StarControls {
             initial_mass: 1.0,
             rotation_flag: true,
@@ -402,20 +391,23 @@ mod tests {
         let mut model = load_zams_model(ctrl, StarJobControls::default())
             .expect("1 Msun ZAMS");
         model.omega.fill(2.0e-4);
-        model.j_rot.fill(0.0);
-        for k in 0..model.nz {
-            model.r[k] = 1.05 * flexmesa_math::exp(model.ln_r[k]);
-        }
-        let mut expected = model.clone();
-        use_xh_to_update_i_rot_and_j_rot(&mut expected);
+        use_xh_to_update_i_rot_and_j_rot(&mut model);
+        let j_before = model.j_rot.clone();
+        assert!(j_before.iter().all(|&j| j > 0.0));
+        model.omega.fill(0.0);
 
         conserve_shell_j_rot_and_distortion(&mut model);
         assert!(model.nz > 0);
         for k in 0..model.nz {
             assert_eq!(
                 model.j_rot[k].to_bits(),
-                expected.j_rot[k].to_bits(),
-                "j_rot[{k}] must bootstrap from exp(ln_r), not model.r"
+                j_before[k].to_bits(),
+                "j_rot[{k}] must be preserved"
+            );
+            assert_eq!(
+                model.omega[k].to_bits(),
+                (model.j_rot[k] / model.aux.i_rot[k]).to_bits(),
+                "omega[{k}] must be j_rot / i_rot"
             );
         }
         assert!(model.aux.fp_rot[0] < 1.0 && model.aux.ft_rot[0] < 1.0);

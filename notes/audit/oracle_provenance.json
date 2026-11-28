@@ -23,6 +23,7 @@
   "interp_2d/private/bipm_db.f90::do_evbipm_db",
   "interp_2d/private/bipm_db.f90::do_mkbipm_db",
   "neu/public/neu_lib.f90::neu_get",
+  "star/private/diffusion_support.f90::get_matrix_coeffs",
   "star/private/eps_mdot.f90::calculate_eps_mdot",
   "star/private/init_model.f90::get_zams_model",
   "star/private/mix_info.f90::update_rotation_mixing_info",
@@ -120,7 +121,6 @@
   "eos/public/eos_lib.f90::helmeos2_eval",
   "neu/private/mod_neu.f90::neutrinos",
   "star/private/diffusion.f90::do_solve_diffusion",
-  "star/private/diffusion_support.f90::get_matrix_coeffs",
   "star/private/phase_separation.f90::do_phase_separation",
   "star/private/rsp.f90::build_rsp_model",
   "star/private/rsp_build.f90::do_rsp_build"

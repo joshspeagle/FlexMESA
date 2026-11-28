@@ -359,203 +359,214 @@ fn test_get_matrix_coeffs_all_8_regimes_match_mesa_26_4_1_oracles() {
         ),
     ];
 
-    for (
-        cid,
-        pure_coulomb,
-        use_paq,
-        use_cgs,
-        use_caplan,
-        rho,
-        temp,
-        eta_v,
-        gam_v,
-    ) in regimes
-    {
-        let rho_face = vec![rho; nz];
-        let t_face = vec![temp; nz];
-        let eta = vec![eta_v; nz];
-        let gam = vec![gam_v; nz];
-        let fpr2r: Vec<f64> =
-            r_face.iter().map(|&r| PI4 * r * r * rho).collect();
-
-        let mut x_work = x_init.clone();
-        let mut x_face = vec![0.0_f64; nz * m];
-        let mut c_mat = vec![0.0_f64; nz * m];
-        let mut c_div_x = vec![0.0_f64; nz * m];
-        let mut c_div_x_f = vec![0.0_f64; nz * m];
-        let mut e_ap = vec![0.0_f64; nz];
-        let mut e_at = vec![0.0_f64; nz];
-        let mut e_ar = vec![0.0_f64; nz];
-        let mut e_ax = vec![0.0_f64; nz * m];
-        let mut e_fld = vec![0.0_f64; nz];
-        let mut g_ap = vec![0.0_f64; nz];
-        let mut g_at = vec![0.0_f64; nz];
-        let mut g_ar = vec![0.0_f64; nz];
-        let mut g_ax = vec![0.0_f64; nz * m];
-        let mut g_fld = vec![0.0_f64; nz];
-        let mut v_adv = vec![0.0_f64; nz * nc];
-        let mut v_tot = vec![0.0_f64; nz * nc];
-        let mut vlnp = vec![0.0_f64; nz * nc];
-        let mut vlnt = vec![0.0_f64; nz * nc];
-        let mut vrad = vec![0.0_f64; nz * nc];
-        let mut gt_face = vec![0.0_f64; nz * nc];
-        let mut d_self = vec![0.0_f64; nz * nc];
-        let mut ad_face = vec![0.0_f64; nz];
-        let mut sig_face = vec![0.0_f64; nz * nc * nc];
-        let mut sigma_lnc = vec![0.0_f64; nz * nc * nc];
-
-        let inp = MatrixCoeffsInput {
-            nz,
-            nc,
-            m,
-            nzlo: 0,
-            nzhi: nz - 1,
+    with_numerics_mode(NumericsMode::Strict, || {
+        for (
+            cid,
             pure_coulomb,
-            diffusion_use_paquette: use_paq,
-            diffusion_use_caplan: use_caplan,
-            diffusion_use_cgs_solver: use_cgs,
-            cgs_thermal_diffusion_eta_full_on: 10.0,
-            cgs_thermal_diffusion_eta_full_off: 40.0,
-            use_other_diffusion_factor: false,
-            star_dt: dt,
-            v_advection_max: 1.0e99,
-            diffusion_vlimit: 0.0,
-            diffusion_vlimit_dm_full_on: -1.0,
-            diffusion_vlimit_dm_full_off: -1.0,
-            diffusion_ad_dm_full_on: -1.0,
-            diffusion_ad_dm_full_off: -1.0,
-            diffusion_ad_boost_factor: 1.0,
-            diffusion_sig_factor: 1.0,
-            diffusion_gt_factor: 1.0,
-            min_t_for_radaccel: 1.0e99,
-            max_t_for_radaccel: -1.0,
-            diffusion_factor: &diff_fac,
-            extra_diffusion_factor: None,
-            a: &a_vec,
-            z: &z_mat,
-            rho_face: &rho_face,
-            t_face: &t_face,
-            four_pi_r2_rho_face: &fpr2r,
-            xm_face: &xm_face,
-            cell_dm: &cell_dm,
-            dm_bar: &dm_bar,
-            dln_p_dr_face: &dlnp_dr,
-            dln_t_dr_face: &dlnt_dr,
-            dln_rho_dr_face: &dlnrho_dr,
-            r_mid: &r_mid,
-            grav: &grav,
-            eta: &eta,
-            gam: &gam,
-            gamma_t_limit_coeffs_face: &gam_t_lim,
-            alfa_face: &alfa_face,
-            rad_accel_face: &rad_acc,
-        };
-        let mut out = MatrixCoeffsOutput {
-            x: &mut x_work,
-            x_face: &mut x_face,
-            c: &mut c_mat,
-            c_div_x: &mut c_div_x,
-            c_div_x_face: &mut c_div_x_f,
-            e_ap: &mut e_ap,
-            e_at: &mut e_at,
-            e_ar: &mut e_ar,
-            e_ax: &mut e_ax,
-            e_field_face: &mut e_fld,
-            g_ap: &mut g_ap,
-            g_at: &mut g_at,
-            g_ar: &mut g_ar,
-            g_ax: &mut g_ax,
-            g_field_face: &mut g_fld,
-            v_advection_face: &mut v_adv,
-            v_total_face: &mut v_tot,
-            vln_p_face: &mut vlnp,
-            vln_t_face: &mut vlnt,
-            v_rad_face: &mut vrad,
-            gt_face: &mut gt_face,
-            d_self_face: &mut d_self,
-            ad_face: &mut ad_face,
-            sig_face: &mut sig_face,
-            sigma_lnc: &mut sigma_lnc,
-        };
-        get_matrix_coeffs(&inp, &mut out)
-            .unwrap_or_else(|e| panic!("get_matrix_coeffs({cid}) failed: {e}"));
+            use_paq,
+            use_cgs,
+            use_caplan,
+            rho,
+            temp,
+            eta_v,
+            gam_v,
+        ) in regimes
+        {
+            let rho_face = vec![rho; nz];
+            let t_face = vec![temp; nz];
+            let eta = vec![eta_v; nz];
+            let gam = vec![gam_v; nz];
+            let fpr2r: Vec<f64> =
+                r_face.iter().map(|&r| PI4 * r * r * rho).collect();
 
-        // Interior face k = 2 (1-based k = 3 in Fortran oracle)
-        let k = 2_usize;
-        let k1 = k + 1;
-        assert_close(
-            &format!("mc/{cid}/AD_face"),
-            ad_face[k],
-            oracle_val(&oracles, "matrix_coeffs", cid, "AD_face", k1, 0),
-            1.0e-12,
-            1.0e-30,
-        );
-        assert_close(
-            &format!("mc/{cid}/E_field_face"),
-            e_fld[k],
-            oracle_val(&oracles, "matrix_coeffs", cid, "E_field_face", k1, 0),
-            1.0e-11,
-            1.0e-30,
-        );
-        assert_close(
-            &format!("mc/{cid}/g_field_face"),
-            g_fld[k],
-            oracle_val(&oracles, "matrix_coeffs", cid, "g_field_face", k1, 0),
-            1.0e-11,
-            1.0e-30,
-        );
-        for i in 0..nc {
-            for (fld, arr) in [
-                ("v_advection", &v_adv),
-                ("v_total", &v_tot),
-                ("vlnP", &vlnp),
-                ("vlnT", &vlnt),
-                ("GT_face", &gt_face),
-                ("D_self_face", &d_self),
-            ] {
-                let want =
-                    oracle_val(&oracles, "matrix_coeffs", cid, fld, i + 1, k1);
-                assert_close(
-                    &format!("mc/{cid}/{fld}[{}, {k1}]", i + 1),
-                    arr[k * nc + i],
-                    want,
-                    1.0e-11,
-                    1.0e-25,
-                );
-            }
-            for j in 0..nc {
-                let idx = (k * nc + i) * nc + j;
-                assert_close(
-                    &format!("mc/{cid}/SIG_face[{},{}]", i + 1, j + 1),
-                    sig_face[idx],
-                    oracle_val(
+            let mut x_work = x_init.clone();
+            let mut x_face = vec![0.0_f64; nz * m];
+            let mut c_mat = vec![0.0_f64; nz * m];
+            let mut c_div_x = vec![0.0_f64; nz * m];
+            let mut c_div_x_f = vec![0.0_f64; nz * m];
+            let mut e_ap = vec![0.0_f64; nz];
+            let mut e_at = vec![0.0_f64; nz];
+            let mut e_ar = vec![0.0_f64; nz];
+            let mut e_ax = vec![0.0_f64; nz * m];
+            let mut e_fld = vec![0.0_f64; nz];
+            let mut g_ap = vec![0.0_f64; nz];
+            let mut g_at = vec![0.0_f64; nz];
+            let mut g_ar = vec![0.0_f64; nz];
+            let mut g_ax = vec![0.0_f64; nz * m];
+            let mut g_fld = vec![0.0_f64; nz];
+            let mut v_adv = vec![0.0_f64; nz * nc];
+            let mut v_tot = vec![0.0_f64; nz * nc];
+            let mut vlnp = vec![0.0_f64; nz * nc];
+            let mut vlnt = vec![0.0_f64; nz * nc];
+            let mut vrad = vec![0.0_f64; nz * nc];
+            let mut gt_face = vec![0.0_f64; nz * nc];
+            let mut d_self = vec![0.0_f64; nz * nc];
+            let mut ad_face = vec![0.0_f64; nz];
+            let mut sig_face = vec![0.0_f64; nz * nc * nc];
+            let mut sigma_lnc = vec![0.0_f64; nz * nc * nc];
+
+            let inp = MatrixCoeffsInput {
+                nz,
+                nc,
+                m,
+                nzlo: 0,
+                nzhi: nz - 1,
+                pure_coulomb,
+                diffusion_use_paquette: use_paq,
+                diffusion_use_caplan: use_caplan,
+                diffusion_use_cgs_solver: use_cgs,
+                cgs_thermal_diffusion_eta_full_on: 10.0,
+                cgs_thermal_diffusion_eta_full_off: 40.0,
+                use_other_diffusion_factor: false,
+                star_dt: dt,
+                v_advection_max: 1.0e99,
+                diffusion_vlimit: 0.0,
+                diffusion_vlimit_dm_full_on: -1.0,
+                diffusion_vlimit_dm_full_off: -1.0,
+                diffusion_ad_dm_full_on: -1.0,
+                diffusion_ad_dm_full_off: -1.0,
+                diffusion_ad_boost_factor: 1.0,
+                diffusion_sig_factor: 1.0,
+                diffusion_gt_factor: 1.0,
+                min_t_for_radaccel: 1.0e99,
+                max_t_for_radaccel: -1.0,
+                diffusion_factor: &diff_fac,
+                extra_diffusion_factor: None,
+                a: &a_vec,
+                z: &z_mat,
+                rho_face: &rho_face,
+                t_face: &t_face,
+                four_pi_r2_rho_face: &fpr2r,
+                xm_face: &xm_face,
+                cell_dm: &cell_dm,
+                dm_bar: &dm_bar,
+                dln_p_dr_face: &dlnp_dr,
+                dln_t_dr_face: &dlnt_dr,
+                dln_rho_dr_face: &dlnrho_dr,
+                r_mid: &r_mid,
+                grav: &grav,
+                eta: &eta,
+                gam: &gam,
+                gamma_t_limit_coeffs_face: &gam_t_lim,
+                alfa_face: &alfa_face,
+                rad_accel_face: &rad_acc,
+            };
+            let mut out = MatrixCoeffsOutput {
+                x: &mut x_work,
+                x_face: &mut x_face,
+                c: &mut c_mat,
+                c_div_x: &mut c_div_x,
+                c_div_x_face: &mut c_div_x_f,
+                e_ap: &mut e_ap,
+                e_at: &mut e_at,
+                e_ar: &mut e_ar,
+                e_ax: &mut e_ax,
+                e_field_face: &mut e_fld,
+                g_ap: &mut g_ap,
+                g_at: &mut g_at,
+                g_ar: &mut g_ar,
+                g_ax: &mut g_ax,
+                g_field_face: &mut g_fld,
+                v_advection_face: &mut v_adv,
+                v_total_face: &mut v_tot,
+                vln_p_face: &mut vlnp,
+                vln_t_face: &mut vlnt,
+                v_rad_face: &mut vrad,
+                gt_face: &mut gt_face,
+                d_self_face: &mut d_self,
+                ad_face: &mut ad_face,
+                sig_face: &mut sig_face,
+                sigma_lnc: &mut sigma_lnc,
+            };
+            get_matrix_coeffs(&inp, &mut out).unwrap_or_else(|e| {
+                panic!("get_matrix_coeffs({cid}) failed: {e}")
+            });
+
+            // Interior face k = 2 (1-based k = 3 in Fortran oracle)
+            let k = 2_usize;
+            let k1 = k + 1;
+            assert_bits_eq(
+                &format!("mc/{cid}/AD_face"),
+                ad_face[k],
+                oracle_val(&oracles, "matrix_coeffs", cid, "AD_face", k1, 0),
+            );
+            assert_bits_eq(
+                &format!("mc/{cid}/E_field_face"),
+                e_fld[k],
+                oracle_val(
+                    &oracles,
+                    "matrix_coeffs",
+                    cid,
+                    "E_field_face",
+                    k1,
+                    0,
+                ),
+            );
+            assert_bits_eq(
+                &format!("mc/{cid}/g_field_face"),
+                g_fld[k],
+                oracle_val(
+                    &oracles,
+                    "matrix_coeffs",
+                    cid,
+                    "g_field_face",
+                    k1,
+                    0,
+                ),
+            );
+            for i in 0..nc {
+                for (fld, arr) in [
+                    ("v_advection", &v_adv),
+                    ("v_total", &v_tot),
+                    ("vlnP", &vlnp),
+                    ("vlnT", &vlnt),
+                    ("GT_face", &gt_face),
+                    ("D_self_face", &d_self),
+                ] {
+                    let want = oracle_val(
                         &oracles,
                         "matrix_coeffs",
                         cid,
-                        "SIG_face",
+                        fld,
                         i + 1,
-                        j + 1,
-                    ),
-                    1.0e-11,
-                    1.0e-25,
-                );
-                assert_close(
-                    &format!("mc/{cid}/sigma_lnC[{},{}]", i + 1, j + 1),
-                    sigma_lnc[idx],
-                    oracle_val(
-                        &oracles,
-                        "matrix_coeffs",
-                        cid,
-                        "sigma_lnC",
-                        i + 1,
-                        j + 1,
-                    ),
-                    1.0e-11,
-                    1.0e-25,
-                );
+                        k1,
+                    );
+                    assert_bits_eq(
+                        &format!("mc/{cid}/{fld}[{}, {k1}]", i + 1),
+                        arr[k * nc + i],
+                        want,
+                    );
+                }
+                for j in 0..nc {
+                    let idx = (k * nc + i) * nc + j;
+                    assert_bits_eq(
+                        &format!("mc/{cid}/SIG_face[{},{}]", i + 1, j + 1),
+                        sig_face[idx],
+                        oracle_val(
+                            &oracles,
+                            "matrix_coeffs",
+                            cid,
+                            "SIG_face",
+                            i + 1,
+                            j + 1,
+                        ),
+                    );
+                    assert_bits_eq(
+                        &format!("mc/{cid}/sigma_lnC[{},{}]", i + 1, j + 1),
+                        sigma_lnc[idx],
+                        oracle_val(
+                            &oracles,
+                            "matrix_coeffs",
+                            cid,
+                            "sigma_lnC",
+                            i + 1,
+                            j + 1,
+                        ),
+                    );
+                }
             }
         }
-    }
+    });
 }
 
 #[test]

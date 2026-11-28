@@ -960,20 +960,23 @@ pub fn build_pre_ms_model_with_configs(
     let dlnd = 0.01;
     let epsx = 1.0e-3; // limit for variation in lnd
     let epsy = 1.0e-3; // limit for matching desired mass as fraction of total
-    let root =
-        look_for_brackets(lnd, dlnd, -f64::MAX, f64::MAX, &mut pre_ms_f, IMAX)
-            .and_then(|((lnd1, lnd3), (y1, y3))| {
-                safe_root_with_brackets(
-                    &mut pre_ms_f,
-                    lnd1,
-                    lnd3,
-                    y1,
-                    y3,
-                    IMAX,
-                    epsx,
-                    epsy,
-                )
-            });
+
+    // `look_for_brackets` and `safe_root` as upstream calls them
+    // (`pre_ms_model.f90:212-213, 229`): no bounds, no Brent cap (#667).
+    let root = look_for_brackets(lnd, dlnd, &mut pre_ms_f, IMAX).and_then(
+        |((lnd1, lnd3), (y1, y3))| {
+            safe_root_with_brackets(
+                &mut pre_ms_f,
+                lnd1,
+                lnd3,
+                y1,
+                y3,
+                IMAX,
+                epsx,
+                epsy,
+            )
+        },
+    );
     if let Err(e) = root {
         return Err(failure.take().unwrap_or_else(|| {
             StarError::ConvergenceFailure(format!(

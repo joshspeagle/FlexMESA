@@ -643,7 +643,7 @@ fn test_num_module_hex_zero_ulp() {
             Ok((tanh(x) - 0.4621171572600098_f64, 1.0 / (c * c)))
         };
         let ((x1_b, x3_b), (y1_b, y3_b)) =
-            look_for_brackets(-1.0, 0.1, -1.0e30, 1.0e30, f_root2, 50).unwrap();
+            look_for_brackets(-1.0, 0.1, f_root2, 50).unwrap();
         let (r2, _) = safe_root_with_brackets(
             f_root2, x1_b, x3_b, y1_b, y3_b, 50, 1e-10, 1e-10,
         )

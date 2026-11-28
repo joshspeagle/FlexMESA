@@ -277,8 +277,7 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
     .unwrap();
     assert!((root_mesa - 7.480_061_088_059_349e-1).abs() <= 1e-14);
 
-    let ((x1, x3), (y1, y3)) =
-        look_for_brackets(5.0, 1.0, 0.0, 10.0, f1, 50).unwrap();
+    let ((x1, x3), (y1, y3)) = look_for_brackets(5.0, 1.0, f1, 50).unwrap();
     let (root1, res1) =
         safe_root_with_brackets(f1, x1, x3, y1, y3, 50, 1e-12, 1e-12).unwrap();
     assert!((root1 - 0.748_006_110_748_124_4).abs() <= 1e-11);
@@ -292,7 +291,7 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
         Ok((t - 0.462_117_157_260_009_8, 1.0 / (c * c)))
     };
     let ((r2_x1, r2_x3), (r2_y1, r2_y3)) =
-        look_for_brackets(-1.0, 0.1, -1.0e30, 1.0e30, f2, 50).unwrap();
+        look_for_brackets(-1.0, 0.1, f2, 50).unwrap();
     assert!((r2_x1 - (-1.2)).abs() <= 1e-15);
     assert!((r2_x3 - 2.0).abs() <= 1e-15);
     let (root2_mesa, _) =

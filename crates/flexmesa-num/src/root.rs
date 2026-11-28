@@ -10,19 +10,100 @@
 //!
 //! # Safeguards & Error Handling
 //!
-//! - [`look_for_brackets`] expands outward geometrically from `x` inside
-//!   `[xmin, xmax]` while verifying finite function evaluations at every step.
-//! - [`safe_root_with_brackets`] delegates to [`brent_safe_zero`] so the
-//!   iterate never leaves the sign-change bracket (`mod_root.f90:27-45`).
+//! - [`look_for_brackets`] is `do_look_for_brackets` as upstream writes it:
+//!   no bounds and no finiteness tests, with an explicit error where
+//!   upstream's integer `2**i` overflows (#669).
+//! - [`safe_root_with_brackets`] delegates to
+//!   [`crate::brent::eval_brent_safe_zero`], which has no iteration cap
+//!   (`mod_root.f90:27-45`, #667).
 //! - [`safe_root_with_guess`] tries guarded Newton steps before bracketing.
 
-use crate::brent::brent_safe_zero;
+use crate::brent::{brent_safe_zero, eval_brent_safe_zero};
 use crate::NumError;
 use flexmesa_autodiff::DualOrder1;
 
 /// Bracket pair `((x1, x3), (y1, y3))` returned by [`look_for_brackets`].
 pub type BracketPair = ((f64, f64), (f64, f64));
 
+/// `do_look_for_brackets` as upstream writes it
+/// (`num/private/mod_root.f90:168-256`): starting from `x1 = x3 = x`, widen
+/// by `jump = 2**i*dx` for `i = 1..imax`, moving both ends at `i = 1` and
+/// then the end whose value is nearer zero, until `y1*y3 <= 0`. No bounds,
+/// no finiteness test (a NaN value just fails `y1*y3 <= 0`), and `dx` is
+/// used with its sign.
+///
+/// # Errors
+///
+/// Propagates an error from `func` (upstream returns on `ierr /= 0`), and
+/// returns [`NumError::BracketingFailed`] after `imax` tries
+/// (`ierr = -1`). Upstream evaluates `2**i` in default 32-bit integer, which
+/// overflows at `i = 31` (#669); there is no defined jump to reproduce, so
+/// reaching `i = 31` is an explicit error (`DECISIONS #43`).
+pub fn look_for_brackets<F>(
+    x: f64,
+    dx: f64,
+    mut func: F,
+    imax: usize,
+) -> Result<BracketPair, NumError>
+where
+    F: FnMut(f64) -> Result<(f64, f64), NumError>,
+{
+    let mut y1 = 0.0_f64;
+    let mut y3 = 0.0_f64;
+    let mut x1 = x;
+    let mut x3 = x;
+    for i in 1..=imax {
+        // `jump = (2**i)*dx` (`mod_root.f90:199`): `2**i` overflows the
+        // default integer for `i >= 31` (#669, `DECISIONS #43`).
+        if i >= 31 {
+            return Err(NumError::ConvergenceFailed(
+                "look_for_brackets reached i = 31, where upstream's integer \
+                 2**i overflows (num/private/mod_root.f90:199, #669)",
+            ));
+        }
+        let jump = f64::from(1_u32 << i) * dx;
+        let (move_x1, move_x3);
+        if i == 1 {
+            x1 -= jump;
+            x3 += jump;
+            move_x1 = true;
+            move_x3 = true;
+        } else if y1 > 0.0 {
+            if y1 < y3 {
+                x1 -= jump;
+                move_x1 = true;
+                move_x3 = false;
+            } else {
+                x3 += jump;
+                move_x3 = true;
+                move_x1 = false;
+            }
+        } else if y1 > y3 {
+            x1 -= jump;
+            move_x1 = true;
+            move_x3 = false;
+        } else {
+            x3 += jump;
+            move_x3 = true;
+            move_x1 = false;
+        }
+        if move_x1 {
+            y1 = func(x1)?.0;
+        }
+        if move_x3 {
+            y3 = func(x3)?.0;
+        }
+        if y1 * y3 <= 0.0 {
+            return Ok(((x1, x3), (y1, y3)));
+        }
+    }
+    Err(NumError::BracketingFailed(
+        "failed to bracket root in look_for_brackets",
+    ))
+}
+
+/// FlexMESA-internal bounded bracket search, used only by
+/// [`safe_root_with_guess`]; not a port of an upstream call (#667).
 /// Searches outward from `x` in steps of $\pm 2^k \mathrm{dx}$ up to
 /// `[xmin, xmax]` to find a sign-change bracket $((x_1, x_3), (y_1, y_3))$ for
 /// $f(x) = 0$.
@@ -31,7 +112,7 @@ pub type BracketPair = ((f64, f64), (f64, f64));
 ///
 /// Returns [`NumError::BracketingFailed`] if no sign change is found within
 /// `[xmin, xmax]` or `ntry` steps.
-pub fn look_for_brackets<F>(
+pub(crate) fn look_for_brackets_bounded<F>(
     x: f64,
     dx: f64,
     xmin: f64,
@@ -131,17 +212,18 @@ pub fn safe_root_with_brackets<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
-    let max_iter = imax.max(200);
-    brent_safe_zero(
+    // `do_safe_root_with_brackets` ignores `imax`
+    // (`num/private/mod_root.f90:42-43`).
+    let _ = imax;
+    eval_brent_safe_zero(
         x1_in,
         x3_in,
         1.0e-14,
         epsx,
         epsy,
         |x| Ok(func(x)?.0),
-        Some(y1_in),
-        Some(y3_in),
-        max_iter,
+        y1_in,
+        y3_in,
     )
 }
 
@@ -234,10 +316,10 @@ where
         if (yv1 <= 0.0 && yv3 >= 0.0) || (yv1 >= 0.0 && yv3 <= 0.0) {
             ((xv1, xv3), (yv1, yv3))
         } else {
-            look_for_brackets(x_guess, dx, xmin, xmax, &mut func, imax)?
+            look_for_brackets_bounded(x_guess, dx, xmin, xmax, &mut func, imax)?
         }
     } else {
-        look_for_brackets(x_guess, dx, xmin, xmax, &mut func, imax)?
+        look_for_brackets_bounded(x_guess, dx, xmin, xmax, &mut func, imax)?
     };
 
     safe_root_with_brackets(func, bx1, bx3, by1, by3, imax, epsx, epsy)
@@ -301,15 +383,18 @@ where
 {
     let (y1, _) = f_primal(x1)?;
     let (y3, _) = f_primal(x3)?;
-    let (x_star, _) = safe_root_with_brackets(
-        &mut f_primal,
+    // FlexMESA-internal (no upstream counterpart), so it keeps the bounded
+    // Brent with its iteration cap.
+    let (x_star, _) = brent_safe_zero(
         x1,
         x3,
-        y1,
-        y3,
-        imax,
+        1.0e-14,
         epsx,
         epsy,
+        |x| Ok(f_primal(x)?.0),
+        Some(y1),
+        Some(y3),
+        imax.max(200),
     )?;
     let (_, df_dx) = f_primal(x_star)?;
     if df_dx == 0.0 || !df_dx.is_finite() {
@@ -323,4 +408,43 @@ where
         d1[m] = -f_p.d1[m] / df_dx;
     }
     Ok(DualOrder1::new(x_star, d1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// With no sign change, the search widens until `i = 31`, where
+    /// upstream's default-integer `2**i` overflows, and stops there with an
+    /// explicit error (`num/private/mod_root.f90:199`, #669).
+    #[test]
+    fn look_for_brackets_errors_at_i_31_where_upstream_overflows() {
+        let mut calls = 0_usize;
+        let err = look_for_brackets(
+            0.0,
+            0.01,
+            |x| {
+                calls += 1;
+                Ok((1.0 + x * x, 0.0))
+            },
+            100,
+        )
+        .expect_err("no sign change");
+        assert!(err.to_string().contains("#669"), "{err}");
+        // `i = 1` evaluates both ends, `i = 2..30` one end each.
+        assert_eq!(calls, 2 + 29);
+    }
+
+    /// The upstream search moves both ends at `i = 1` by `2*dx`, then the end
+    /// whose value is nearer zero, with `dx` used with its sign.
+    #[test]
+    fn look_for_brackets_follows_upstream_steps() {
+        let ((x1, x3), (y1, y3)) =
+            look_for_brackets(0.0, 0.5, |x| Ok((x - 2.5, 1.0)), 10)
+                .expect("bracket");
+        // i = 1: jump = 1, x1 = -1, x3 = 1, both values negative and
+        // y1 < y3, so i = 2 moves x3 by jump = 2 to 3.
+        assert_eq!((x1, x3), (-1.0, 3.0));
+        assert!(y1 < 0.0 && y3 > 0.0);
+    }
 }

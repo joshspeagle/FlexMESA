@@ -67,7 +67,8 @@ pub mod simplex;
 pub use accurate_sum::{neumaier_sum_qp, AccurateReal};
 pub use bobyqa::{bobyqa, BobyqaResult};
 pub use brent::{
-    brent_global_min, brent_local_min, brent_safe_zero, glomin, local_min,
+    brent_global_min, brent_local_min, brent_safe_zero, eval_brent_safe_zero,
+    glomin, local_min,
 };
 pub use newton::{
     newton_solve_banded, newton_solve_block_tridiagonal, newton_solve_dense,

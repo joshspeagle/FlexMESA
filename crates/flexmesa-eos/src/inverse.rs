@@ -103,7 +103,19 @@ where
     let mut y3 = 0.0;
 
     for i in 1..=imax {
-        let jump = ((1u64 << i.min(50)) as f64) * dx;
+        // `jump = (2**i)*dx` (`num/private/mod_root.f90:199`): upstream's
+        // default-integer `2**i` overflows for `i >= 31`, which has no
+        // defined value to reproduce (#669, `DECISIONS #43`).
+        if i >= 31 {
+            return Err(EosError::ConvergenceFailure {
+                context: "look_for_brackets",
+                detail: String::from(
+                    "reached i = 31, where upstream's integer 2**i overflows \
+                     (num/private/mod_root.f90:199, #669)",
+                ),
+            });
+        }
+        let jump = f64::from(1_u32 << i) * dx;
         let (move_x1, move_x3) = if i == 1 {
             x1 -= jump;
             x3 += jump;

@@ -2,7 +2,7 @@
   "header": {
     "generator": "scripts/dashboard/build_python_inventory.py",
     "scope": "src/flexmesa/<pkg>/ excluding testing/ and plotting/; public Rust items across crates/flexmesa-* excluding flexmesa-py, flexmesa-testing, flexmesa-crlibm-sys, and binaries",
-    "staleness_rule": "PyO3 wrappers execute Rust directly and stay mirror-current; pure-python mirrors, JAX kernels, and frozen JAX twins are mirror-stale when the paired Rust span has a newer git committer timestamp and different SHA than the Python span"
+    "staleness_rule": "PyO3 wrappers execute Rust directly and stay mirror-current; pure-python mirrors, JAX kernels, and frozen JAX twins are mirror-stale when the latest git blame committer timestamp over all lines of the paired Rust span is newer than the latest over all lines of the Python span and the two latest commit SHAs differ (a timestamp heuristic, not a behavioural comparison)"
   },
   "summary_by_subpackage": [
     {

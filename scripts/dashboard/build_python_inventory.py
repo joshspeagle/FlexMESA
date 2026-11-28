@@ -1654,8 +1654,11 @@ def build_inventory(repo_root: pathlib.Path) -> dict[str, Any]:
             "staleness_rule": (
                 "PyO3 wrappers execute Rust directly and stay mirror-current; "
                 "pure-python mirrors, JAX kernels, and frozen JAX twins are "
-                "mirror-stale when the paired Rust span has a newer git "
-                "committer timestamp and different SHA than the Python span"
+                "mirror-stale when the latest git blame committer timestamp "
+                "over all lines of the paired Rust span is newer than the "
+                "latest over all lines of the Python span and the two "
+                "latest commit SHAs differ (a timestamp heuristic, not a "
+                "behavioural comparison)"
             ),
         },
         "summary_by_subpackage": summary,
@@ -1693,9 +1696,11 @@ def render_outputs(repo_root: pathlib.Path) -> dict[pathlib.Path, str]:
         "* **States**: `PyO3 wrapper` items delegate directly to Rust at "
         "runtime and are always `mirror-current`; non-PyO3 mirrors/JAX "
         "kernels are "
-        "`mirror-stale` when the paired Rust implementation span has a newer "
-        "`git blame` committer timestamp and different commit SHA than the "
-        "Python span, otherwise `mirror-current`. Unpaired Python items are "
+        "`mirror-stale` when the latest `git blame` committer timestamp over "
+        "all lines of the paired Rust implementation span is newer than the "
+        "latest over all lines of the Python span and the two latest commit "
+        "SHAs differ (a timestamp heuristic, not a behavioural comparison), "
+        "otherwise `mirror-current`. Unpaired Python items are "
         "`python-only`; externally-reachable public Rust items with neither a "
         "Python counterpart nor a PyO3 binding in `crates/flexmesa-py` are "
         "`rust-only`.",

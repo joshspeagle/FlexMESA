@@ -7,7 +7,7 @@ Scope: `src/flexmesa/<pkg>/` (excluding `testing/` and `plotting/`) and external
 ## Classification & Staleness Rules
 
 * **Kinds**: `PyO3 wrapper` (calls `_rust.*`), `JAX engine twin (frozen)` (`#166` frozen star/binary/astero modules), `JAX kernel` (non-frozen `@jax.jit` / `jnp` / `custom_vjp` kernels), and `pure-python mirror` (pure Python/NumPy implementations).
-* **States**: `PyO3 wrapper` items delegate directly to Rust at runtime and are always `mirror-current`; non-PyO3 mirrors/JAX kernels are `mirror-stale` when the paired Rust implementation span has a newer `git blame` committer timestamp and different commit SHA than the Python span, otherwise `mirror-current`. Unpaired Python items are `python-only`; externally-reachable public Rust items with neither a Python counterpart nor a PyO3 binding in `crates/flexmesa-py` are `rust-only`.
+* **States**: `PyO3 wrapper` items delegate directly to Rust at runtime and are always `mirror-current`; non-PyO3 mirrors/JAX kernels are `mirror-stale` when the latest `git blame` committer timestamp over all lines of the paired Rust implementation span is newer than the latest over all lines of the Python span and the two latest commit SHAs differ (a timestamp heuristic, not a behavioural comparison), otherwise `mirror-current`. Unpaired Python items are `python-only`; externally-reachable public Rust items with neither a Python counterpart nor a PyO3 binding in `crates/flexmesa-py` are `rust-only`.
 
 ## Per-Subpackage Summary
 

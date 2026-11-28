@@ -22,6 +22,28 @@ use flexmesa_schema::{
 use crate::controls::{StarControls, StarError, StarJobControls};
 use crate::inlist_inventory::supported_star_control_inventory;
 
+/// `max_extra_inlists` (`const/public/const_def.f90:39`).
+const MAX_EXTRA_INLISTS: usize = 5;
+/// Nesting limit of the ctrls readers (`level >= 10` is an error,
+/// `star/private/star_job_ctrls_io.f90:557-561`).
+const MAX_INCLUDE_LEVEL: usize = 10;
+
+/// The module-level `read_extra_<section>_inlist(1:5)` and
+/// `extra_<section>_inlist_name(1:5)` arrays of one namelist reader.
+///
+/// MESA's readers keep these in place across the recursion: a file's
+/// namelist read sets some slots, and the include loop copies and resets each
+/// slot before reading the file it names (`star_job_ctrls_io.f90:597-607`;
+/// the same pattern is in `read_controls_file`, `ctrls_io.f90:700-709`, and
+/// the `eos` and `kap` readers). A child inlist that sets slot `j` thus
+/// overrides the parent's slot `j`, and the parent's later slots are already
+/// reset when the child returns (Deferred bug #705).
+#[derive(Debug, Clone, Default)]
+struct ExtraSlots {
+    read: [bool; MAX_EXTRA_INLISTS],
+    name: [Option<String>; MAX_EXTRA_INLISTS],
+}
+
 /// Number of abundance-limit slots per block in MESA
 /// (`star_data/public/star_data_def.inc:374-376`).
 pub(crate) const NUM_XA_LIMITS: usize = 9;
@@ -433,7 +455,7 @@ impl InlistBundle {
             )));
         };
         let mut sections: HashMap<String, SectionControls> = HashMap::new();
-        let mut visited: HashSet<(String, PathBuf)> = HashSet::new();
+        let mut slots: HashMap<String, ExtraSlots> = HashMap::new();
         let mut pending_gui_includes: Vec<(String, PathBuf, SectionControls)> =
             Vec::new();
 
@@ -442,7 +464,8 @@ impl InlistBundle {
             &entry_path,
             None,
             &mut sections,
-            &mut visited,
+            &mut slots,
+            1,
             Some(&mut pending_gui_includes),
         )?;
 
@@ -467,13 +490,17 @@ impl InlistBundle {
             if !active {
                 continue;
             }
+            // Deferred headless sections start from fresh slots: only the
+            // block that named them is replayed.
+            let mut fresh: HashMap<String, ExtraSlots> = HashMap::new();
             Self::resolve_section_includes(
                 case_dir,
                 &parent_file,
                 &sec_name,
                 &local_sec,
+                &mut fresh,
                 &mut sections,
-                &mut visited,
+                1,
                 None,
             )?;
         }
@@ -652,34 +679,62 @@ impl InlistBundle {
         )
     }
 
+    /// Merges the include slots set by `local_sec` into `slots`, then runs
+    /// MESA's include loop (`star_job_ctrls_io.f90:597-607`): for each slot,
+    /// copy it, reset it, and read the named file at once if it was set.
+    /// The reset is in place, so this is not a tree walk (#705).
     fn resolve_section_includes(
         case_dir: &Path,
         parent_file: &Path,
         section_name: &str,
         local_sec: &SectionControls,
+        slots: &mut HashMap<String, ExtraSlots>,
         sections: &mut HashMap<String, SectionControls>,
-        visited: &mut HashSet<(String, PathBuf)>,
+        level: usize,
         mut pending_gui_includes: Option<
             &mut Vec<(String, PathBuf, SectionControls)>,
         >,
     ) -> Result<(), StarError> {
         let extra_prefix = section_include_prefix(section_name);
-        for idx in 1..=5 {
-            let read_flag = local_sec
-                .try_get_indexed_bool(
+        let state = slots.entry(section_name.to_ascii_lowercase()).or_default();
+        for idx in 1..=MAX_EXTRA_INLISTS {
+            let flag = local_sec.try_get_indexed_bool(
+                section_name,
+                &format!("read_extra_{extra_prefix}_inlist"),
+                idx,
+            )?;
+            if let Some(flag) = flag {
+                state.read[idx - 1] = flag;
+            }
+            // A name is read when this block sets the slot's name or its
+            // flag (the legacy fallbacks of `try_get_indexed_inlist_name`
+            // apply only with the flag, as before).
+            let named_here = local_sec
+                .indexed
+                .get(&format!("extra_{extra_prefix}_inlist_name"))
+                .is_some_and(|l| {
+                    l.iter().any(|(s, _)| s.trim() == idx.to_string())
+                });
+            if named_here || flag == Some(true) {
+                if let Some(name) = local_sec.try_get_indexed_inlist_name(
                     section_name,
-                    &format!("read_extra_{extra_prefix}_inlist"),
+                    extra_prefix,
                     idx,
-                )?
-                .unwrap_or(false);
+                )? {
+                    state.name[idx - 1] = Some(name.to_string());
+                }
+            }
+        }
+        for idx in 1..=MAX_EXTRA_INLISTS {
+            let state =
+                slots.entry(section_name.to_ascii_lowercase()).or_default();
+            let read_flag = state.read[idx - 1];
+            let extra_name = state.name[idx - 1].take();
+            state.read[idx - 1] = false;
             if !read_flag {
                 continue;
             }
-            if let Some(extra_name) = local_sec.try_get_indexed_inlist_name(
-                section_name,
-                extra_prefix,
-                idx,
-            )? {
+            if let Some(extra_name) = extra_name {
                 let trimmed = extra_name.trim();
                 if trimmed.is_empty() {
                     continue;
@@ -698,7 +753,8 @@ impl InlistBundle {
                     &next_path,
                     Some(section_name),
                     sections,
-                    visited,
+                    slots,
+                    level + 1,
                     pending_gui_includes.as_deref_mut(),
                 )?;
             }
@@ -711,17 +767,17 @@ impl InlistBundle {
         file_path: &Path,
         target_section: Option<&str>,
         sections: &mut HashMap<String, SectionControls>,
-        visited: &mut HashSet<(String, PathBuf)>,
+        slots: &mut HashMap<String, ExtraSlots>,
+        level: usize,
         mut pending_gui_includes: Option<
             &mut Vec<(String, PathBuf, SectionControls)>,
         >,
     ) -> Result<(), StarError> {
-        let canon = file_path
-            .canonicalize()
-            .unwrap_or_else(|_| file_path.to_path_buf());
-        let sec_tag = target_section.unwrap_or("*").to_ascii_lowercase();
-        if !visited.insert((sec_tag, canon)) {
-            return Ok(());
+        if level >= MAX_INCLUDE_LEVEL {
+            return Err(StarError::InvalidInput(format!(
+                "too many levels of nested extra inlist files at '{}'",
+                file_path.display()
+            )));
         }
 
         let blocks = parse_namelist_file(file_path).map_err(|e| {
@@ -756,8 +812,9 @@ impl InlistBundle {
                 file_path,
                 &bname,
                 &local_sec,
+                slots,
                 sections,
-                visited,
+                level,
                 pending_gui_includes.as_deref_mut(),
             )?;
         }

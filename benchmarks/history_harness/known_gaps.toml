@@ -153,11 +153,6 @@ case = "double_bh"
 issue = "#161"
 reason = "Strict run reaches extras_binary_finish_step in [1022] steps (MESA [888]); final values out of tolerance: star_1_mass, star_2_mass, period_days; track columns out of tolerance: star_1_mass, star_2_mass (first at step 149); MESA's recorded step count (888) is star 1's model number, while the harness compares the binary model number (Train 14 campaign; #161)."
 [[gaps]]
-suite = "binary"
-case = "wind_fed_bhhmxb"
-issue = "#587"
-reason = "Strict run reaches xa_central_lower_limit in [392] steps (MESA [393]); every compared column is within tolerance (Train 14 campaign; #587)."
-[[gaps]]
 suite = "astero"
 case = "example_astero"
 issue = "#162"

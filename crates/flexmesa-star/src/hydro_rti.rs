@@ -18,9 +18,7 @@ use flexmesa_utils::is_bad;
 
 use crate::job_controls::StarError;
 use crate::model::StarModel;
-use crate::report_utils::{
-    csound_face_at, eval_shock_info, surface_avg_x_by_name,
-};
+use crate::report_utils::{csound_face_at, eval_shock_info};
 
 /// Evaluates the start-of-step Rayleigh-Taylor baroclinic instability indicator
 /// $(\partial P / \partial r)(\partial \rho / \partial r) \le 0$ across all
@@ -258,6 +256,13 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     }
 
     let c_base = model.controls.rti_c;
+    if model.controls.rti_c_x_factor != 0.0 {
+        // [Parity] #742: `surface_h1` is report-time state.
+        return Err(StarError::InvalidInput(String::from(
+            "set_rti_mixing_info: RTI_C_X_factor != 0 needs s% surface_h1 from \
+             the previous report step, which is not ported (#742)",
+        )));
+    }
 
     // Mass of the first cell moving faster than sound, unless it is the
     // surface cell (`mix_info.f90:1986-1997`).
@@ -285,15 +290,14 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     let mut min_eta = -1.0_f64;
     let dm_for_center_eta_nondecreasing =
         M_SUN * model.controls.rti_dm_for_center_eta_nondecreasing;
-    let surface_h1 = surface_avg_x_by_name(model, "h1");
 
     // Outside-in pass sets `eta_rti` and `etamid_rti` using current `alpha_rti`
     // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`).
     for k in 0..nz {
-        // `f` and `C` (`mix_info.f90:2010-2011`).
-        let f = (model.xh_mass[k] - model.controls.rti_c_x0_frac * surface_h1)
-            .max(0.0);
-        let mut c = c_base * (1.0 + f * f * model.controls.rti_c_x_factor);
+        // `f` and `C` (`mix_info.f90:2010-2011`): `f` uses `s% surface_h1`,
+        // the previous report's value (`report.f90:260`), which FlexMESA does
+        // not carry; with `RTI_C_X_factor = 0` the term is exactly `RTI_C`.
+        let mut c = c_base;
         let m_k = model.m[k];
         // Mass boost (`mix_info.f90:2013-2020`).
         if m_k < m_no_boost {

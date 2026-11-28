@@ -727,6 +727,10 @@ impl RelaxHooks for RelaxOmega {
             RelaxOmegaKind::NewOmega => self.target_value,
             RelaxOmegaKind::NewOmegaDivOmegaCrit => {
                 crate::hydro_rotation::set_i_rot(model, false);
+                // `set_surf_avg_rotation_info`
+                // (`star/private/hydro_rotation.f90:617`) calls
+                // `set_rotation_info(s, .true., ierr)` before averaging.
+                crate::hydro_rotation::set_rotation_info(model, true);
                 let surf =
                     crate::report_utils::eval_surf_avg_rotation_info(model);
                 self.target_value * surf.omega_crit
@@ -821,8 +825,108 @@ pub(crate) fn do_relax_uniform_omega(
     c.mix_wind.am_d_mix_factor = am_d_mix_factor;
     c.max_model_number = max_model_number;
     c.max_years_for_timestep = max_years_for_timestep;
-    // `s% D_omega(1:nz) = 0; s% am_nu_rot(1:nz) = 0` (`relax.f90:1306-1307`);
-    // `D_omega` (`D_omega_flag`) is not ported.
+    // `s% D_omega(1:s% nz) = 0; s% am_nu_rot(1:s% nz) = 0`
+    // (`star/private/relax.f90:1307-1308`).
+    let nz = model.nz;
+    model.aux.rotmix.d_omega.resize(nz, 0.0);
+    model.aux.rotmix.d_omega.fill(0.0);
+    model.aux.am_nu_rot.resize(nz, 0.0);
     model.aux.am_nu_rot.fill(0.0);
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        do_relax_uniform_omega, RelaxHookResult, RelaxHooks, RelaxOmega,
+        RelaxOmegaKind, RELAX_FINISHED_OKAY,
+    };
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::inlist_runner::DefaultStarExtras;
+    use crate::relax::apply_uniform_rotation;
+    use crate::report_utils::star_surface_omega_crit;
+    use crate::zams::load_zams_model;
+
+    #[test]
+    fn test_relax_omega_check_model_refreshes_rotation_info_before_check() {
+        let mut model = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                initial_z: 0.02,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        crate::hydro_vars::set_hydro_vars(&mut model, false, false)
+            .expect("set_hydro_vars");
+        let omega_true = 1.0e-5;
+        apply_uniform_rotation(&mut model, omega_true);
+        let omega_crit = star_surface_omega_crit(&mut model);
+        assert!(omega_crit > 0.0);
+
+        // Make `omega`, `fp_rot`, and `ft_rot` stale while preserving `j_rot`
+        // for `omega_true`; `RelaxOmega::check_model` must call
+        // `set_rotation_info(model, true)` after `set_i_rot(model, false)` so
+        // `model.omega[0]` matches `j_rot[0] / i_rot[0]` before comparing.
+        let nz = model.nz;
+        model.omega[..nz].fill(0.0);
+        model.aux.fp_rot[..nz].fill(0.0);
+        model.aux.ft_rot[..nz].fill(0.0);
+        model.aux.need_to_setvars = false;
+        model.model_number = 1;
+
+        let mut hooks = RelaxOmega {
+            kind: RelaxOmegaKind::NewOmegaDivOmegaCrit,
+            target_value: omega_true / omega_crit,
+            starting_omega: 0.0,
+            starting_model_number: 0,
+            num_steps_to_use: 10,
+        };
+        let outcome = hooks.check_model(&mut model).expect("check_model");
+        assert_eq!(
+            outcome,
+            RelaxHookResult::Terminate(String::from(RELAX_FINISHED_OKAY))
+        );
+        // `set_uniform_omega` still runs on the final step with `frac = 0.1`.
+        assert!((model.omega[0] - 0.1 * omega_true).abs() < 1.0e-15);
+        assert!(model.aux.fp_rot[0] > 0.0 && model.aux.ft_rot[0] > 0.0);
+        assert!(model.aux.need_to_setvars);
+    }
+
+    #[test]
+    fn test_do_relax_uniform_omega_zeroes_d_omega_and_am_nu_rot() {
+        let mut model = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        let omega_0 = 1.0e-5;
+        apply_uniform_rotation(&mut model, omega_0);
+        let nz = model.nz;
+        model.aux.rotmix.d_omega = vec![7.5; nz];
+        model.aux.am_nu_rot = vec![3.25; nz];
+
+        let mut extras = DefaultStarExtras;
+        do_relax_uniform_omega(
+            &mut model,
+            RelaxOmegaKind::NewOmega,
+            omega_0 * (1.0 + 1.0e-8),
+            1,
+            1.0e9,
+            &mut extras,
+        )
+        .expect("do_relax_uniform_omega");
+
+        let nz_end = model.nz;
+        assert_eq!(model.aux.rotmix.d_omega.len(), nz_end);
+        assert!(model.aux.rotmix.d_omega.iter().all(|&v| v == 0.0));
+        assert_eq!(model.aux.am_nu_rot.len(), nz_end);
+        assert!(model.aux.am_nu_rot.iter().all(|&v| v == 0.0));
+    }
 }

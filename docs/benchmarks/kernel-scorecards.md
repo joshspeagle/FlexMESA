@@ -74,7 +74,7 @@ All nine Wave 3a and Wave 3b workloads invoke compiled MESA `r26.4.1` subroutine
 
 ## 4. 1D Stellar Structure, Henyey Solver & Evolution ($N_{\mathrm{zones}} = 1024$)
 
-Full tables and `star/test` comparisons live in the [Wave 4 Benchmark Report](../design/wave-4-benchmark-report.md). All five Wave 4 workloads run post-`51e1adc` (`need_to_setvars = .true.`), but **do not yet match MESA `26.4.1` numerically or execute equal work scope**:
+Full tables and `star/test` comparisons live in the [Four-Way Benchmark & `star/test` Report](../design/wave-4-benchmark-report.md). All five 1D stellar-structure workloads in that report run post-`51e1adc` (`need_to_setvars = .true.`), but **do not yet match MESA `26.4.1` numerically or execute equal work scope**:
 
 - **Workloads where Fortran is faster**: At 4 threads, MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` (`2962.80 us` vs. `13814.92 us`) and `star_newton_step` (`3165.36 us` vs. `14296.08 us`). The `star_remesh` timings (`21.93 us` Fortran vs. `340.46 us` Rust 4t / `223.41 us` 1t Stage 2) are not a like-for-like comparison: the Fortran stage times only `set_mesh_function_data`, the Rust stage the whole `do_adjust_mesh`.
 - **PyO3 `star_newton_step` Stage 0 mismatch**: Python Stage 0 PyO3 (`204.75 us`) times only the `bcyclic` linear solve without calling `eval_equations`.

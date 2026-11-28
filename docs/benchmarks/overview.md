@@ -22,7 +22,7 @@ The acceptance pass rate against MESA `26.4.1` references currently stands at **
 - **Toolchains**: MESA `r26.4.1`, SDK `x86_64-linux-26.6.1`, `GNU Fortran (GCC) 15.2.0` (`-O2 -fopenmp -cpp -ffree-form -ffree-line-length-none`), `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `Python 3.14.0`, JAX `0.11.0` (`gpu`, `jax_enable_x64=True`).
 - **Workload taxonomy (`28` workloads, `84` `(workload, N_zones)` points)**: `21` full MESA `r26.4.1` workloads, `3` mixed MESA `0-1` / Ref. Fortran `2-3` workloads (`auto_diff`, `mtx_tridiag`, `chem_comp`), `3` hybrid Reference Fortran workloads (`w5_diff_rot`, `w5_binary_rlof`, `w5_astero_seism`), and `1` standalone non-MESA Reference Fortran workload (`w5_riemann_rsp2`).
 
-- **Checksum accounting**: Across all `57` `(workload, N_zones)` operating points in Waves 1-3b, Safe Rust and Fortran match across all 9 printed significant digits. The full `float64` Python checksums differ from the printed Fortran values by at most `4.84e-09`, within the `5e-09` rounding of a 9-digit print. Wave 4 diverges on all five workloads: across all sizes the Rust and Fortran checksums differ by between `2.10e-06` and a factor of `12.6` (the `star_remesh` stages also time different work). Wave 5 `w5_diff_rot` diverges by `99.17%` (`#158`).
+- **Checksum accounting**: Across all `57` `(workload, N_zones)` operating points in Waves 1-3b, Safe Rust and Fortran match across all 9 printed significant digits. The full `float64` Python checksums differ from the printed Fortran values by at most `4.84e-09`, within the `5e-09` rounding of a 9-digit print. The 1D stellar-structure workloads diverge on all five cases: across all sizes the Rust and Fortran checksums differ by between `2.10e-06` and a factor of `12.6` (the `star_remesh` stages also time different work). Wave 5 `w5_diff_rot` diverges by `99.17%` (`#158`).
 - **Cases where Fortran is faster**: At 4 threads, Fortran is faster than Safe Rust on `interp_2d`, `mtx_tridiag` (batch Thomas), `ion_fe56`, `star_hydro_eqns`, `star_newton_step`, `w5_diff_rot`, `w5_binary_rlof`, and `w5_astero_seism`. `star_remesh` is not listed either way: its Fortran stage times only `set_mesh_function_data`, while the Rust stage times the whole `do_adjust_mesh`.
 
 | Physics Domain | Workload ($N_{\mathrm{zones}}$) | Comparator | Comparator 4t ($\mu\mathrm{s}$) | Safe Rust 4t ($\mu\mathrm{s}$) | JAX `vmap` Batch/4 ($\mu\mathrm{s}$) | Scope & Result Notes |
@@ -61,7 +61,7 @@ The acceptance pass rate against MESA `26.4.1` references currently stands at **
 
 ### 5. 1D Stellar Structure, Henyey Solver & Coupled Evolution Step
 
-![MESA 26.4.1 Wave 4 four-way runtime staircase for 1D stellar structure, Henyey Newton step, remeshing, and coupled evolution](../assets/figures/wave4_benchmark_staircase.png)
+![MESA 26.4.1 four-way runtime staircase for 1D stellar structure, Henyey Newton step, remeshing, and coupled evolution](../assets/figures/wave4_benchmark_staircase.png)
 
 ### 6. Reference Fortran Comparator vs. FlexMESA (`w5_*`, Hybrid & Non-MESA)
 

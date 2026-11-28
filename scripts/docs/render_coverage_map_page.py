@@ -222,6 +222,7 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             "| `math` strict-mode scalar vectors (`#165`) | "
             f"{math_vector_count:,} vectors | "
             f"{numerics['strict_kernels_bit_identical']} | "
+            "None against MESA: "
             f"{numerics['strict_cross_machine_identical']} | "
             f"{other_suites_verified} / {other_suites_total} remaining module "
             "suites at `verified` status in `port_manifest.toml` |"

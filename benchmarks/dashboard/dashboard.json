@@ -2039,7 +2039,13 @@
         ]
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 724,
+        "title": "Train 18: near-miss fixes, hydro and momentum departures, band LAPACK, exact diffusion oracles, Python mirrors, docs API checker",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -2748,6 +2754,86 @@
       {
         "number": 681,
         "title": "[Deferred bug] split_line reads line(k:k) past the end of the line when it has fewer than num fields",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 689,
+        "title": "[Deferred bug] DLANGB leaves VALUE unset for an unrecognised NORM (Reference LAPACK 3.12.0 dlangb.f:160-219)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 694,
+        "title": "[Deferred bug] eval_frequency_ratios: get_max_sequence can return an empty sequence, then l0(l0_last) reads index first-1",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 695,
+        "title": "[Deferred bug] DGBSVX_banded_wrapper: lower-band fill loop indexes AB and pre_conditioner past matrix_size when n_lower_bands > 1",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 696,
+        "title": "[Deferred bug] two_piece_linear_coeffs: a NaN x falls through every branch and leaves a0, a1, a2 unassigned with ierr = 0",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 697,
+        "title": "[Deferred bug] set_compression_BC: reads lnd(2) and dxh_lnd(2) unconditionally, outside the arrays when nz = 1",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 698,
+        "title": "[Deferred bug] RSP2 with RSP2_use_L_eqn_at_surface = .false.: equ(i_equL, 1) is never assigned",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 699,
+        "title": "[Deferred bug] get_fgong_data indexes xa and dxdt_nuc with h1 = net_iso(ih1) = 0 when the net has no h1",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 705,
+        "title": "[Deferred bug] extra-inlist recursion resets the parent's remaining slots, so MESA skips later read_extra_* files (star_job_ctrls_io.f90:596-607)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 717,
+        "title": "[Deferred bug] Kolb thick mass transfer reads r(nz+1) when the whole donor is outside its Roche lobe (binary_mdot.f90:776-778)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 723,
+        "title": "[Deferred bug] write_pulse_data dispatches 'gr1d' to write_saio_data, which reads unset point_data rows (pulse.f90:174-175)",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -4393,6 +4479,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "89"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "784acc96",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.0",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "99"
     }
   ]
 }

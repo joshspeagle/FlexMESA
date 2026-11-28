@@ -1802,8 +1802,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 19,
-        "closed": 17,
+        "open": 16,
+        "closed": 20,
         "issues": [
           {
             "number": 152,
@@ -1888,7 +1888,7 @@
           {
             "number": 299,
             "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 365,
@@ -1973,12 +1973,12 @@
           {
             "number": 539,
             "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 541,
             "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 587,
@@ -2043,11 +2043,6 @@
       {
         "number": 747,
         "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
-        "draft": false
-      },
-      {
-        "number": 753,
-        "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
         "draft": false
       },
       {
@@ -4597,6 +4592,19 @@
       "rust_cov_pct": "77.0",
       "python_cov_pct": "87.8",
       "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "af8e2a38",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
       "total_140": "56",
       "deferred_169": "103"
     }

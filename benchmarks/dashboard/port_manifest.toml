@@ -7274,7 +7274,10 @@ upstream_lines = 766
 upstream_sha256 = "15db7aba384fc82c221f57902b68a0e5d2b67ae0ef70cb4f16cb629c553f8191"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["compute_rev_ratio"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"compute_rev_ratio" = "crates/flexmesa-rates/src/loader.rs::compute_reaclib_rev_coeffs" # partial: inverse coefficients, exponent and partition-function ratio follow upstream; w/e reactions keep their coefficients and are skipped at evaluation instead of getting -huge; the separate Python-exposed helper compute_rev_ratio_coeff1 rounds differently (#744)
 
 [[files]]
 upstream_path = "rates/private/screen.f90"

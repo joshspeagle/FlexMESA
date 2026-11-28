@@ -68,6 +68,11 @@ print(f"exp10(1.25): strict={strict_val:.16e}, |fast - strict|={abs(fast_val - s
 
 ---
 
+- **`NumericsMode`** (`Literal["strict", "fast"]`): Type alias of the two run-level arithmetic modes.
+- **`get_numerics_mode`** (`() -> NumericsMode`): Returns the active Rust arithmetic mode (`"strict"` or `"fast"`, default `"strict"`).
+- **`set_numerics_mode`** (`(mode: NumericsMode | str) -> None`): Sets the process-wide Rust arithmetic mode; raises `ValueError` unless `mode` is `"strict"` or `"fast"`.
+- **`numerics_mode_context`** (`(mode: NumericsMode | str) -> Iterator[NumericsMode]`): Context manager that temporarily switches the Rust arithmetic mode and restores the previous mode on exit.
+
 ## Array, Checkpoint Codec, Timing & Thread-Pool Utilities (`flexmesa.utils`)
 
 Floating-point finiteness guards (`is_bad`), array helpers, Safe Rust persistent worker-pool utilities, and the deterministic IEEE-754 little-endian `serde` binary codec (`flexmesa_utils::bin_codec` with shared 13-byte `NumericsMode` wire framing for `StarModel` and `BinarySystem` checkpoints).
@@ -209,6 +214,7 @@ Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for constants, ut
 - **`safe_sqrt_array`** (`(xs: _ArrF64) -> _ArrF64`): Evaluates `safe_sqrt` elementwise over a 1D C-contiguous `f64` array.
 - **`eval_autodiff_order2_zone`** (`(x: float, y: float) -> list[float]`): Evaluates `f(x, y) = exp(0.1*x*y) + x^1.5 / (y + 2)` in `AutoDiffReal2VarOrder2`, returning `[val, df_dx, df_dy, d2f_dx2, d2f_dxdy, d2f_dy2]`.
 - **`eval_autodiff_order2_batch`** (`(x: _ArrF64, y: _ArrF64, parallel: bool = False) -> _ArrF64`): Evaluates `eval_autodiff_order2_zone` across 1D arrays `x, y` of shape `(nz,)`, dispatching across the persistent 4-thread `rayon` pool when `parallel=True` and `nz >= 64`.
+- **`solve_block_tridiag_bcyclic`** (`(nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64, rhs: _ArrF64, parallel: bool = False) -> _ArrF64`): Solves a block-tridiagonal system $A x = b$ via Hirshman et al. (2010) odd-even block cyclic reduction (`bcyclic`); `parallel=True` runs the level reductions in the persistent 4-thread `rayon` pool.
 - **`mtx_solve_dense`** (`(n: int, a_flat: _ArrF64, b: _ArrF64) -> _ArrF64`): Solves a dense $n \times n$ linear system $A x = b$ via pure Rust LU.
 - **`math_test_suite_eval`** (`(x: float) -> list[tuple[str, float]]`): Evaluates 33 `flexmesa_math` scalar and integer/real-power functions at `x`, returning `(name, value)` pairs.
 - **`auto_diff_test_suite_values`** (`() -> list[float]`): Computes the `auto_diff` 1-variable, 2-variable, and `AutoDiffRealStarOrder1` probe vector (`387` `f64` outputs).

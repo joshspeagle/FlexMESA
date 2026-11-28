@@ -5629,7 +5629,20 @@ upstream_lines = 765
 upstream_sha256 = "45e9ba95785f895f6f38e7e5193ef5d4d7d1411c6bffd9210e95e301f2cfd73e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["setup_kap_tables", "setup_kap_tables::setup", "setup_kap_tables::setup_lowT", "load_one", "Prepare_Kap_X_Table", "Prepare_Kap_X_Table::Setup_Kap_X_Table", "Prepare_Kap_X_Table::Read_Kap_X_Table", "Make_Interpolation_Data", "Make_Interpolation_Data::Check_Interpolation_Data", "Get_Filenames", "create_fname"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"setup_kap_tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: builds every table set once into a single FMKAP001 payload instead of per kap_option handle with use_cache and load_on_demand; the Compton blend bounds of load_kap.f90:65-70 are computed at evaluation in loader.rs (KapTables::compton_blend_bounds) and init_potekhin runs lazily in conduction.rs
+"setup_kap_tables::setup" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: fixed-metal sets are built for every prefix, not only rq% kap_option; X clipped to 1 - Z as upstream
+"setup_kap_tables::setup_lowT" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: lowT_fa05_gs98 and Freedman11 sets are built for every option; kapCN and AESOPUS arrive as pre-converted sections instead of kapCN_init and kap_aesopus_init
+"load_one" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: parses one data file into the FMKAP001 payload at build time; no Get_Filenames, cache files, or not_loaded_yet flag
+"Prepare_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the form, version >= min_version and X/Z header-consistency (1e-6) checks; no cache read or write
+"Prepare_Kap_X_Table::Setup_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the |xin - X| and |zz - Z| > 1e-6 error; X and Z come from the caller rather than the file header
+"Prepare_Kap_X_Table::Read_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: log kappa is stored as round(1000 x value) in i16 and divided by 1000 at fit time; exact for 3-decimal table values; cache read path not ported
+"Make_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per table (OnceLock), and a non-finite table value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting (Check_Interpolation_Data)
+"Make_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them
+"Get_Filenames" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: file names are built inline as <prefix>_z<Z>_x<X>.data with get_output_string; no cache or temp-cache file names
+"create_fname" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: inlined, including the Freedman11 name; no cache file name
 
 [[files]]
 upstream_path = "kap/private/op_common.f"

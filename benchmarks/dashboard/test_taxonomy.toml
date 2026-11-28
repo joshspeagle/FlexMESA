@@ -732,6 +732,12 @@ routines = [
 ]
 
 [[tests]]
+path = "crates/flexmesa-interp2d/tests/interp2d_numerics_mode_test.rs"
+language = "rust"
+module = "interp_2d"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-interp2d/tests/interp2d_tests.rs"
 language = "rust"
 module = "interp_2d"
@@ -975,6 +981,75 @@ language = "rust"
 module = "num"
 kind = "oracle"
 provenance = "MESA 26.4.1 num/test/test_output & ODE/root IEEE-754 hex oracles (#161)"
+
+[[tests]]
+path = "crates/flexmesa-num/tests/newuoa_oracle_test.rs"
+language = "rust"
+module = "num"
+kind = "oracle"
+provenance = "MESA 26.4.1 NEWUOA CALFUN-sequence and BIGDEN IEEE-754 hex oracles (benchmarks/fortran_mesa/newuoa/, libnum driver)"
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_chebyquad_n2.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_chebyquad_n4.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_chebyquad_n6.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_chebyquad_n4_npt6.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_quad_rhoend1.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_quad_rhoend1em6.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/public/num_newuoa.dek::newuoa",
+  "num/private/mod_newuoa.f::do_newuoa",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/newuoa/mesa_26_4_1_newuoa_bigden.hex"
+recipe = "benchmarks/fortran_mesa/newuoa/Makefile"
+precision = "exact"
+routines = [
+  "num/private/mod_newuoa.f::BIGDEN",
+]
 
 [[tests]]
 path = "crates/flexmesa-num/tests/num_module_hex_test.rs"
@@ -1674,6 +1749,12 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/solver_rti_152_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/rti_shock_mod_load_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"

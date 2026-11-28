@@ -71,6 +71,31 @@ fn as_int(cell: &MesaCellValue) -> i64 {
     }
 }
 
+/// Closed-form MESA `26.4.1` `GD_coeff` value at `omega = 0` and inclination
+/// `incl` (radians) strictly inside an inclination cell.
+///
+/// The `omega = 0` row of `C_T` and `C_L` is 1.0 at every knot
+/// (`data/star_data/gravity_darkening_coefficients.data`), so its
+/// not-a-knot `f_yy` vanishes, and at `xparam = 0` the `fvbicub_db` cubic
+/// x-basis `cx = cxi = 0` (`interp_2d/private/bicub_db.f:1438-1466`). The value
+/// is then `xpi * (ypi * 1 + yp * 1)` with `xpi = 1`, where `yp` and
+/// `ypi = 1 - yp` are implicit `REAL` (`f32`) and the sum is `real(dp)`.
+/// `yparam` follows `herm2xy_db` (`bicub_db.f:2172-2178`, `real(dp)`).
+#[allow(clippy::cast_possible_truncation)]
+fn gd_zero_omega_row_value(incl: f64) -> f64 {
+    let (_, incl_grid, c_t_vals, c_l_vals) = gravity_darkening_table();
+    assert!(c_t_vals[..21].iter().all(|&v| v == 1.0));
+    assert!(c_l_vals[..21].iter().all(|&v| v == 1.0));
+    let j = incl_grid.partition_point(|&y| y <= incl) - 1;
+    assert!(incl_grid[j] < incl && incl < incl_grid[j + 1]);
+    let hy = incl_grid[j + 1] - incl_grid[j];
+    let hyi = 1.0 / hy;
+    let yparam = (incl - incl_grid[j]) * hyi;
+    let yp = yparam as f32;
+    let ypi = (1.0_f64 - f64::from(yp)) as f32;
+    f64::from(ypi) + f64::from(yp)
+}
+
 #[test]
 fn test_gravity_darkening_table_matches_upstream_data_bit_for_bit() {
     let Some(path) = require_mesa_test_input_path(
@@ -133,9 +158,23 @@ fn test_gravity_darkening_table_matches_upstream_data_bit_for_bit() {
         (gravity_darkening_l_coeff(-0.5, -0.3) - 1.0).abs() <= 1.0e-15,
         "negative omega must clamp to 0 without abs()"
     );
-    assert!(
-        (gravity_darkening_teff_coeff(-0.5, 0.5) - 1.0).abs() <= 1.0e-15,
-        "negative omega must clamp to 0 for C_T"
+    // Off an inclination knot, the clamped value is MESA's `fvbicub_db`
+    // evaluation at `omega = 0`, whose implicit-`REAL` basis (#672, #680)
+    // keeps it off 1.0 by the `f32` rounding of `yparam` and `1 - yparam`.
+    let clamped_ct = gravity_darkening_teff_coeff(-0.5, 0.5);
+    let zero_omega_ct = gravity_darkening_teff_coeff(0.0, 0.5);
+    assert_eq!(
+        clamped_ct.to_bits(),
+        zero_omega_ct.to_bits(),
+        "negative omega must clamp to 0 for C_T: {clamped_ct:e} vs \
+         {zero_omega_ct:e}"
+    );
+    assert_eq!(
+        clamped_ct.to_bits(),
+        gd_zero_omega_row_value(0.5).to_bits(),
+        "C_T at omega = 0 must equal the closed-form `fvbicub_db` value: \
+         {clamped_ct:e} vs {:e}",
+        gd_zero_omega_row_value(0.5)
     );
     assert!(
         (gravity_darkening_l_coeff(1.5, 2.5)

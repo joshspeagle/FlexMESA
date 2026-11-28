@@ -1193,10 +1193,16 @@ pub fn run_star_astero_with_case_hooks(
     let active_ctrl = if max_steps_per_stage.is_some() {
         smoke_ctrl = ctrl.clone();
         (smoke_ctrl.simplex_itermax, smoke_ctrl.simplex_fcn_calls_max) = (1, 2);
+        // NEWUOA needs MAXFUN >= NPT: with fewer calls upstream returns X
+        // from an unset XOPT (`mod_newuoa.f:432-436, 691`, Deferred bug #755),
+        // so the bounded smoke run allows exactly the NPT = 2n+1 initial
+        // interpolation points (n as `try_newuoa_minimize` pads it).
+        let n_newuoa =
+            crate::search_methods::active_search_params(&smoke_ctrl).len();
         (
             smoke_ctrl.newuoa_max_fcn_calls,
             smoke_ctrl.bobyqa_max_fcn_calls,
-        ) = (2, 2);
+        ) = (2 * n_newuoa.max(2) + 1, 2);
         &smoke_ctrl
     } else {
         ctrl

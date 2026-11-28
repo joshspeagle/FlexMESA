@@ -2293,6 +2293,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_python_inventory.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_reviewed_map_raise.py"
 language = "python"
 module = "tooling"

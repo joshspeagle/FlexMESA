@@ -5592,7 +5592,7 @@ flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
 routine_map_partial = ["locate_log", "locate_logT", "locate_logR"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
-"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: clamps the equally-spaced int() index to num_logs - 2 (upstream then reads logs(i+1) past the end), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error
+"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: clamps the equally-spaced int() index to num_logs - 2 (upstream then reads logs(i+1) past the end), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error (#701)
 "locate_logT" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
 "locate_logR" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
 "do_kap_interpolations" = "crates/flexmesa-kap/src/spline.rs::do_kap_interpolations"

@@ -130,11 +130,6 @@ fn eval_eps_grav_std_cell_with_ctx(
     ctx: Option<&EosZoneContext>,
 ) -> Result<StarAdOrder1, StarError> {
     let dt = model.dt;
-    if dt <= 0.0 || !dt.is_finite() {
-        return Err(StarError::MicrophysicsError(format!(
-            "eval_eps_grav_and_partials: non-positive or non-finite dt ({dt})"
-        )));
-    }
 
     // `wrap_dxh_lnd(s,k)/s% dt` and `wrap_dxh_lnT(s,k)/s% dt`
     // (`star/private/eps_grav.f90:152-153`): the accumulated Newton
@@ -227,8 +222,8 @@ fn eval_eps_grav_std_cell_with_ctx(
 /// applied once at the end of [`eval_eps_grav`].
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if `dt <= 0`, if `get_eos` fails
-/// inside `eval_eps_grav_composition`, or if the resulting
+/// Returns [`StarError::MicrophysicsError`] if `get_eos` fails inside
+/// `eval_eps_grav_composition`, or if the resulting
 /// $\epsilon_{\mathrm{grav},k}$ is non-finite.
 pub fn eval_eps_grav_std_cell(
     model: &StarModel,
@@ -265,12 +260,6 @@ fn do_ln_s_eps_grav(
     model: &StarModel,
     k: usize,
 ) -> Result<StarAdOrder1, StarError> {
-    if model.dt <= 0.0 || !model.dt.is_finite() {
-        return Err(StarError::MicrophysicsError(format!(
-            "eval_eps_grav_and_partials: non-positive or non-finite dt ({})",
-            model.dt
-        )));
-    }
     let eps_grav = eval_eps_grav_lns_cell(model, k);
     if is_bad(eps_grav.val) {
         return Err(StarError::MicrophysicsError(format!(
@@ -290,7 +279,7 @@ fn eval_eps_grav_cell(
     gam_off: f64,
     ctx: Option<&EosZoneContext>,
 ) -> Result<(StarAdOrder1, bool), StarError> {
-    let using_pc = model.aux.eos_frac_pc.get(k).copied().unwrap_or(0.0) > 0.0;
+    let using_pc = model.aux.eos_frac_pc[k] > 0.0;
     let gam_start = model.gam_start[k];
     let (ad, used_std) = if using_pc && gam_start >= gam_on {
         (do_ln_s_eps_grav(model, k)?, false)
@@ -360,7 +349,7 @@ fn fill_d_eps_grav_dx_cell(
 /// `star/private/eps_grav.f90:35-119`).
 ///
 /// # Errors
-/// Returns [`StarError::MicrophysicsError`] if `dt <= 0` or non-finite, if
+/// Returns [`StarError::MicrophysicsError`] if `dt <= 0.0`, if
 /// `get_eos` fails inside `eval_eps_grav_composition`, or if any cell produces
 /// a non-finite $\epsilon_{\mathrm{grav},k}$; returns [`StarError::InvalidInput`]
 /// if `use_other_eps_grav` is enabled (unported hook).
@@ -369,9 +358,9 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
     let species = model.species;
     let dt = model.dt;
     let fac = model.controls.eps_grav_factor;
-    if dt <= 0.0 || !dt.is_finite() {
+    if dt <= 0.0 {
         return Err(StarError::MicrophysicsError(format!(
-            "eval_eps_grav_and_partials: non-positive or non-finite dt ({dt})"
+            "eval_eps_grav_and_partials: non-positive dt ({dt})"
         )));
     }
     if model.aux.d_eps_grav_dx.len() != nz * species {
@@ -387,8 +376,7 @@ pub fn eval_eps_grav(model: &mut StarModel) -> Result<(), StarError> {
 
     let need_ctx = inc_comp
         && (0..nz).any(|k| {
-            let using_pc =
-                model.aux.eos_frac_pc.get(k).copied().unwrap_or(0.0) > 0.0;
+            let using_pc = model.aux.eos_frac_pc[k] > 0.0;
             !(using_pc && model.gam_start[k] >= gam_on)
         });
 

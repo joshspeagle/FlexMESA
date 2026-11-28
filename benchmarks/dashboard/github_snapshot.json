@@ -340,13 +340,18 @@
   ],
   "open_pull_requests": [
     {
-      "number": 757,
-      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+      "number": 759,
+      "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
       "draft": false
     },
     {
-      "number": 759,
-      "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
+      "number": 760,
+      "title": "star: inlist includes follow MESA's in-place slot reset (#705)",
+      "draft": false
+    },
+    {
+      "number": 762,
+      "title": "star, mtx, binary: DECISIONS #43 errors where upstream is undefined (#566, #674, #717)",
       "draft": false
     }
   ],

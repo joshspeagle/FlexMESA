@@ -2,24 +2,18 @@
 //! `interp_evbicub_db`, and `interp_evbicub_mask_db`).
 //!
 //! Evaluates the 6-component bicubic spline vector
-//! `(f, df/dx, df/dy, d2f/dx2, d2f/dy2, d2f/dxdy)` from the coefficient table
-//! `[f, f_xx, f_yy, f_xxyy]` produced by [`crate::interp_mkbicub_db`].
+//! `(f, df/dx, df/dy, d2f/dx2, d2f/dy2, d2f/dxdy)` in full `f64` precision from
+//! the coefficient table `[f, f_xx, f_yy, f_xxyy]` produced by
+//! [`crate::interp_mkbicub_db`].
 //!
 //! # Precision Contract
 //!
-//! Upstream MESA `26.4.1`'s `fvbicub_db` (`interp_2d/private/bicub_db.f:24,
-//! 1371-1698`) omits `implicit none` (deferred upstream bug `#680`), leaving its
-//! local coordinate and cubic basis variables (`xp`, `yp`, `xpi`, `ypi`, `xp2`,
-//! `yp2`, `xpi2`, `ypi2`, `cx`, `cy`, `cxi`, `cyi`, `cxd`, `cyd`, `cxdi`,
-//! `cydi`, `hx2`, `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`)
-//! before widening into `f64` accumulations.
-//! - In [`NumericsMode::Strict`] (default), [`interp_evbicub_db`],
-//!   [`interp_evbicub_prevalidated_db`], and [`interp_evbicub_mask_db`] evaluate
-//!   these implicit-`f32` basis scalars bit-for-bit identically to MESA
-//!   `fvbicub_db`.
-//! - In [`NumericsMode::Fast`], all basis terms stay in pure `f64` so
-//!   analytical first and second partial derivatives satisfy exact polynomial
-//!   calculus to $\le 10^{-13}$.
+//! Upstream MESA's `fvbicub_db` in `interp_2d/private/bicub_db.f` omits
+//! `implicit none`, leaving its local coordinate and cubic basis variables
+//! (`xp`, `yp`, `cx`, `cy`, `cxd`, `cyd`, `hx2`, `hy2`, `z36th`) implicitly
+//! typed as 32-bit `REAL` (`f32`). `FlexMESA` evaluates all basis terms in full
+//! `f64` precision so analytical first and second partial derivatives satisfy
+//! exact polynomial calculus to $\le 10^{-13}$.
 //!
 //! # Grid Lookup Complexity
 //!
@@ -29,7 +23,6 @@
 
 use crate::spline1d::splinck_db;
 use crate::{BicubicEval, Interp2dError};
-use flexmesa_math::{numerics_mode, NumericsMode};
 use flexmesa_utils::is_bad;
 
 /// Locates the grid cell `(i, j)` and normalized local coordinates
@@ -220,150 +213,6 @@ pub fn interp_evbicub_db(
     interp_evbicub_prevalidated_db(xget, yget, x, y, ilinx, iliny, coeffs)
 }
 
-/// Evaluates `fvbicub_db` (`interp_2d/private/bicub_db.f:24,1371-1698`,
-/// deferred upstream bug `#680`), reproducing Fortran's implicit `REAL`
-/// (`f32`) basis scalars before widening into `f64` sums in
-/// `NumericsMode::Strict`.
-#[inline]
-#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
-fn eval_fvbicub_strict(
-    xparam: f64,
-    yparam: f64,
-    hx: f64,
-    hxi: f64,
-    hy: f64,
-    hyi: f64,
-    c00: [f64; 4],
-    c01: [f64; 4],
-    c10: [f64; 4],
-    c11: [f64; 4],
-) -> BicubicEval {
-    let sixth = 1.0_f64 / 6.0_f64;
-    let z36th = (sixth * sixth) as f32;
-
-    let xp = xparam as f32;
-    let xpi = (1.0_f64 - f64::from(xp)) as f32;
-    let xp2 = xp * xp;
-    let xpi2 = xpi * xpi;
-    let cx = (f64::from(xp) * (f64::from(xp2) - 1.0_f64)) as f32;
-    let cxi = (f64::from(xpi) * (f64::from(xpi2) - 1.0_f64)) as f32;
-    let hx2 = (hx * hx) as f32;
-
-    let yp = yparam as f32;
-    let ypi = (1.0_f64 - f64::from(yp)) as f32;
-    let yp2 = yp * yp;
-    let ypi2 = ypi * ypi;
-    let cy = (f64::from(yp) * (f64::from(yp2) - 1.0_f64)) as f32;
-    let cyi = (f64::from(ypi) * (f64::from(ypi2) - 1.0_f64)) as f32;
-    let hy2 = (hy * hy) as f32;
-
-    let cxd = (3.0_f64 * f64::from(xp2) - 1.0_f64) as f32;
-    let cxdi = (-3.0_f64 * f64::from(xpi2) + 1.0_f64) as f32;
-    let cyd = (3.0_f64 * f64::from(yp2) - 1.0_f64) as f32;
-    let cydi = (-3.0_f64 * f64::from(ypi2) + 1.0_f64) as f32;
-
-    let z36th_hx2_hy2_d = f64::from((z36th * hx2) * hy2);
-    let z36th_hx2_d = f64::from(z36th * hx2);
-    let (z36th_d, hx2_d, hy2_d) =
-        (f64::from(z36th), f64::from(hx2), f64::from(hy2));
-    let (xp_d, xpi_d, cx_d, cxi_d) =
-        (f64::from(xp), f64::from(xpi), f64::from(cx), f64::from(cxi));
-    let (yp_d, ypi_d, cy_d, cyi_d) =
-        (f64::from(yp), f64::from(ypi), f64::from(cy), f64::from(cyi));
-    let (cxd_d, cxdi_d, cyd_d, cydi_d) = (
-        f64::from(cxd),
-        f64::from(cxdi),
-        f64::from(cyd),
-        f64::from(cydi),
-    );
-
-    let mut f = xpi_d * (ypi_d * c00[0] + yp_d * c01[0])
-        + xp_d * (ypi_d * c10[0] + yp_d * c11[0]);
-    f += sixth
-        * hx2_d
-        * (cxi_d * (ypi_d * c00[1] + yp_d * c01[1])
-            + cx_d * (ypi_d * c10[1] + yp_d * c11[1]));
-    f += sixth
-        * hy2_d
-        * (xpi_d * (cyi_d * c00[2] + cy_d * c01[2])
-            + xp_d * (cyi_d * c10[2] + cy_d * c11[2]));
-    f += z36th_hx2_hy2_d
-        * (cxi_d * (cyi_d * c00[3] + cy_d * c01[3])
-            + cx_d * (cyi_d * c10[3] + cy_d * c11[3]));
-
-    let mut df_dx = hxi
-        * (-(ypi_d * c00[0] + yp_d * c01[0])
-            + (ypi_d * c10[0] + yp_d * c11[0]));
-    df_dx += sixth
-        * hx
-        * (cxdi_d * (ypi_d * c00[1] + yp_d * c01[1])
-            + cxd_d * (ypi_d * c10[1] + yp_d * c11[1]));
-    df_dx += sixth
-        * hxi
-        * hy2_d
-        * (-(cyi_d * c00[2] + cy_d * c01[2])
-            + (cyi_d * c10[2] + cy_d * c11[2]));
-    df_dx += z36th_d
-        * hx
-        * hy2_d
-        * (cxdi_d * (cyi_d * c00[3] + cy_d * c01[3])
-            + cxd_d * (cyi_d * c10[3] + cy_d * c11[3]));
-
-    let mut df_dy =
-        hyi * (xpi_d * (-c00[0] + c01[0]) + xp_d * (-c10[0] + c11[0]));
-    df_dy += sixth
-        * hx2_d
-        * hyi
-        * (cxi_d * (-c00[1] + c01[1]) + cx_d * (-c10[1] + c11[1]));
-    df_dy += sixth
-        * hy
-        * (xpi_d * (cydi_d * c00[2] + cyd_d * c01[2])
-            + xp_d * (cydi_d * c10[2] + cyd_d * c11[2]));
-    df_dy += z36th_hx2_d
-        * hy
-        * (cxi_d * (cydi_d * c00[3] + cyd_d * c01[3])
-            + cx_d * (cydi_d * c10[3] + cyd_d * c11[3]));
-
-    let mut d2f_dx2 = xpi_d * (ypi_d * c00[1] + yp_d * c01[1])
-        + xp_d * (ypi_d * c10[1] + yp_d * c11[1]);
-    d2f_dx2 += sixth
-        * hy2_d
-        * (xpi_d * (cyi_d * c00[3] + cy_d * c01[3])
-            + xp_d * (cyi_d * c10[3] + cy_d * c11[3]));
-
-    let mut d2f_dy2 = xpi_d * (ypi_d * c00[2] + yp_d * c01[2])
-        + xp_d * (ypi_d * c10[2] + yp_d * c11[2]);
-    d2f_dy2 += sixth
-        * hx2_d
-        * (cxi_d * (ypi_d * c00[3] + yp_d * c01[3])
-            + cx_d * (ypi_d * c10[3] + yp_d * c11[3]));
-
-    let mut d2f_dxdy = hxi * hyi * (c00[0] - c01[0] - c10[0] + c11[0]);
-    d2f_dxdy += sixth
-        * hx
-        * hyi
-        * (cxdi_d * (-c00[1] + c01[1]) + cxd_d * (-c10[1] + c11[1]));
-    d2f_dxdy += sixth
-        * hxi
-        * hy
-        * (-(cydi_d * c00[2] + cyd_d * c01[2])
-            + (cydi_d * c10[2] + cyd_d * c11[2]));
-    d2f_dxdy += z36th_d
-        * hx
-        * hy
-        * (cxdi_d * (cydi_d * c00[3] + cyd_d * c01[3])
-            + cxd_d * (cydi_d * c10[3] + cyd_d * c11[3]));
-
-    BicubicEval {
-        f,
-        df_dx,
-        df_dy,
-        d2f_dx2,
-        d2f_dy2,
-        d2f_dxdy,
-    }
-}
-
 /// Evaluates the 2D bicubic spline value and all first and second partial
 /// derivatives at `(xget, yget)` on a pre-validated spline table (`x`, `y`,
 /// and `coeffs` already checked by [`crate::interp_mkbicub_db`]).
@@ -387,16 +236,6 @@ pub fn interp_evbicub_prevalidated_db(
     let ny = y.len();
     let (i, j, xp, yp, hx, hxi, hy, hyi) =
         herm2xy_prevalidated_db(xget, yget, x, y, ilinx, iliny)?;
-    let c00 = &coeffs[i * ny + j];
-    let c01 = &coeffs[i * ny + j + 1];
-    let c10 = &coeffs[(i + 1) * ny + j];
-    let c11 = &coeffs[(i + 1) * ny + j + 1];
-
-    if numerics_mode() == NumericsMode::Strict {
-        return Ok(eval_fvbicub_strict(
-            xp, yp, hx, hxi, hy, hyi, *c00, *c01, *c10, *c11,
-        ));
-    }
 
     let sixth = 1.0_f64 / 6.0;
     let z36th = sixth * sixth;
@@ -420,6 +259,11 @@ pub fn interp_evbicub_prevalidated_db(
     let cyd = 3.0 * yp2 - 1.0;
     let cydi = -3.0 * ypi2 + 1.0;
     let hy2 = hy * hy;
+
+    let c00 = &coeffs[i * ny + j];
+    let c01 = &coeffs[i * ny + j + 1];
+    let c10 = &coeffs[(i + 1) * ny + j];
+    let c11 = &coeffs[(i + 1) * ny + j + 1];
 
     // Precompute shared y-basis combinations on left (`0`) and right (`1`)
     // cell boundaries to eliminate redundant arithmetic across the 6 outputs.

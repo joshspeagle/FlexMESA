@@ -18,9 +18,10 @@ use std::sync::OnceLock;
 
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_interp2d::{
-    interp_evbicub_prevalidated_db, interp_mkbicub_db, BicubicBc, BicubicEval,
+    herm2xy_prevalidated_db, interp_evbicub_prevalidated_db, interp_mkbicub_db,
+    BicubicBc, BicubicEval,
 };
-use flexmesa_math::str_to_vector;
+use flexmesa_math::{numerics_mode, str_to_vector, NumericsMode};
 use rayon::prelude::*;
 
 use crate::fe56_he4_data_a::{
@@ -154,7 +155,7 @@ impl Fe56He4Table {
         log10_ne: f64,
         log10_t: f64,
     ) -> Result<BicubicEval, IonError> {
-        interp_evbicub_prevalidated_db(
+        let mut ev = interp_evbicub_prevalidated_db(
             log10_ne,
             log10_t,
             &self.log_ne,
@@ -163,11 +164,48 @@ impl Fe56He4Table {
             self.iliny,
             &self.coeffs,
         )
-        .map_err(|e| IonError::Interp(e.to_string()))
+        .map_err(|e| IonError::Interp(e.to_string()))?;
+        if numerics_mode() == NumericsMode::Strict {
+            let [f, df_dx, df_dy] =
+                self.eval_strict_val_grad(log10_ne, log10_t)?;
+            ev.f = f;
+            ev.df_dx = df_dx;
+            ev.df_dy = df_dy;
+        }
+        Ok(ev)
+    }
+
+    fn eval_strict_val_grad(
+        &self,
+        log10_ne: f64,
+        log10_t: f64,
+    ) -> Result<[f64; 3], IonError> {
+        let (i, j, xparam, yparam, hx, hxi, hy, hyi) = herm2xy_prevalidated_db(
+            log10_ne,
+            log10_t,
+            &self.log_ne,
+            &self.log_t,
+            self.ilinx,
+            self.iliny,
+        )
+        .map_err(|e| IonError::Interp(e.to_string()))?;
+        let ny = self.log_t.len();
+        let c00 = self.coeffs[i * ny + j];
+        let c01 = self.coeffs[i * ny + (j + 1)];
+        let c10 = self.coeffs[(i + 1) * ny + j];
+        let c11 = self.coeffs[(i + 1) * ny + (j + 1)];
+        let (f, df_dx, df_dy) = eval_fvbicub_strict(
+            xparam, yparam, hx, hxi, hy, hyi, c00, c01, c10, c11,
+        );
+        Ok([f, df_dx, df_dy])
     }
 
     /// Evaluate `[f, df_dx, df_dy]` at $(\log_{10} n_e, \log_{10} T)$ without
-    /// computing second partials, honoring `numerics_mode()`.
+    /// computing second partials, honoring [`numerics_mode()`].
+    ///
+    /// In [`NumericsMode::Strict`], evaluates `fvbicub_db`'s implicit `f32`
+    /// basis scalars matching [`Fe56He4Table::eval_full`]; otherwise evaluates
+    /// the pure-`f64` bicubic formula.
     ///
     /// # Panics
     /// Panics if `log10_ne` or `log10_t` is outside the table grid domain or
@@ -178,6 +216,11 @@ impl Fe56He4Table {
         log10_ne: f64,
         log10_t: f64,
     ) -> [f64; 3] {
+        if numerics_mode() == NumericsMode::Strict {
+            return self
+                .eval_strict_val_grad(log10_ne, log10_t)
+                .expect("valid prevalidated Fe56 query");
+        }
         let ev = interp_evbicub_prevalidated_db(
             log10_ne,
             log10_t,
@@ -273,6 +316,111 @@ pub fn eval_charge_of_fe56_in_he4(
     log10_t: f64,
 ) -> Result<f64, IonError> {
     Fe56He4Table::builtin().eval(log10_ne, log10_t)
+}
+
+/// Evaluates `(f, df_dx, df_dy)` matching `fvbicub_db`
+/// (`interp_2d/private/bicub_db.f:1420-1575`), which omits `implicit none`
+/// so local basis scalars are implicit `REAL` (`f32`).
+#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
+fn eval_fvbicub_strict(
+    xparam: f64,
+    yparam: f64,
+    hx: f64,
+    hxi: f64,
+    hy: f64,
+    hyi: f64,
+    c00: [f64; 4],
+    c01: [f64; 4],
+    c10: [f64; 4],
+    c11: [f64; 4],
+) -> (f64, f64, f64) {
+    let sixth = 1.0_f64 / 6.0_f64;
+    let z36th = (sixth * sixth) as f32;
+
+    let xp = xparam as f32;
+    let xpi = (1.0_f64 - f64::from(xp)) as f32;
+    let xp2 = xp * xp;
+    let xpi2 = xpi * xpi;
+    let cx = (f64::from(xp) * (f64::from(xp2) - 1.0_f64)) as f32;
+    let cxi = (f64::from(xpi) * (f64::from(xpi2) - 1.0_f64)) as f32;
+    let hx2 = (hx * hx) as f32;
+
+    let yp = yparam as f32;
+    let ypi = (1.0_f64 - f64::from(yp)) as f32;
+    let yp2 = yp * yp;
+    let ypi2 = ypi * ypi;
+    let cy = (f64::from(yp) * (f64::from(yp2) - 1.0_f64)) as f32;
+    let cyi = (f64::from(ypi) * (f64::from(ypi2) - 1.0_f64)) as f32;
+    let hy2 = (hy * hy) as f32;
+
+    let cxd = (3.0_f64 * f64::from(xp2) - 1.0_f64) as f32;
+    let cxdi = (-3.0_f64 * f64::from(xpi2) + 1.0_f64) as f32;
+    let cyd = (3.0_f64 * f64::from(yp2) - 1.0_f64) as f32;
+    let cydi = (-3.0_f64 * f64::from(ypi2) + 1.0_f64) as f32;
+
+    let z36th_hx2_hy2_d = f64::from((z36th * hx2) * hy2);
+    let z36th_hx2_d = f64::from(z36th * hx2);
+    let (z36th_d, hx2_d, hy2_d) =
+        (f64::from(z36th), f64::from(hx2), f64::from(hy2));
+    let (xp_d, xpi_d, cx_d, cxi_d) =
+        (f64::from(xp), f64::from(xpi), f64::from(cx), f64::from(cxi));
+    let (yp_d, ypi_d, cy_d, cyi_d) =
+        (f64::from(yp), f64::from(ypi), f64::from(cy), f64::from(cyi));
+    let (cxd_d, cxdi_d, cyd_d, cydi_d) = (
+        f64::from(cxd),
+        f64::from(cxdi),
+        f64::from(cyd),
+        f64::from(cydi),
+    );
+
+    let mut f = xpi_d * (ypi_d * c00[0] + yp_d * c01[0])
+        + xp_d * (ypi_d * c10[0] + yp_d * c11[0]);
+    f += sixth
+        * hx2_d
+        * (cxi_d * (ypi_d * c00[1] + yp_d * c01[1])
+            + cx_d * (ypi_d * c10[1] + yp_d * c11[1]));
+    f += sixth
+        * hy2_d
+        * (xpi_d * (cyi_d * c00[2] + cy_d * c01[2])
+            + xp_d * (cyi_d * c10[2] + cy_d * c11[2]));
+    f += z36th_hx2_hy2_d
+        * (cxi_d * (cyi_d * c00[3] + cy_d * c01[3])
+            + cx_d * (cyi_d * c10[3] + cy_d * c11[3]));
+
+    let mut df_dx = hxi
+        * (-(ypi_d * c00[0] + yp_d * c01[0])
+            + (ypi_d * c10[0] + yp_d * c11[0]));
+    df_dx += sixth
+        * hx
+        * (cxdi_d * (ypi_d * c00[1] + yp_d * c01[1])
+            + cxd_d * (ypi_d * c10[1] + yp_d * c11[1]));
+    df_dx += sixth
+        * hxi
+        * hy2_d
+        * (-(cyi_d * c00[2] + cy_d * c01[2])
+            + (cyi_d * c10[2] + cy_d * c11[2]));
+    df_dx += z36th_d
+        * hx
+        * hy2_d
+        * (cxdi_d * (cyi_d * c00[3] + cy_d * c01[3])
+            + cxd_d * (cyi_d * c10[3] + cy_d * c11[3]));
+
+    let mut df_dy =
+        hyi * (xpi_d * (-c00[0] + c01[0]) + xp_d * (-c10[0] + c11[0]));
+    df_dy += sixth
+        * hx2_d
+        * hyi
+        * (cxi_d * (-c00[1] + c01[1]) + cx_d * (-c10[1] + c11[1]));
+    df_dy += sixth
+        * hy
+        * (xpi_d * (cydi_d * c00[2] + cyd_d * c01[2])
+            + xp_d * (cydi_d * c10[2] + cyd_d * c11[2]));
+    df_dy += z36th_hx2_d
+        * hy
+        * (cxi_d * (cydi_d * c00[3] + cyd_d * c01[3])
+            + cx_d * (cydi_d * c10[3] + cyd_d * c11[3]));
+
+    (f, df_dx, df_dy)
 }
 
 /// Parse whitespace-separated `f64` values from an ASCII file via

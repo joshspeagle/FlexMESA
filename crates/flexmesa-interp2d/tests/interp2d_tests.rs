@@ -27,7 +27,6 @@ use flexmesa_interp2d::{
     interp_mkbicub_db, interp_mkbipm_db, interp_rgbi3p_db, interp_rgsf3p_db,
     BicubicBc,
 };
-use flexmesa_math::{with_numerics_mode, NumericsMode};
 use proptest::prelude::*;
 use std::f64::consts::PI;
 
@@ -165,69 +164,60 @@ fn test_mesa_bicubic_spline_matches_golden_output() {
     for (i, j, exp_z, exp_dzdx, exp_dzdy) in expected_pts {
         let x = x_min + (i as f64) * dx;
         let y = y_min + (j as f64) * dy;
-        // Upstream MESA `fvbicub_db` omits `implicit none` (#680), leaving
-        // local basis variables as implicit `REAL` (`f32`). Compare MESA
-        // goldens and masked parity in `NumericsMode::Strict`.
-        with_numerics_mode(NumericsMode::Strict, || {
-            let eval = interp_evbicub_db(x, y, &xpts, &ypts, ilinx, iliny, &f)
-                .expect("bicubic evaluation succeeds");
-            assert!(
-                (eval.f - exp_z).abs() < 5.0e-9,
-                "i={i}, j={j}: eval.f={} vs exp_z={exp_z}",
-                eval.f
-            );
-            assert!(
-                (eval.df_dx - exp_dzdx).abs() < 5.0e-7,
-                "i={i}, j={j}: eval.df_dx={} vs exp_dzdx={exp_dzdx}",
-                eval.df_dx
-            );
-            assert!(
-                (eval.df_dy - exp_dzdy).abs() < 5.0e-7,
-                "i={i}, j={j}: eval.df_dy={} vs exp_dzdy={exp_dzdy}",
-                eval.df_dy
-            );
+        let eval = interp_evbicub_db(x, y, &xpts, &ypts, ilinx, iliny, &f)
+            .expect("bicubic evaluation succeeds");
+        // Upstream MESA fvbicub_db omits `implicit none`, leaving local basis
+        // variables (xp, yp, cx, cy, cxd, cyd, hx2, hy2, z36th) as implicit
+        // 32-bit `real`. Our full `f64` evaluator matches the golden output to
+        // within single-precision basis truncation (~5e-7) while satisfying
+        // exact f64 calculus identities to machine precision.
+        assert!(
+            (eval.f - exp_z).abs() < 5.0e-9,
+            "i={i}, j={j}: eval.f={} vs exp_z={exp_z}",
+            eval.f
+        );
+        assert!(
+            (eval.df_dx - exp_dzdx).abs() < 5.0e-7,
+            "i={i}, j={j}: eval.df_dx={} vs exp_dzdx={exp_dzdx}",
+            eval.df_dx
+        );
+        assert!(
+            (eval.df_dy - exp_dzdy).abs() < 5.0e-7,
+            "i={i}, j={j}: eval.df_dy={} vs exp_dzdy={exp_dzdy}",
+            eval.df_dy
+        );
 
-            let masked = interp_evbicub_mask_db(
-                x,
-                y,
-                &xpts,
-                &ypts,
-                ilinx,
-                iliny,
-                &f,
-                &[1, 1, 1, 0, 0, 0],
-            )
-            .expect("masked bicubic evaluation succeeds");
-            assert!((masked[0] - eval.f).abs() < 1.0e-15);
-            assert!((masked[1] - eval.df_dx).abs() < 1.0e-15);
-            assert!((masked[2] - eval.df_dy).abs() < 1.0e-15);
-            assert_eq!(masked[3], 0.0);
-        });
+        // Verify exact f64 consistency between value and analytic first/second
+        // derivatives on the cubic polynomial patch.
+        let h = 1.0e-6;
+        let fx_p = interp_evbicub_db(x + h, y, &xpts, &ypts, ilinx, iliny, &f)
+            .unwrap();
+        let fx_m = interp_evbicub_db(x - h, y, &xpts, &ypts, ilinx, iliny, &f)
+            .unwrap();
+        let fy_p = interp_evbicub_db(x, y + h, &xpts, &ypts, ilinx, iliny, &f)
+            .unwrap();
+        let fy_m = interp_evbicub_db(x, y - h, &xpts, &ypts, ilinx, iliny, &f)
+            .unwrap();
+        let fd_dx = (fx_p.f - fx_m.f) / (2.0 * h);
+        let fd_dy = (fy_p.f - fy_m.f) / (2.0 * h);
+        assert!((eval.df_dx - fd_dx).abs() < 1.0e-10);
+        assert!((eval.df_dy - fd_dy).abs() < 1.0e-10);
 
-        // Verify exact pure-f64 consistency between value and analytic first
-        // derivatives on the cubic polynomial patch in `NumericsMode::Fast`.
-        with_numerics_mode(NumericsMode::Fast, || {
-            let eval_fast =
-                interp_evbicub_db(x, y, &xpts, &ypts, ilinx, iliny, &f)
-                    .expect("fast bicubic evaluation succeeds");
-            let h = 1.0e-6;
-            let fx_p =
-                interp_evbicub_db(x + h, y, &xpts, &ypts, ilinx, iliny, &f)
-                    .unwrap();
-            let fx_m =
-                interp_evbicub_db(x - h, y, &xpts, &ypts, ilinx, iliny, &f)
-                    .unwrap();
-            let fy_p =
-                interp_evbicub_db(x, y + h, &xpts, &ypts, ilinx, iliny, &f)
-                    .unwrap();
-            let fy_m =
-                interp_evbicub_db(x, y - h, &xpts, &ypts, ilinx, iliny, &f)
-                    .unwrap();
-            let fd_dx = (fx_p.f - fx_m.f) / (2.0 * h);
-            let fd_dy = (fy_p.f - fy_m.f) / (2.0 * h);
-            assert!((eval_fast.df_dx - fd_dx).abs() < 1.0e-10);
-            assert!((eval_fast.df_dy - fd_dy).abs() < 1.0e-10);
-        });
+        let masked = interp_evbicub_mask_db(
+            x,
+            y,
+            &xpts,
+            &ypts,
+            ilinx,
+            iliny,
+            &f,
+            &[1, 1, 1, 0, 0, 0],
+        )
+        .expect("masked bicubic evaluation succeeds");
+        assert!((masked[0] - eval.f).abs() < 1.0e-15);
+        assert!((masked[1] - eval.df_dx).abs() < 1.0e-15);
+        assert!((masked[2] - eval.df_dy).abs() < 1.0e-15);
+        assert_eq!(masked[3], 0.0);
     }
 }
 
@@ -583,10 +573,8 @@ proptest! {
             &bc_y,
         ).unwrap();
 
-        let ev = with_numerics_mode(NumericsMode::Fast, || {
-            interp_evbicub_db(xq, yq, &xs, &ys, ilinx, iliny, &f)
-        })
-        .unwrap();
+        let ev =
+            interp_evbicub_db(xq, yq, &xs, &ys, ilinx, iliny, &f).unwrap();
         let exact_f = poly(xq, yq);
         let exact_df_dx = a10 + 2.0 * a20 * xq + a11 * yq;
         let exact_df_dy = a01 + a11 * xq + 2.0 * a02 * yq;

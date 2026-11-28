@@ -98,31 +98,8 @@ def test_wave1_four_stage_benchmarks_match_snapshots() -> None:
     _assert_records_match_snapshots(
         records,
         _WAVE1_REGRESSION_SNAPSHOTS_N8,
-        stage_check_elsewhere=frozenset({"turb_tdc", "interp_2d"}),
+        stage_check_elsewhere=frozenset({"turb_tdc"}),
     )
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#295: Rust interp_evbicub_db in strict mode now reproduces MESA "
-        "26.4.1 fvbicub_db implicit-REAL (f32) basis scalars "
-        "(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the "
-        "frozen JAX twin keeps pure f64 basis scalars; measured cross-stage "
-        "max_rel_err is 2.980e-8 (N=4) and 2.980e-8 (N=8) against 1.0e-12."
-    ),
-)
-def test_wave1_interp_2d_stages_agree() -> None:
-    """The `interp_2d` workload agrees across Stages 0..3 to 1.0e-12."""
-    table = bench.BicubTable.create()
-    for n_zones in (4, 8):
-        rec = bench.bench_interp2d(
-            bench.ThermoGrid.create(n_zones), table, n_warmup=1, n_repeats=3
-        )
-        assert rec.max_rel_err <= 1.0e-12, (
-            f"workload {rec.workload} (N={rec.n_zones}) "
-            f"cross-stage rel_err {rec.max_rel_err:.3e} > 1.0e-12"
-        )
 
 
 def test_wave1_turb_tdc_stages_agree() -> None:

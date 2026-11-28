@@ -17,10 +17,8 @@ import hypothesis
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 from hypothesis import strategies as st
 
-import flexmesa
 from flexmesa import interp_2d
 
 
@@ -125,9 +123,10 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
 
     # Evaluate each of the 6 upstream test2D_db(.true.) sample points and
     # verify both full BicubicEval and masked interp_evbicub_mask_db outputs.
-    # Upstream MESA's fvbicub_db omits `implicit none` (#680) and evaluates its
-    # local basis polynomials in 32-bit float; Rust strict mode reproduces this
-    # path at 0 ULP, while the frozen JAX twin remains pure float64.
+    # Note that upstream MESA's fvbicub_db omits `implicit none` and evaluates
+    # its local basis polynomials in 32-bit float; our full float64 basis
+    # agrees with upstream within single-precision truncation (~5e-7) while
+    # matching exact polynomial calculus and jax.grad/jax.hessian to ~1e-13.
     for i, j, exp_z, exp_dzdx, exp_dzdy in expected_bicub:
         xq = x_min + float(i) * dx
         yq = y_min + float(j) * dy
@@ -151,6 +150,30 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
             atol=1e-15,
         )
         np.testing.assert_allclose(masked[3:], 0.0, atol=1e-15)
+
+    def f_scalar(xy: jnp.ndarray) -> jnp.ndarray:
+        return interp_2d.interp_evbicub_db(
+            xy[0], xy[1], x, y, ilinx, iliny, coeffs
+        ).f
+
+    # Verify analytic first and second partials against jax.grad / jax.hessian.
+    x0, y0 = 0.1, 0.2
+    ev0 = interp_2d.interp_evbicub_db(x0, y0, x, y, ilinx, iliny, coeffs)
+    xy0 = jnp.array([x0, y0], dtype=jnp.float64)
+    grad_xy = np.asarray(jax.grad(f_scalar)(xy0))
+    hess_xy = np.asarray(jax.hessian(f_scalar)(xy0))
+    np.testing.assert_allclose(
+        grad_xy, [float(ev0.df_dx), float(ev0.df_dy)], rtol=1e-13, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        hess_xy[0, 0], float(ev0.d2f_dx2), rtol=1e-13, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        hess_xy[1, 1], float(ev0.d2f_dy2), rtol=1e-13, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        hess_xy[0, 1], float(ev0.d2f_dxdy), rtol=1e-13, atol=1e-14
+    )
 
     # Verify 2D Steffen (1990) piecewise-monotonic interpolation on all 6 pts.
     # Each query evaluates four 1D x-splines on a 4-point y stencil followed by
@@ -180,49 +203,6 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
         yq = y_min + float(j) * dy
         val_pm = float(interp_2d.interp_evbipm_db(xq, yq, x, y, coeffs_pm))
         np.testing.assert_allclose(val_pm, exp_z, rtol=1e-12, atol=1e-13)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#295: Rust interp_evbicub_db in strict mode now reproduces MESA "
-        "26.4.1 fvbicub_db implicit-REAL (f32) basis scalars "
-        "(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas "
-        "jax.grad/jax.hessian differentiate the frozen pure-f64 JAX twin; "
-        "measured diffs at (0.1, 0.2) are df_dx rel=2.112e-8 (abs=1.736e-8), "
-        "df_dy rel=7.129e-9 (abs=4.157e-10), d2f_dx2 rel=3.211e-8 "
-        "(abs=1.826e-8), d2f_dy2 rel=3.313e-8 (abs=4.680e-9), "
-        "d2f_dxdy rel=1.844e-8 (abs=1.001e-8) against rtol=1e-13, atol=1e-14."
-    ),
-)
-def test_interp2d_bicub_rust_strict_vs_jax_autodiff() -> None:
-    """Verify strict Rust `interp_evbicub_db` vs `jax.grad`/`jax.hessian`."""
-    x, y, z = _mesa_2d_test_grid()
-    coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
-
-    def f_scalar(xy: jnp.ndarray) -> jnp.ndarray:
-        return interp_2d.interp_evbicub_db(
-            xy[0], xy[1], x, y, ilinx, iliny, coeffs
-        ).f
-
-    # Verify analytic first and second partials against jax.grad / jax.hessian.
-    x0, y0 = 0.1, 0.2
-    ev0 = interp_2d.interp_evbicub_db(x0, y0, x, y, ilinx, iliny, coeffs)
-    xy0 = jnp.array([x0, y0], dtype=jnp.float64)
-    grad_xy = np.asarray(jax.grad(f_scalar)(xy0))
-    hess_xy = np.asarray(jax.hessian(f_scalar)(xy0))
-    np.testing.assert_allclose(
-        grad_xy, [float(ev0.df_dx), float(ev0.df_dy)], rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[0, 0], float(ev0.d2f_dx2), rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[1, 1], float(ev0.d2f_dy2), rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[0, 1], float(ev0.d2f_dxdy), rtol=1e-13, atol=1e-14
-    )
 
 
 def test_upstream_mesa_interp2d_akima_matches_golden_table() -> None:
@@ -303,8 +283,7 @@ def test_prop_interp2d_bicubic_reproduces_biquadratic_and_derivatives(
     xx, yy = np.meshgrid(x, y, indexing="ij")
     z = a00 + a10 * xx + a01 * yy + a20 * xx**2 + a11 * xx * yy + a02 * yy**2
     coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
-    with flexmesa.numerics_mode_context("fast"):
-        ev = interp_2d.interp_evbicub_db(xq, yq, x, y, ilinx, iliny, coeffs)
+    ev = interp_2d.interp_evbicub_db(xq, yq, x, y, ilinx, iliny, coeffs)
 
     f_exact = (
         a00 + a10 * xq + a01 * yq + a20 * xq**2 + a11 * xq * yq + a02 * yq**2

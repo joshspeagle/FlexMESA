@@ -16,10 +16,7 @@ use flexmesa_bench::{
 /// Wave 1 workloads (internal self-consistency check, tracked in #146).
 const WAVE1_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 6] = [
     ("auto_diff", 1.089_274_155_553_244e4),
-    // Under #672, `interp_2d` shifted from `3.622_775_349_153_983e2` to
-    // `3.622_775_375_231_549e2` after aligning `interp_evbicub_db` Strict mode
-    // with upstream MESA `fvbicub_db` implicit-`REAL` (`f32`) basis scalars.
-    ("interp_2d", 3.622_775_375_231_549e2),
+    ("interp_2d", 3.622_775_349_153_983e2),
     ("neu", 9.873_195_638_253_145e12),
     ("mtx_tridiag", 1.065_650_530_823_759e1),
     ("turb_mlt", 3.419_048_546_150_96),

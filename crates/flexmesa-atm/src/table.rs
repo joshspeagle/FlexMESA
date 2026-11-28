@@ -15,9 +15,10 @@ use crate::utils::radiation_pressure;
 use flexmesa_const::LN10;
 use flexmesa_interp1d::{interp_pm, interp_value};
 use flexmesa_interp2d::{
-    interp_evbicub_prevalidated_db, interp_mkbicub_db, BicubicBc,
+    herm2xy_prevalidated_db, interp_evbicub_prevalidated_db, interp_mkbicub_db,
+    BicubicBc,
 };
-use flexmesa_math::safe_log10;
+use flexmesa_math::{numerics_mode, safe_log10, NumericsMode};
 use flexmesa_utils::is_bad;
 use std::sync::LazyLock;
 
@@ -295,29 +296,71 @@ pub fn get_table_values(
     }
     let num_zs = zhi - zlo + 1;
 
+    let strict = numerics_mode() == NumericsMode::Strict;
     let do_interp =
         |splines: &[Vec<[f64; 4]>]| -> Result<(f64, f64, f64), AtmError> {
             let mut vals = [0.0_f64; 4];
             let mut d_dlogg = [0.0_f64; 4];
             let mut d_dteff = [0.0_f64; 4];
 
-            for (k, iz) in ((zlo - 1)..zhi).enumerate() {
-                let ev = interp_evbicub_prevalidated_db(
-                    new_logg,
-                    new_teff,
-                    &ai.logg_array,
-                    &ai.teff_array,
-                    ai.iling,
-                    ai.ilint,
-                    &splines[iz],
-                )
-                .map_err(|e| AtmError::CallbackError {
-                    context: "get_table_values::interp_evbicub_db",
-                    detail: e.to_string(),
-                })?;
-                vals[k] = ev.f;
-                d_dlogg[k] = ev.df_dx;
-                d_dteff[k] = ev.df_dy;
+            if strict {
+                let (i, j, xparam, yparam, hx, hxi, hy, hyi) =
+                    herm2xy_prevalidated_db(
+                        new_logg,
+                        new_teff,
+                        &ai.logg_array,
+                        &ai.teff_array,
+                        ai.iling,
+                        ai.ilint,
+                    )
+                    .map_err(|e| {
+                        AtmError::CallbackError {
+                            context:
+                                "get_table_values::herm2xy_prevalidated_db",
+                            detail: e.to_string(),
+                        }
+                    })?;
+                let i0 = i * nt + j;
+                let i1 = (i + 1) * nt + j;
+                for (k, iz) in ((zlo - 1)..zhi).enumerate() {
+                    let s = &splines[iz];
+                    let (f, df_dx, df_dy) = eval_fvbicub_strict(
+                        xparam,
+                        yparam,
+                        hx,
+                        hxi,
+                        hy,
+                        hyi,
+                        s[i0],
+                        s[i0 + 1],
+                        s[i1],
+                        s[i1 + 1],
+                    );
+                    vals[k] = f;
+                    d_dlogg[k] = df_dx;
+                    d_dteff[k] = df_dy;
+                }
+            } else {
+                for (k, iz) in ((zlo - 1)..zhi).enumerate() {
+                    let ev = interp_evbicub_prevalidated_db(
+                        new_logg,
+                        new_teff,
+                        &ai.logg_array,
+                        &ai.teff_array,
+                        ai.iling,
+                        ai.ilint,
+                        &splines[iz],
+                    )
+                    .map_err(|e| {
+                        AtmError::CallbackError {
+                            context: "get_table_values::interp_evbicub_db",
+                            detail: e.to_string(),
+                        }
+                    })?;
+                    vals[k] = ev.f;
+                    d_dlogg[k] = ev.df_dx;
+                    d_dteff[k] = ev.df_dy;
+                }
             }
 
             if num_zs == 1 {
@@ -618,4 +661,110 @@ pub fn get_table_base(id: i32) -> Result<f64, AtmError> {
             id,
         }),
     }
+}
+
+/// Evaluates `fvbicub_db` (`interp_2d/private/bicub_db.f`) matching Fortran's
+/// implicit single-precision (`REAL` / `f32`) basis scalars (`xp`, `yp`, `cx`,
+/// `cy`, `cxd`, `cyd`, `hx2`, `hy2`, `z36th`) in `NumericsMode::Strict`.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn eval_fvbicub_strict(
+    xparam: f64,
+    yparam: f64,
+    hx: f64,
+    hxi: f64,
+    hy: f64,
+    hyi: f64,
+    c00: [f64; 4],
+    c01: [f64; 4],
+    c10: [f64; 4],
+    c11: [f64; 4],
+) -> (f64, f64, f64) {
+    let sixth = 1.0_f64 / 6.0_f64;
+    let z36th = (sixth * sixth) as f32;
+
+    let xp = xparam as f32;
+    let xpi = (1.0_f64 - f64::from(xp)) as f32;
+    let xp2 = xp * xp;
+    let xpi2 = xpi * xpi;
+    let cx = (f64::from(xp) * (f64::from(xp2) - 1.0_f64)) as f32;
+    let cxi = (f64::from(xpi) * (f64::from(xpi2) - 1.0_f64)) as f32;
+    let hx2 = (hx * hx) as f32;
+
+    let yp = yparam as f32;
+    let ypi = (1.0_f64 - f64::from(yp)) as f32;
+    let yp2 = yp * yp;
+    let ypi2 = ypi * ypi;
+    let cy = (f64::from(yp) * (f64::from(yp2) - 1.0_f64)) as f32;
+    let cyi = (f64::from(ypi) * (f64::from(ypi2) - 1.0_f64)) as f32;
+    let hy2 = (hy * hy) as f32;
+
+    let cxd = (3.0_f64 * f64::from(xp2) - 1.0_f64) as f32;
+    let cxdi = (-3.0_f64 * f64::from(xpi2) + 1.0_f64) as f32;
+    let cyd = (3.0_f64 * f64::from(yp2) - 1.0_f64) as f32;
+    let cydi = (-3.0_f64 * f64::from(ypi2) + 1.0_f64) as f32;
+
+    let z36th_hx2_hy2_d = f64::from((z36th * hx2) * hy2);
+    let z36th_hx2_d = f64::from(z36th * hx2);
+    let (z36th_d, hx2_d, hy2_d) =
+        (f64::from(z36th), f64::from(hx2), f64::from(hy2));
+    let (xp_d, xpi_d, cx_d, cxi_d) =
+        (f64::from(xp), f64::from(xpi), f64::from(cx), f64::from(cxi));
+    let (yp_d, ypi_d, cy_d, cyi_d) =
+        (f64::from(yp), f64::from(ypi), f64::from(cy), f64::from(cyi));
+    let (cxd_d, cxdi_d, cyd_d, cydi_d) = (
+        f64::from(cxd),
+        f64::from(cxdi),
+        f64::from(cyd),
+        f64::from(cydi),
+    );
+
+    let mut f = xpi_d * (ypi_d * c00[0] + yp_d * c01[0])
+        + xp_d * (ypi_d * c10[0] + yp_d * c11[0]);
+    f += sixth
+        * hx2_d
+        * (cxi_d * (ypi_d * c00[1] + yp_d * c01[1])
+            + cx_d * (ypi_d * c10[1] + yp_d * c11[1]));
+    f += sixth
+        * hy2_d
+        * (xpi_d * (cyi_d * c00[2] + cy_d * c01[2])
+            + xp_d * (cyi_d * c10[2] + cy_d * c11[2]));
+    f += z36th_hx2_hy2_d
+        * (cxi_d * (cyi_d * c00[3] + cy_d * c01[3])
+            + cx_d * (cyi_d * c10[3] + cy_d * c11[3]));
+
+    let mut df_dx = hxi
+        * (-(ypi_d * c00[0] + yp_d * c01[0])
+            + (ypi_d * c10[0] + yp_d * c11[0]));
+    df_dx += sixth
+        * hx
+        * (cxdi_d * (ypi_d * c00[1] + yp_d * c01[1])
+            + cxd_d * (ypi_d * c10[1] + yp_d * c11[1]));
+    df_dx += sixth
+        * hxi
+        * hy2_d
+        * (-(cyi_d * c00[2] + cy_d * c01[2])
+            + (cyi_d * c10[2] + cy_d * c11[2]));
+    df_dx += z36th_d
+        * hx
+        * hy2_d
+        * (cxdi_d * (cyi_d * c00[3] + cy_d * c01[3])
+            + cxd_d * (cyi_d * c10[3] + cy_d * c11[3]));
+
+    let mut df_dy =
+        hyi * (xpi_d * (-c00[0] + c01[0]) + xp_d * (-c10[0] + c11[0]));
+    df_dy += sixth
+        * hx2_d
+        * hyi
+        * (cxi_d * (-c00[1] + c01[1]) + cx_d * (-c10[1] + c11[1]));
+    df_dy += sixth
+        * hy
+        * (xpi_d * (cydi_d * c00[2] + cyd_d * c01[2])
+            + xp_d * (cydi_d * c10[2] + cyd_d * c11[2]));
+    df_dy += z36th_hx2_d
+        * hy
+        * (cxi_d * (cydi_d * c00[3] + cyd_d * c01[3])
+            + cx_d * (cydi_d * c10[3] + cyd_d * c11[3]));
+
+    (f, df_dx, df_dy)
 }

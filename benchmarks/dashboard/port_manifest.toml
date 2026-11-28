@@ -5754,7 +5754,14 @@ upstream_lines = 868
 upstream_sha256 = "7ced181ca4636da7c161f8ae7ba177c9de1a8ff9d76bea8f87915d25b096b749"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kap_setup_tables", "kap_get", "kap_get_elect_cond_opacity", "kap_get_compton_opacity", "kap_get_radiative_opacity"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kap_setup_tables" = "crates/flexmesa-kap/src/loader.rs::kap_tables" # partial: tables load lazily and globally on first kap_tables() call instead of per handle with use_cache and load_on_demand
+"kap_get" = "crates/flexmesa-kap/src/eval.rs::kap_get" # partial: takes a KapConfig instead of a handle and has no kap_is_initialized check; dlnkap_dxa (identically zero upstream) is not returned
+"kap_get_elect_cond_opacity" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers pass a KapConfig directly
+"kap_get_compton_opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers call compton_opacity directly
+"kap_get_radiative_opacity" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers pass a KapConfig directly
 
 [[files]]
 upstream_path = "math/private/math_io.f90"

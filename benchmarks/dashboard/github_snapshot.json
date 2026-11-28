@@ -345,13 +345,23 @@
       "draft": false
     },
     {
-      "number": 749,
-      "title": "windows: W2 window-inlist constructor and tests (#684)",
+      "number": 751,
+      "title": "dashboard: read the deferred register from the children of #727",
       "draft": false
     },
     {
-      "number": 751,
-      "title": "dashboard: read the deferred register from the children of #727",
+      "number": 753,
+      "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
+      "draft": false
+    },
+    {
+      "number": 756,
+      "title": "audit: Python and JAX port inventory (P1.5)",
+      "draft": false
+    },
+    {
+      "number": 757,
+      "title": "docs: replace unmeasured status wording (P1.4 part 3)",
       "draft": false
     }
   ],
@@ -1154,6 +1164,30 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 752,
+      "title": "[Deferred bug] mtx: DGBSVX_tridiagonal_wrapper reads x_flat unset when the matrix is exactly singular",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 754,
+      "title": "[Deferred bug] astero: the NEWUOA workspace is BOBYQA's length, shorter than NEWUOA documents (BIGDEN writes past it)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 755,
+      "title": "[Deferred bug] num: NEWUOA returns X from an unset XOPT when MAXFUN < NPT",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
       "needs_confirmation": false
     }
   ]

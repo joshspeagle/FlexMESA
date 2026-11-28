@@ -211,7 +211,10 @@ pub fn dgbtrf_blocked(
         // dgbtrf.f:355
         if j + jb <= n {
             // dgbtrf.f:359-360
-            let j2 = ((ju + 1 - j).min(kv) as isize) - jb as isize;
+            // Signed as in Fortran: JU-J+1 is <= 0 when every pivot so far
+            // was zero (JU stays at its initial value).
+            let j2 =
+                (ju as isize - j as isize + 1).min(kv as isize) - jb as isize;
             let j3 = (ju as isize - j as isize - kv as isize + 1).max(0);
             // dgbtrf.f:365-366
             if j2 > 0 {

@@ -1336,3 +1336,25 @@ fn dgbtrs_transposed_l_step_accumulates_the_dgemv_sum_before_subtracting() {
     assert_eq!(s.berr, 0.0);
     assert!(s.ferr >= P2M61 && s.ferr < 64.0 * dlamch::EPS, "{}", s.ferr);
 }
+
+/// Blocked DGBTRF with every leading pivot zero: JU stays 1, so
+/// `J2 = MIN(JU-J+1, KV) - JB` (`dgbtrf.f:359`) is negative and DLASWP is
+/// skipped. n = 100, KL = 32, KU = 65 (blocked path), columns 1..64 zero, the
+/// rest the identity: the first zero pivot is column 1 (INFO = 1).
+#[test]
+fn blocked_dgbtrf_all_zero_leading_columns_reports_singular_not_overflow() {
+    let (n, kl, ku) = (100_usize, 32_usize, 65_usize);
+    assert!(dgbtrf_uses_blocked_code(kl, ku));
+    let mut a = vec![0.0_f64; n * n];
+    for i in 64..n {
+        a[i * n + i] = 1.0;
+    }
+    let ldab = 2 * kl + ku + 1;
+    let mut ab = vec![0.0_f64; ldab * n];
+    dense_to_band(n, n, &a, kl, ku, &mut ab, ldab).unwrap();
+    let mut ipiv = vec![0usize; n];
+    assert_eq!(
+        dgbtrf(n, kl, ku, &mut ab, ldab, &mut ipiv),
+        Err(MtxError::SingularMatrix(0))
+    );
+}

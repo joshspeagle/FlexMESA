@@ -149,14 +149,7 @@ pub fn burn_1_zone_const_density(
         // (`net_burn_const_density.f90:398-401`): `lgRho` is the input and
         // `lgT = y(nvar)/ln10`, so `eosDT_get` gets them as given.
         let eos = eos_dt_get_with_logs(
-            ht,
-            rho,
-            lg_rho,
-            temp,
-            lg_t,
-            &g.chem_id,
-            &buf.x_buf,
-            eos_cfg,
+            ht, rho, lg_rho, temp, lg_t, &g.chem_id, &buf.x_buf, eos_cfg,
         )
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         let cv = eos.res[I_CV];
@@ -401,10 +394,10 @@ mod tests {
         let ht = HelmTable::builtin().expect("builtin HELM table");
         let eos_cfg = EosConfig::default();
         let species = g.num_isos;
-        let xa = vec![1.0 / f64::from(u32::try_from(species).unwrap()); species];
+        let xa =
+            vec![1.0 / f64::from(u32::try_from(species).unwrap()); species];
         let mut any_log_dependence = false;
-        for (lg_rho, lg_t) in [(4.0, 8.5), (2.0, 6.0), (0.5, 5.0), (7.0, 9.0)]
-        {
+        for (lg_rho, lg_t) in [(4.0, 8.5), (2.0, 6.0), (0.5, 5.0), (7.0, 9.0)] {
             let rho = exp10(lg_rho);
             let t = exp10(lg_t);
             let base = eos_dt_get(ht, rho, t, &g.chem_id, &xa, &eos_cfg)
@@ -568,14 +561,7 @@ mod tests {
                 get_composition_info(nuclides, &g.chem_id, &x_cur, false)
                     .unwrap();
             let eos = eos_dt_get_with_logs(
-                ht,
-                rho,
-                lg_rho,
-                temp,
-                lg_t,
-                &g.chem_id,
-                &x_cur,
-                &eos_cfg,
+                ht, rho, lg_rho, temp, lg_t, &g.chem_id, &x_cur, &eos_cfg,
             )
             .unwrap();
             let (abar, zbar, z2bar, ye, cv, eta, d_eta_dlnt) = freeze_comp

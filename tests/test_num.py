@@ -281,6 +281,91 @@ def test_look_for_brackets_and_tanh_match_rust_667() -> None:
     assert by1 < 0.0 < by3
 
 
+def test_safe_root_with_guess_and_without_brackets_match_rust_663() -> None:
+    """Verifies #663 safe_root_with_guess and safe_root_without_brackets."""
+    # Mirrors crates/flexmesa-num/src/root.rs::tests::
+    # safe_root_with_guess_reevaluates_newton_brackets.
+    calls: list[float] = []
+
+    def fn_linear(x: float) -> tuple[float, float]:
+        calls.append(x)
+        return x - 0.3, 0.5
+
+    root, _ = num.safe_root_with_guess(
+        fn_linear, 0.0, 0.1, None, None, None, None, 3, 50, 1e-14, 1e-14
+    )
+    assert calls[:5] == [0.0, 0.6, 0.0, 0.0, 0.6]
+    assert abs(root - 0.3) < 1e-12
+
+    # Mirrors safe_root_with_guess_newton_is_unbounded.
+    root_huge, _ = num.safe_root_with_guess(
+        lambda x: (x - 1.0e40, 1.0),
+        0.0,
+        1.0,
+        None,
+        None,
+        None,
+        None,
+        5,
+        50,
+        1e-12,
+        1e-12,
+    )
+    assert root_huge == 1.0e40
+
+    # ValueError inside Newton breaks loop and falls back to bracketing.
+    def fn_domain(x: float) -> tuple[float, float]:
+        if x > 5.0:
+            raise ValueError("out of domain")
+        return x - 0.3, 0.05
+
+    root_fb, _ = num.safe_root_with_guess(
+        fn_domain, 0.0, 0.25, None, None, None, None, 5, 50, 1e-12, 1e-12
+    )
+    assert abs(root_fb - 0.3) < 1e-12
+
+    # Mirrors crates/flexmesa-num/tests/num_tests.rs:337-365 (test_root3).
+    def fn_tanh(x: float) -> tuple[float, float]:
+        t = math.tanh(x)
+        c = math.cosh(x)
+        return t - 0.462_117_157_260_009_8, 1.0 / (c * c)
+
+    root3_first, _ = num.safe_root_without_brackets(
+        fn_tanh, 0.1, 0.1, 10, 50, 1e-10, 1e-10
+    )
+    assert abs(root3_first - 4.999_999_999_999_936e-1) <= 1e-14
+    root3_second, _ = num.safe_root_without_brackets(
+        fn_tanh, -1.0, 0.1, 10, 50, 1e-10, 1e-10
+    )
+    assert abs(root3_second - 5.000_000_000_000_038e-1) <= 1e-14
+    root_explicit, _ = num.safe_root_with_guess(
+        fn_tanh,
+        0.1,
+        0.2,
+        -1.0,
+        2.0,
+        fn_tanh(-1.0)[0],
+        fn_tanh(2.0)[0],
+        5,
+        50,
+        1e-12,
+        1e-12,
+    )
+    assert abs(root_explicit - 0.5) <= 1e-10
+
+    # Verifies min(imax, newt_imax) cap in safe_root_without_brackets.
+    cap_calls: list[float] = []
+
+    def fn_quad(x: float) -> tuple[float, float]:
+        cap_calls.append(x)
+        return x * x - 2.0, 2.0 * x
+
+    with pytest.raises(ValueError, match="failed to bracket"):
+        num.safe_root_without_brackets(fn_quad, 10.0, 0.5, 10, 2, 1e-12, 1e-12)
+    assert cap_calls[:2] == [10.0, 5.1]
+    assert len(cap_calls) == 2 + 3
+
+
 def test_nm_simplex_all_six_upstream_benchmarks_and_newuoa_bobyqa() -> None:
     """Verifies all 6 simplex benchmarks (FR4..TR), newuoa, and bobyqa."""
     u1, s1 = num.r8_uniform_01(12345)

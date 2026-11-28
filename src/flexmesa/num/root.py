@@ -145,25 +145,28 @@ def safe_root_with_guess(
     y3_opt: float | None = None,
     newt_imax: int = 10,
     imax: int = 100,
-    xmin: float = -1e30,
-    xmax: float = 1e30,
     epsx: float = 1e-12,
     epsy: float = 1e-12,
 ) -> tuple[float, float]:
-    """Finds a root of $f(x) = 0$ from ``x_guess`` with optional brackets.
+    """Finds a root from ``x_guess`` matching ``do_safe_root_with_guess``.
+
+    Mirrors ``num/private/mod_root.f90:47-164``: runs up to ``newt_imax``
+    unbounded Newton steps from ``x_guess``, stopping only on
+    ``abs(y) < max(epsy, abs(dydx) * epsx)`` (``:102``), exiting Newton on
+    ``ValueError``, ``dydx == 0``, or increasing ``abs(y)`` (``:89-108``),
+    then falling back to :func:`look_for_brackets` and delegating to
+    :func:`safe_root_with_brackets`.
 
     Args:
         func: Callable returning ``(f(x), df_dx(x))``.
         x_guess: Initial root estimate.
-        dx: Outward bracket search step if Newton steps do not converge.
-        x1_opt: Optional lower bracket abscissa.
-        x3_opt: Optional upper bracket abscissa.
+        dx: Outward bracket search step if Newton steps do not bracket.
+        x1_opt: Optional first bracket abscissa.
+        x3_opt: Optional second bracket abscissa.
         y1_opt: Optional function value at ``x1_opt``.
         y3_opt: Optional function value at ``x3_opt``.
         newt_imax: Maximum pure Newton steps before bracketing.
-        imax: Maximum bracketed iterations.
-        xmin: Lower domain bound.
-        xmax: Upper domain bound.
+        imax: Bracketing step budget passed to :func:`look_for_brackets`.
         epsx: Abscissa tolerance.
         epsy: Residual tolerance.
 
@@ -171,53 +174,59 @@ def safe_root_with_guess(
         Tuple ``(root_x, f_at_root)`` in ``float64``.
 
     Raises:
-        ValueError: If ``xmin >= xmax`` or inputs are non-finite.
-        RuntimeError: If bracketing or iteration fails.
+        ValueError: Propagated from ``func`` outside the Newton loop or from
+            :func:`look_for_brackets`.
     """
-    if xmin >= xmax or not (
-        np.isfinite(x_guess) and np.isfinite(xmin) and np.isfinite(xmax)
-    ):
-        raise ValueError("require finite x_guess and xmin < xmax")
-    x1 = x1_opt
-    x3 = x3_opt
-    y1 = y1_opt
-    y3 = y3_opt
-    x = min(max(float(x_guess), float(xmin)), float(xmax))
+    # `have_x1 = (x1 /= arg_not_provided)` etc. (`mod_root.f90:80-83`).
+    have_x1 = x1_opt is not None
+    have_x3 = x3_opt is not None
+    have_y1 = y1_opt is not None
+    have_y3 = y3_opt is not None
+    x1 = 0.0 if x1_opt is None else float(x1_opt)
+    x3 = 0.0 if x3_opt is None else float(x3_opt)
+    y1 = 0.0 if y1_opt is None else float(y1_opt)
+    y3 = 0.0 if y3_opt is None else float(y3_opt)
+    x = float(x_guess)
+    epsx_f = float(epsx)
+    epsy_f = float(epsy)
     absy_prev = 0.0
-    for i in range(newt_imax):
-        y, dydx = func(x)
-        if not np.isfinite(y):
-            break
-        absy = abs(y)
-        if absy == 0.0 or absy < max(epsy, abs(dydx) * epsx):
-            return x, float(y)
-        if dydx == 0.0 or not np.isfinite(dydx):
-            break
-        if i > 0 and absy > absy_prev:
-            break
-        absy_prev = absy
-        if y < 0.0:
-            x1 = x
-            y1 = float(y)
-        else:
-            x3 = x
-            y3 = float(y)
-        x_next = x - y / dydx
-        if x_next < xmin or x_next > xmax:
-            break
-        x = x_next
 
-    if x1 is not None and x3 is not None:
-        yv1 = float(func(float(x1))[0]) if y1 is None else float(y1)
-        yv3 = float(func(float(x3))[0]) if y3 is None else float(y3)
-        if (yv1 <= 0.0 <= yv3) or (yv3 <= 0.0 <= yv1):
-            bx1, bx3 = float(x1), float(x3)
-            by1, by3 = yv1, yv3
-        else:
-            (bx1, bx3), (by1, by3) = look_for_brackets(x_guess, dx, func, imax)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        for i in range(1, newt_imax + 1):
+            # `if (ierr /= 0) ... exit ! try safe_root` (`:89-96`).
+            try:
+                y_raw, dydx_raw = func(x)
+            except ValueError:
+                break
+            y = float(y_raw)
+            dydx = float(dydx_raw)
+            absy = abs(y)
+            if absy < float(np.fmax(epsy_f, abs(dydx) * epsx_f)):
+                return x, y
+            if dydx == 0.0:
+                break
+            if i > 1 and absy > absy_prev:
+                break
+            absy_prev = absy
+            if y < 0.0:
+                x1 = x
+                y1 = y
+                have_x1 = True
+            else:
+                x3 = x
+                y3 = y
+                have_x3 = True
+            x = float(np.float64(x) - np.float64(y) / np.float64(dydx))
+
+    if not (have_x1 and have_x3):
+        (x1, x3), (y1, y3) = look_for_brackets(x_guess, dx, func, imax)
     else:
-        (bx1, bx3), (by1, by3) = look_for_brackets(x_guess, dx, func, imax)
-    return safe_root_with_brackets(func, bx1, bx3, by1, by3, imax, epsx, epsy)
+        if not have_y1:
+            y1 = float(func(x1)[0])
+        if not have_y3:
+            y3 = float(func(x3)[0])
+
+    return safe_root_with_brackets(func, x1, x3, y1, y3, imax, epsx, epsy)
 
 
 def safe_root_without_brackets(
@@ -226,21 +235,21 @@ def safe_root_without_brackets(
     dx: float,
     newt_imax: int = 10,
     imax: int = 100,
-    xmin: float = -1e30,
-    xmax: float = 1e30,
     epsx: float = 1e-12,
     epsy: float = 1e-12,
 ) -> tuple[float, float]:
-    """Finds a root of $f(x) = 0$ from ``x_guess`` without initial brackets.
+    """Finds a root from ``x_guess`` matching ``safe_root_without_brackets``.
+
+    Mirrors ``num/public/num_safe_root.dek:120-144``: calls
+    :func:`safe_root_with_guess` with no initial brackets and
+    ``newt_imax = min(imax, newt_imax)`` (``:143``).
 
     Args:
         func: Callable returning ``(f(x), df_dx(x))``.
         x_guess: Initial root estimate.
         dx: Outward bracket search step.
         newt_imax: Maximum pure Newton steps before bracketing.
-        imax: Maximum bracketed iterations.
-        xmin: Lower domain bound.
-        xmax: Upper domain bound.
+        imax: Bracketing step budget (also caps ``newt_imax``).
         epsx: Abscissa tolerance.
         epsy: Residual tolerance.
 
@@ -248,8 +257,7 @@ def safe_root_without_brackets(
         Tuple ``(root_x, f_at_root)`` in ``float64``.
 
     Raises:
-        ValueError: If ``xmin >= xmax`` or inputs are non-finite.
-        RuntimeError: If bracketing or iteration fails.
+        ValueError: Propagated from :func:`safe_root_with_guess`.
     """
     return safe_root_with_guess(
         func,
@@ -259,10 +267,8 @@ def safe_root_without_brackets(
         None,
         None,
         None,
-        newt_imax,
+        min(imax, newt_imax),
         imax,
-        xmin,
-        xmax,
         epsx,
         epsy,
     )

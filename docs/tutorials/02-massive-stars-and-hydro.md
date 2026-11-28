@@ -12,38 +12,7 @@ $$
 \Omega_{\mathrm{crit}} = \sqrt{(1 - \Gamma_{\mathrm{Edd}})\,\frac{G m_{\mathrm{grav}}}{r^3}}, \qquad \Gamma_{\mathrm{Edd}} = \frac{\kappa L}{4\pi c G m_{\mathrm{grav}}}
 $$
 
-You can evaluate $\Omega_{\mathrm{crit}}$ and $(f_P, f_T, i_{\mathrm{rot}}/r^2)$ either in Safe Rust (`_rust.star_eval_omega_crit`, `_rust.star_eval_rotation_fp_ft`) or in differentiable JAX (`star.eval_omega_crit_jax`, `star.eval_rotation_fp_ft_jax`):
-
-```python
-import jax
-import jax.numpy as jnp
-from flexmesa import _rust, constants, star
-
-# Initialize a 15 Msun ZAMS star
-model_15m = star.StarModel.from_zams(initial_mass=15.0, initial_z=0.02)
-r_surf = float(model_15m.r[0])
-m_surf = float(model_15m.m[0])
-l_surf = float(model_15m.lum[0])
-kap_surf = float(model_15m.opacity[0])
-
-# 1. Compute critical Roche angular velocity at the photosphere
-omega_crit_rust = _rust.star_eval_omega_crit(
-    constants.STANDARD_CGRAV, m_surf, r_surf, l_surf, kap_surf
-)
-
-# 2. Evaluate Roche distortion factors at Omega / Omega_crit = 0.5
-w_ratio = 0.5
-fp_rust, ft_rust, irot_rust = _rust.star_eval_rotation_fp_ft(w_ratio)
-
-# Differentiate f_P with respect to Omega / Omega_crit via jax.grad
-dfp_dw = jax.grad(lambda w: star.eval_rotation_fp_ft_jax(w)[0])(jnp.float64(w_ratio))
-
-print(f"15 Msun photosphere: Omega_crit = {omega_crit_rust:.4e} rad/s")
-print(
-    f"At Omega/Omega_crit = 0.5: f_P = {fp_rust:.6f}, f_T = {ft_rust:.6f}, "
-    f"i_rot/r^2 = {irot_rust:.6f}, df_P/d(Omega/Omega_crit) = {float(dfp_dw):.6f}"
-)
-```
+In `FlexMESA` the solver evaluates $\Omega_{\mathrm{crit}}$, $f_P$, $f_T$ and $i_{\mathrm{rot}}$ through the Rust port of MESA's `hydro_rotation` (`set_rotation_info`, `eval_fp_ft`, `eval_i_rot`) at every `set_hydro_vars` call. No standalone Python entry point exposes these routines, so this section has no runnable snippet. The differentiable JAX kernels `star.eval_omega_crit_jax` and `star.eval_rotation_fp_ft_jax` are frozen derived kernels rather than ports of the Rust routines.
 
 ---
 
@@ -51,45 +20,17 @@ print(
 
 Differential rotation in radiative zones drives five hydrodynamic instabilities: Dynamical Shear (`DSI`), Solberg-Høiland (`SH`), Secular Shear (`SSI`), Eddington-Sweet meridional circulation (`ES`), and Goldreich-Schubert-Fricke (`GSF`). In addition, radial shear $q = |\partial \ln \Omega / \partial \ln r|$ winds poloidal magnetic seed fields into toroidal fields until the pinch-type Tayler instability saturates (Spruit 2002), producing an effective magnetic viscosity $\nu_{\mathrm{ST}}$ (which dominates core-envelope angular momentum coupling) and compositional diffusivity $D_{\mathrm{ST}}$.
 
-In `FlexMESA`, `_rust.star_eval_rotational_mixing_zone` and `star.eval_rotational_mixing_zone_jax` evaluate a single shell's 9-tuple `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r)`, while `model.set_rotation_mixing_info()` runs the port of MESA's `set_rotation_mixing_info` over the whole profile and returns an `(nz, 9)` array of face values in the same column order (all zero when $\Omega = 0$ everywhere, as in this non-rotating ZAMS model), and `model.run_omega_mix(...)` applies implicit angular momentum diffusion:
+In `FlexMESA`, `model.set_rotation_mixing_info()` runs the port of MESA's `set_rotation_mixing_info` over the whole profile and returns an `(nz, 9)` array of face values `(d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r)` (all zero when $\Omega = 0$ everywhere, as in this non-rotating ZAMS model), and `model.run_omega_mix(...)` applies implicit angular momentum diffusion:
 
 ```python
-import jax.numpy as jnp
 import numpy as np
 from flexmesa import star
 
 model_15m = star.StarModel.from_zams(initial_mass=15.0, initial_z=0.02)
 
-# Evaluate single-zone rotational instabilities and Spruit-Tayler dynamo in radiative envelope (zone k=300)
-k = 300
-d_dsi, d_sh, d_ssi, d_es, d_gsf, d_st, nu_st, b_phi, b_r = (
-    star.eval_rotational_mixing_zone_jax(
-        r=jnp.float64(model_15m.r[k]),
-        hp=jnp.float64(model_15m.scale_height[k]),
-        grav=jnp.float64(model_15m.grav[k]),
-        rho=jnp.float64(model_15m.rho[k]),
-        t=jnp.float64(model_15m.t[k]),
-        cp=jnp.float64(model_15m.cp[k]),
-        opacity=jnp.float64(model_15m.opacity[k]),
-        chi_t=jnp.float64(model_15m.chi_t[k]),
-        chi_rho=jnp.float64(model_15m.chi_rho[k]),
-        grada=jnp.float64(model_15m.grada[k]),
-        gradt=jnp.float64(model_15m.gradt[k]),
-        brunt_n2_t=jnp.float64(max(float(model_15m.brunt_n2[k]), 1.0e-6)),
-        brunt_n2_mu=jnp.float64(2.0e-7),
-        omega=jnp.float64(5.0e-5),
-        dln_omega_dln_r=jnp.float64(-0.6),
-        abar=jnp.float64(1.3),
-        zbar=jnp.float64(1.1),
-    )
-)
-print(
-    f"Zone {k}: D_ES={float(d_es):.3e} cm^2/s, nu_ST={float(nu_st):.3e} cm^2/s, "
-    f"B_phi={float(b_phi):.2f} G, B_r={float(b_r):.4f} G"
-)
-
 # Populate full-star rotational mixing coefficients and diffuse Omega over dt = 1e3 yr
 d_rot_profile = model_15m.set_rotation_mixing_info()
+print(f"Rotational mixing profile shape: {d_rot_profile.shape}")
 omega_init = np.linspace(4.0e-5, 8.0e-5, model_15m.nz)
 nu_omega = np.full(model_15m.nz, 1.0e10)
 model_15m.run_omega_mix(dt=1.0e3 * 3.15576e7, omega=omega_init, nu_omega=nu_omega, n_substeps=4)

@@ -22,7 +22,6 @@ pub use crate::hydro_brunt_surf::{do_brunt_b, do_brunt_n2, eval_surf_bc};
 use crate::micro_cache::MicrophysicsCache;
 use crate::mixing_state::driving_species_for_cid;
 use crate::model::StarModel;
-use crate::rotation::update_rotation_distortion_factors;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_L_00,
 };
@@ -62,15 +61,12 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
 /// Refreshes the rotation information that `set_hydro_vars` sets before the
 /// gradients (`star/private/hydro_vars.f90:539-543`; `skip_rotation` is false
 /// for every caller of `set_hydro_vars`), whether or not MLT is evaluated.
+/// Upstream reads `j_rot` as it stands: it is set where `omega` is set
+/// (`read_model.f90:102-129`, `set_uniform_omega` in
+/// `hydro_rotation.f90:492-535`), not here.
 fn refresh_rotation_info_outside_solver(model: &mut StarModel) {
     if model.controls.rotation_flag {
-        if model.j_rot.iter().any(|&j| j != 0.0)
-            || model.omega.iter().all(|&w| w == 0.0)
-        {
-            crate::hydro_rotation::set_rotation_info(model, true);
-        } else {
-            update_rotation_distortion_factors(model);
-        }
+        crate::hydro_rotation::set_rotation_info(model, true);
     }
 }
 

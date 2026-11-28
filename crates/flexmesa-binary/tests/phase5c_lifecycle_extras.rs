@@ -12,11 +12,11 @@ use flexmesa_binary::{
 };
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    StarControls, StarError, StarJobControls, StarModel,
     apply_step_pre_physics, compute_convection_sigmas, do_struct_burn_mix,
-    load_zams_model, set_hydro_vars,
-    solve_henyey_step, star_evolve_step, sync_post_henyey_rotation,
-    update_rotation_distortion_factors,
+    load_zams_model, set_hydro_vars, set_rotation_info, solve_henyey_step,
+    star_evolve_step, sync_post_henyey_rotation,
+    use_xh_to_update_i_rot_and_j_rot, StarControls, StarError, StarJobControls,
+    StarModel,
 };
 
 #[test]
@@ -41,7 +41,8 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
         let frac = f64::from(u32::try_from(k).unwrap_or(0)) / denom;
         *om = 1.0e-5 * (1.0 + 0.5 * frac);
     }
-    update_rotation_distortion_factors(&mut star);
+    use_xh_to_update_i_rot_and_j_rot(&mut star);
+    set_rotation_info(&mut star, false);
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
     // `star/private/hydro_vars.f90` never assigns `s% sig`; upstream sets it
     // from `D_mix` in `struct_burn_mix` before the solver
@@ -135,7 +136,8 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
         let frac = f64::from(u32::try_from(k).unwrap_or(0)) / denom;
         *om = 2.0e-5 * (1.0 + 0.8 * frac);
     }
-    update_rotation_distortion_factors(&mut star_premix);
+    use_xh_to_update_i_rot_and_j_rot(&mut star_premix);
+    set_rotation_info(&mut star_premix, false);
     set_hydro_vars(&mut star_premix, false, false).expect("set_hydro_vars");
     star_premix.save_start_values().expect("save_start_values");
     star_premix.save_old_values();

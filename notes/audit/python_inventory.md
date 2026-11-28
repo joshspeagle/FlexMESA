@@ -11,7 +11,7 @@ Scope: `src/flexmesa/<pkg>/` (excluding `testing/` and `plotting/`) and external
 
 ## Per-Subpackage Summary
 
-Headline totals: **702** public Python items (**235** pure-python mirror, **212** PyO3 wrapper, **200** JAX kernel, **55** frozen JAX twin; **500** `mirror-current`, **171** `mirror-stale`, **31** `python-only`), plus **1491** `rust-only` public items and **19** `#295` JAX `xfail` tests.
+Headline totals: **701** public Python items (**235** pure-python mirror, **211** PyO3 wrapper, **200** JAX kernel, **55** frozen JAX twin; **499** `mirror-current`, **168** `mirror-stale`, **34** `python-only`), plus **1485** `rust-only` public items and **18** `#295` JAX `xfail` tests.
 
 | Subpackage | Python | `pure-python mirror` | `PyO3 wrapper` | `JAX kernel` | `JAX engine twin (frozen)` | `mirror-current` | `mirror-stale` | `python-only` | `rust-only` | `#295` xfails |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -19,8 +19,8 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `astero` | 30 | 0 | 18 | 0 | 12 | 24 | 6 | 0 | 44 | 0 |
 | `atm` | 20 | 2 | 15 | 3 | 0 | 18 | 2 | 0 | 9 | 0 |
 | `auto_diff` | 43 | 4 | 0 | 39 | 0 | 35 | 7 | 1 | 38 | 0 |
-| `bench` | 49 | 15 | 24 | 10 | 0 | 43 | 4 | 2 | 26 | 6 |
-| `binary` | 24 | 0 | 12 | 0 | 12 | 14 | 10 | 0 | 74 | 0 |
+| `bench` | 48 | 15 | 23 | 10 | 0 | 42 | 4 | 2 | 25 | 5 |
+| `binary` | 24 | 0 | 12 | 0 | 12 | 14 | 10 | 0 | 73 | 0 |
 | `chem` | 29 | 2 | 24 | 3 | 0 | 29 | 0 | 0 | 11 | 0 |
 | `colors` | 34 | 1 | 14 | 19 | 0 | 25 | 9 | 0 | 15 | 0 |
 | `constants` | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
@@ -39,10 +39,10 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `rates` | 25 | 3 | 16 | 6 | 0 | 19 | 6 | 0 | 19 | 0 |
 | `replay` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 29 | 0 |
 | `schema` | 16 | 12 | 4 | 0 | 0 | 16 | 0 | 0 | 9 | 0 |
-| `star` | 46 | 0 | 15 | 0 | 31 | 26 | 20 | 0 | 659 | 6 |
+| `star` | 46 | 0 | 15 | 0 | 31 | 26 | 17 | 3 | 655 | 6 |
 | `turb` | 47 | 44 | 1 | 2 | 0 | 35 | 12 | 0 | 2 | 0 |
 | `utils` | 11 | 5 | 5 | 1 | 0 | 10 | 1 | 0 | 19 | 0 |
-| **TOTAL** | **702** | **235** | **212** | **200** | **55** | **500** | **171** | **31** | **1491** | **19** |
+| **TOTAL** | **701** | **235** | **211** | **200** | **55** | **499** | **168** | **34** | **1485** | **18** |
 
 ## Oldest `mirror-stale` Rows
 
@@ -69,7 +69,7 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `src/flexmesa/math/trig.py:23` | `sin` | `crates/flexmesa-math/src/trig.rs:47` | `JAX kernel` | `2026-11-05T14:52Z` (`3663d87f`) | `2026-11-17T01:19Z` (`2a594542`) |
 | `src/flexmesa/math/trig.py:28` | `tan` | `crates/flexmesa-math/src/trig.rs:73` | `JAX kernel` | `2026-11-05T14:52Z` (`3663d87f`) | `2026-11-17T01:19Z` (`2a594542`) |
 
-## `#295` JAX `xfail` Tests (19)
+## `#295` JAX `xfail` Tests (18)
 
 | Test path:line | Test | Subpackage | Target symbol(s) | Reason |
 | :--- | :--- | :--- | :--- | :--- |
@@ -78,7 +78,6 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `tests/test_bench.py:218` | `test_wave3b_atm_table_stages_agree` | `bench` | `eval_table_atm`, `eval_table_jax`, `bench_atm_table` | #295: Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) and 4.705e-6 (N=8) against 5.0e-12. |
 | `tests/test_wave4_bench.py:163` | `test_wave4_star_micro_vars_rust_matches_frozen_jax` | `bench` | `eval_face_mlt_and_brunt_jax`, `bench_star_micro_vars` | #295: Rust do1_mlt_2 takes the face radiation pressure from the face temperature (MESA 26.4.1 star_utils.f90:3838-3843, #291); the frozen JAX face-MLT twin still interpolates the cell values (measured max_rel_err 8.9e-3). |
 | `tests/test_wave4_bench.py:178` | `test_wave4_star_hydro_eqns_rust_matches_frozen_jax` | `bench` | `eval_hydro_residuals_jax`, `bench_star_hydro_eqns` | #295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] (measured max_rel_err 9.73e-3). |
-| `tests/test_wave5_bench.py:93` | `test_wave5_diff_rot_rust_matches_frozen_jax` | `bench` | `eval_caplan_ocp_dstar_jax`, `bench_w5_diff_rot` | #295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about 5.4e-5). |
 | `tests/test_eos_wave3a3.py:496` | `test_eval_pc_eos_and_zones_match_across_rust_and_jax` | `eos` | `eval_pc_eos_zones`, `eval_pc_eos` | #295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table (pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), differing by up to 2.17e-6 on res and 4.35e-5 on derivatives. |
 | `tests/test_eos_wave3a3.py:1013` | `test_pc_multispecies_buckets_rust_matches_frozen_jax` | `eos` | `eval_pc_eos_zones`, `eval_pc_eos` | #295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table (pc_eos.f90:1895, create_EXCOR7_table.f90 THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical EXCOR7 (THETA > 0.04), differing by up to 3.72e-6 on res and 9.93e-8 on derivatives across the 9- and 35-species PC mixtures. |
 | `tests/test_eos_wave3b1.py:816` | `test_helm_ideal_edge_skip_blend_rust_and_jax_agree` | `eos` | `eos_dt_get`, `eos_dt_get_jax` | #295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff expressions (#349), which moves the cancellation-dominated de_dd of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the JAX twin keeps its own rounding. |
@@ -89,11 +88,11 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `tests/test_star_wave4_1.py:102` | `test_star_jax_face_gradr_and_gradt_match_rust` | `star` | `eval_face_mlt_and_brunt_jax`, `eval_face_mlt_jax` | #295: Rust computes the face radiation pressure from the face temperature (#291); the frozen JAX twin still interpolates it from the two cell values. |
 | `tests/test_star_wave4_2.py:46` | `test_eval_equations_rust_jax_residual_consistency` | `star` | `eval_hydro_vars`, `eval_equations`, `eval_hydro_residuals_jax` | #295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so zone nz - 1 momentum residual differs by 1.12e-5 against rtol=1e-13, atol=1e-13. |
 | `tests/test_star_wave4_4.py:40` | `test_adaptive_remeshing_and_mesh_gval_jax_consistency` | `star` | `eval_mesh_gval_jax` | #295: the Rust pre-MS model is now upstream's build_pre_ms_model (#154); at its 4 Msun inputs the frozen JAX eval_mesh_gval_jax (max/abs, not smooth) fails check_grads: JVP 322.85 against numerical 227.43 at rtol=1e-5. |
-| `tests/test_star_wave5_1.py:239` | `test_caplan_ocp_dstar_jax_matches_rust` | `star` | `eval_caplan_ocp_dstar_jax` | #295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (#156); the frozen JAX twin keeps its earlier expression. |
-| `tests/test_star_wave5_1.py:264` | `test_burgers_velocities_jax_match_rust` | `star` | `eval_burgers_velocities_jax` | #295: Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions. |
-| `tests/test_star_wave5_1.py:305` | `test_phase_separation_shift_jax_matches_rust` | `star` | `eval_phase_separation_shift_jax` | #295: Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (#156); the frozen JAX twin keeps its earlier expression. |
+| `tests/test_star_wave5_1.py:130` | `test_caplan_ocp_dstar_jax_matches_rust` | `star` | `eval_caplan_ocp_dstar_jax` | #295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (#156); the frozen JAX twin keeps its earlier expression. |
+| `tests/test_star_wave5_1.py:155` | `test_burgers_velocities_jax_match_rust` | `star` | `eval_burgers_velocities_jax` | #295: Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions. |
+| `tests/test_star_wave5_1.py:196` | `test_phase_separation_shift_jax_matches_rust` | `star` | `eval_phase_separation_shift_jax` | #295: Rust eval_phase_separation_shift follows the MESA 26.4.1 Blouin fits (#156); the frozen JAX twin keeps its earlier expression. |
 
-## Python & JAX Items (702)
+## Python & JAX Items (701)
 
 | Python path:line | Rust path:line | Kind | State | `#295` xfail |
 | :--- | :--- | :--- | :--- | :--- |
@@ -232,11 +231,10 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `src/flexmesa/bench/kernels_wave4.py:460` (`bench_star_remesh`) | `crates/flexmesa-bench/src/kernels_wave4.rs:347` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/bench/kernels_wave4.py:506` (`bench_star_evolve_step`) | `crates/flexmesa-bench/src/kernels_wave4.rs:407` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/bench/kernels_wave4.py:589` (`run_all_wave4_benchmarks`) | `crates/flexmesa-bench/src/kernels_wave4.rs:482` | `pure-python mirror` | `mirror-current` | - |
-| `src/flexmesa/bench/kernels_wave5.py:402` (`bench_w5_diff_rot`) | `crates/flexmesa-bench/src/kernels_wave5.rs:54` | `PyO3 wrapper` | `mirror-current` | `tests/test_wave5_bench.py:93::test_wave5_diff_rot_rust_matches_frozen_jax` |
-| `src/flexmesa/bench/kernels_wave5.py:418` (`bench_w5_riemann_rsp2`) | `crates/flexmesa-bench/src/kernels_wave5.rs:137` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/bench/kernels_wave5.py:434` (`bench_w5_binary_rlof`) | `crates/flexmesa-bench/src/kernels_wave5.rs:293` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/bench/kernels_wave5.py:450` (`bench_w5_astero_seism`) | `crates/flexmesa-bench/src/kernels_wave5.rs:342` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/bench/kernels_wave5.py:491` (`run_all_wave5_benchmarks`) | `crates/flexmesa-bench/src/kernels_wave5.rs:528` | `pure-python mirror` | `mirror-current` | - |
+| `src/flexmesa/bench/kernels_wave5.py:326` (`bench_w5_riemann_rsp2`) | `crates/flexmesa-bench/src/kernels_wave5.rs:65` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/bench/kernels_wave5.py:342` (`bench_w5_binary_rlof`) | `crates/flexmesa-bench/src/kernels_wave5.rs:221` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/bench/kernels_wave5.py:358` (`bench_w5_astero_seism`) | `crates/flexmesa-bench/src/kernels_wave5.rs:270` | `PyO3 wrapper` | `mirror-current` | - |
+| `src/flexmesa/bench/kernels_wave5.py:399` (`run_all_wave5_benchmarks`) | `crates/flexmesa-bench/src/kernels_wave5.rs:443` | `pure-python mirror` | `mirror-current` | - |
 | `src/flexmesa/bench/tdc_fast.py:76` (`eval_tdc_point_jax`) | `crates/flexmesa-bench/src/kernels_solver.rs:210` | `JAX kernel` | `mirror-current` | - |
 | `src/flexmesa/bench/tridiag_fast.py:32` (`bench_mtx_block_tridiag`) | `crates/flexmesa-mtx/src/block_tridiag.rs:472` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/binary/jax_jdot_tides.py:18` (`eval_bh_spin_and_edd_jax`) | `crates/flexmesa-binary/src/edd_wind.rs:150` | `JAX engine twin (frozen)` | `mirror-stale` | - |
@@ -704,12 +702,12 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `src/flexmesa/star/e2e.py:141` (`eval_astero_scaling_dnu_numax_uhz`) | `crates/flexmesa-star/src/pulse_modes.rs:548` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/star/e2e.py:157` (`eval_rsp_lina_modes`) | `crates/flexmesa-star/src/rsp_build.rs:206` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/star/e2e.py:191` (`build_rsp_envelope_model`) | `crates/flexmesa-star/src/rsp_build.rs:333` | `PyO3 wrapper` | `mirror-current` | - |
-| `src/flexmesa/star/jax_diffusion_rot.py:40` (`eval_rotation_fp_ft_jax`) | `crates/flexmesa-star/src/rotation.rs:62` | `JAX engine twin (frozen)` | `mirror-stale` | - |
-| `src/flexmesa/star/jax_diffusion_rot.py:77` (`eval_omega_crit_jax`) | `crates/flexmesa-star/src/rotation.rs:87` | `JAX engine twin (frozen)` | `mirror-stale` | - |
-| `src/flexmesa/star/jax_diffusion_rot.py:115` (`eval_rotational_mixing_zone_jax`) | `crates/flexmesa-star/src/rotation.rs:252` | `JAX engine twin (frozen)` | `mirror-stale` | - |
-| `src/flexmesa/star/jax_diffusion_rot.py:359` (`eval_caplan_ocp_dstar_jax`) | `crates/flexmesa-star/src/diffusion.rs:2246` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:239::test_caplan_ocp_dstar_jax_matches_rust`, `tests/test_wave5_bench.py:93::test_wave5_diff_rot_rust_matches_frozen_jax` |
-| `src/flexmesa/star/jax_diffusion_rot.py:384` (`eval_burgers_velocities_jax`) | `crates/flexmesa-star/src/diffusion.rs:2326` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:264::test_burgers_velocities_jax_match_rust` |
-| `src/flexmesa/star/jax_diffusion_rot.py:524` (`eval_phase_separation_shift_jax`) | `crates/flexmesa-star/src/phase_separation.rs:85` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:305::test_phase_separation_shift_jax_matches_rust` |
+| `src/flexmesa/star/jax_diffusion_rot.py:40` (`eval_rotation_fp_ft_jax`) | - | `JAX engine twin (frozen)` | `python-only` | - |
+| `src/flexmesa/star/jax_diffusion_rot.py:77` (`eval_omega_crit_jax`) | - | `JAX engine twin (frozen)` | `python-only` | - |
+| `src/flexmesa/star/jax_diffusion_rot.py:115` (`eval_rotational_mixing_zone_jax`) | - | `JAX engine twin (frozen)` | `python-only` | - |
+| `src/flexmesa/star/jax_diffusion_rot.py:359` (`eval_caplan_ocp_dstar_jax`) | `crates/flexmesa-star/src/diffusion.rs:2246` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:130::test_caplan_ocp_dstar_jax_matches_rust` |
+| `src/flexmesa/star/jax_diffusion_rot.py:384` (`eval_burgers_velocities_jax`) | `crates/flexmesa-star/src/diffusion.rs:2326` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:155::test_burgers_velocities_jax_match_rust` |
+| `src/flexmesa/star/jax_diffusion_rot.py:524` (`eval_phase_separation_shift_jax`) | `crates/flexmesa-star/src/phase_separation.rs:85` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave5_1.py:196::test_phase_separation_shift_jax_matches_rust` |
 | `src/flexmesa/star/jax_evolve.py:19` (`eval_mesh_gval_jax`) | `crates/flexmesa-star/src/mesh_adjust.rs:333` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave4_4.py:40::test_adaptive_remeshing_and_mesh_gval_jax_consistency` |
 | `src/flexmesa/star/jax_evolve.py:60` (`eval_varcontrol_jax`) | `crates/flexmesa-star/src/timestep.rs:252` | `JAX engine twin (frozen)` | `mirror-stale` | - |
 | `src/flexmesa/star/jax_evolve.py:105` (`eval_h211_timestep_jax`) | `crates/flexmesa-star/src/timestep.rs:306` | `JAX engine twin (frozen)` | `mirror-stale` | - |
@@ -725,7 +723,7 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `src/flexmesa/star/jax_kernels.py:87` (`face_weights_jax`) | `crates/flexmesa-star/src/mesh.rs:290` | `JAX engine twin (frozen)` | `mirror-current` | - |
 | `src/flexmesa/star/jax_kernels.py:108` (`interp_cell_to_face_jax`) | `crates/flexmesa-star/src/mesh.rs:329` | `JAX engine twin (frozen)` | `mirror-stale` | - |
 | `src/flexmesa/star/jax_kernels.py:127` (`eval_optical_depth_jax`) | `crates/flexmesa-star/src/micro.rs:1816` | `JAX engine twin (frozen)` | `mirror-current` | - |
-| `src/flexmesa/star/jax_kernels.py:268` (`eval_face_mlt_and_brunt_jax`) | `crates/flexmesa-star/src/hydro_vars.rs:45` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave4_1.py:102::test_star_jax_face_gradr_and_gradt_match_rust`, `tests/test_wave4_bench.py:163::test_wave4_star_micro_vars_rust_matches_frozen_jax` |
+| `src/flexmesa/star/jax_kernels.py:268` (`eval_face_mlt_and_brunt_jax`) | `crates/flexmesa-star/src/hydro_vars.rs:44` | `JAX engine twin (frozen)` | `mirror-stale` | `tests/test_star_wave4_1.py:102::test_star_jax_face_gradr_and_gradt_match_rust`, `tests/test_wave4_bench.py:163::test_wave4_star_micro_vars_rust_matches_frozen_jax` |
 | `src/flexmesa/star/jax_kernels.py:347` (`eval_hydro_residuals_jax`) | `crates/flexmesa-star/src/hydro_eqns.rs:973` | `JAX engine twin (frozen)` | `mirror-current` | `tests/test_star_wave4_2.py:46::test_eval_equations_rust_jax_residual_consistency`, `tests/test_wave4_bench.py:178::test_wave4_star_hydro_eqns_rust_matches_frozen_jax` |
 | `src/flexmesa/star/jax_kernels.py:536` (`solve_henyey_linear_jax`) | `crates/flexmesa-star/src/solver.rs:534` | `JAX engine twin (frozen)` | `mirror-stale` | - |
 | `src/flexmesa/star/jax_rsp.py:37` (`rsp2_flux_limiter_jax`) | `crates/flexmesa-star/src/rsp2.rs:138` | `JAX engine twin (frozen)` | `mirror-current` | - |
@@ -800,7 +798,7 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `src/flexmesa/utils/__init__.py:282` (`tokenize`) | `crates/flexmesa-utils/src/lib.rs:696` | `PyO3 wrapper` | `mirror-current` | - |
 | `src/flexmesa/utils/__init__.py:302` (`Tokenizer`) | `crates/flexmesa-utils/src/lib.rs:569` | `pure-python mirror` | `mirror-stale` | - |
 
-## Public Rust Items With No Python Access (1491)
+## Public Rust Items With No Python Access (1485)
 
 | Crate | Rust path:line | Item kind | Name | State |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1041,10 +1039,9 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave3b.rs:280` | `fn` | `bench_net_eval` | `rust-only` |
 | `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave3b.rs:389` | `fn` | `bench_atm_table` | `rust-only` |
 | `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave4.rs:264` | `fn` | `bench_star_newton_step` | `rust-only` |
-| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:443` | `fn` | `bench_w5_diff_rot` | `rust-only` |
-| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:457` | `fn` | `bench_w5_riemann_rsp2` | `rust-only` |
-| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:472` | `fn` | `bench_w5_binary_rlof` | `rust-only` |
-| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:486` | `fn` | `bench_w5_astero_seism` | `rust-only` |
+| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:372` | `fn` | `bench_w5_riemann_rsp2` | `rust-only` |
+| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:387` | `fn` | `bench_w5_binary_rlof` | `rust-only` |
+| `flexmesa-bench` | `crates/flexmesa-bench/src/kernels_wave5.rs:401` | `fn` | `bench_w5_astero_seism` | `rust-only` |
 | `flexmesa-bench` | `crates/flexmesa-bench/src/lib.rs:121` | `fn` | `measure_stage3_chunks_us` | `rust-only` |
 | `flexmesa-bench` | `crates/flexmesa-bench/src/lib.rs:266` | `fn` | `nan_max` | `rust-only` |
 | `flexmesa-bench` | `crates/flexmesa-bench/src/tridiag_fast.rs:67` | `fn` | `fast_block_thomas_solve` | `rust-only` |
@@ -1091,18 +1088,17 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `flexmesa-binary` | `crates/flexmesa-binary/src/roche_deformation.rs:377` | `fn` | `eval_synchronicity_switch` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/roche_deformation.rs:414` | `struct` | `BinaryTidalDeformationHook` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/system.rs:79` | `struct` | `BinaryStepCounters` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:42` | `struct` | `JdotBreakdown` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:62` | `fn` | `eval_star_spin_j` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:105` | `fn` | `eval_star_r_gyr_sq` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:149` | `fn` | `eval_convective_envelope_mass_and_size` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:163` | `fn` | `apply_initial_orbit_sync` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:185` | `fn` | `restore_smooth_omega_after_remesh` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:217` | `fn` | `conserve_spin_after_henyey` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:341` | `fn` | `apply_tidal_spin_sync` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:774` | `fn` | `eval_gated_jdot` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1036` | `struct` | `EdotBreakdown` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1050` | `fn` | `eval_coupled_edot` | `rust-only` |
-| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1078` | `fn` | `eval_coupled_edot_breakdown` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:41` | `struct` | `JdotBreakdown` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:61` | `fn` | `eval_star_spin_j` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:104` | `fn` | `eval_star_r_gyr_sq` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:148` | `fn` | `eval_convective_envelope_mass_and_size` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:162` | `fn` | `apply_initial_orbit_sync` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:189` | `fn` | `restore_smooth_omega_after_remesh` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:306` | `fn` | `apply_tidal_spin_sync` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:738` | `fn` | `eval_gated_jdot` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1000` | `struct` | `EdotBreakdown` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1014` | `fn` | `eval_coupled_edot` | `rust-only` |
+| `flexmesa-binary` | `crates/flexmesa-binary/src/system_jdot.rs:1042` | `fn` | `eval_coupled_edot_breakdown` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/system_rlof.rs:42` | `struct` | `CoupledMdotAccounting` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/system_rlof.rs:74` | `struct` | `BinaryStepSnapshot` | `rust-only` |
 | `flexmesa-binary` | `crates/flexmesa-binary/src/system_rlof.rs:145` | `struct` | `BinaryStepScalars` | `rust-only` |
@@ -1810,8 +1806,8 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_temperature.rs:41` | `fn` | `interp_p_point_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_temperature.rs:54` | `fn` | `set_rsp_lsurf_bc` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_temperature.rs:172` | `fn` | `do1_temperature_eqn` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_vars.rs:112` | `fn` | `update_sig_from_d_mix` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/hydro_vars.rs:1282` | `fn` | `check_for_redo_mlt` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_vars.rs:108` | `fn` | `update_sig_from_d_mix` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/hydro_vars.rs:1278` | `fn` | `check_for_redo_mlt` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_work.rs:24` | `fn` | `eval_cell_dpe_dt_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_work.rs:42` | `fn` | `eval_dke_dt_ad` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/hydro_work.rs:52` | `fn` | `eval_v_flag_dke_dt_ad` | `rust-only` |
@@ -1913,8 +1909,8 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:598` | `fn` | `get_old_value_integral` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:648` | `fn` | `solve_cell_lnt_for_energy` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:756` | `fn` | `do_interp_cell_val` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:1877` | `fn` | `remap_onto_dq` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:1926` | `fn` | `do_prune_mesh_surface` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:1871` | `fn` | `remap_onto_dq` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/mesh_remap.rs:1920` | `fn` | `do_prune_mesh_surface` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/micro.rs:150` | `fn` | `global_basic_net` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/micro.rs:176` | `fn` | `get_or_load_net_with_fe56ec` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/micro.rs:311` | `fn` | `resolve_model_net` | `rust-only` |
@@ -2093,13 +2089,9 @@ Headline totals: **702** public Python items (**235** pure-python mirror, **212*
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann_ad.rs:105` | `fn` | `do_uface_and_pface` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann_eqns.rs:20` | `fn` | `do1_riemann_momentum_eqn` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/riemann_eqns.rs:241` | `fn` | `eval_u_flag_total_energy_rates_ad` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:17` | `struct` | `RotationalMixZone` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:106` | `fn` | `eval_thermal_diffusivity` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:121` | `fn` | `eval_magnetic_diffusivity` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:348` | `fn` | `update_rotation_distortion_factors` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:408` | `fn` | `conserve_shell_j_rot_and_distortion` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:426` | `fn` | `augment_d_mix_with_rotation` | `rust-only` |
-| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:437` | `fn` | `sync_post_henyey_rotation` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:11` | `fn` | `conserve_shell_j_rot_and_distortion` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:22` | `fn` | `augment_d_mix_with_rotation` | `rust-only` |
+| `flexmesa-star` | `crates/flexmesa-star/src/rotation.rs:33` | `fn` | `sync_post_henyey_rotation` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rotation_mix_info.rs:27` | `struct` | `RotMixArrays` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rotation_mix_info.rs:97` | `struct` | `StStartInfo` | `rust-only` |
 | `flexmesa-star` | `crates/flexmesa-star/src/rotation_mix_info.rs:118` | `fn` | `store_st_start_info` | `rust-only` |

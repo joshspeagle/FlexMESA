@@ -8,6 +8,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      tier:
+        description: >-
+          t0 (default) runs the per-push jobs; t1 adds the train canary and
+          macOS bit-identity (DECISIONS #81). Dispatch t1 only on a branch
+          that is about to merge.
+        type: choice
+        options: [t0, t1]
+        default: t0
 
 permissions:
   contents: read
@@ -342,10 +351,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # DECISIONS #81: macOS bit-identity runs on train PRs and manual
-        # runs; the nightly campaign checks it uncapped on main. Other
-        # pushes compare 1 and 4 threads on Linux only.
-        os: ${{ fromJSON((startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        # DECISIONS #81: macOS bit-identity runs on train PRs and on manual
+        # runs dispatched with tier t1; the nightly campaign checks it
+        # uncapped on main. Other pushes compare 1 and 4 threads on Linux
+        # only.
+        os: ${{ fromJSON((startsWith(github.head_ref, 'train-') || inputs.tier == 't1') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -376,7 +386,7 @@ jobs:
   strict-cross-machine-gate:
     name: Strict x86_64 vs aarch64 Bit-Identity Gate
     needs: strict-determinism
-    if: startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.head_ref, 'train-') || inputs.tier == 't1'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -407,7 +417,7 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.engine_runs == 'true' &&
-      (startsWith(github.head_ref, 'train-') || github.event_name == 'workflow_dispatch')
+      (startsWith(github.head_ref, 'train-') || inputs.tier == 't1')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -452,7 +462,7 @@ jobs:
   train-canary:
     name: Train Canary (merge and gate)
     needs: train-canary-shard
-    if: always() && needs.train-canary-shard.result != 'skipped'
+    if: "!cancelled() && needs.train-canary-shard.result != 'skipped'"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

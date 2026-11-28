@@ -24,14 +24,14 @@ use flexmesa_const::{CRAD, LN10};
 use flexmesa_eos::{
     eos_dt_get, eos_dt_get_rho, eos_dt_get_t, eos_pt_get, eos_pt_get_pgas,
     eos_pt_get_t, eval_cms_eos, eval_free_eos, eval_opal_scvh_eos, CmsConfig,
-    CmsTableSet, EosConfig, EosDtTableSet, FreeEosConfig, HelmTable,
-    OpalScvhConfig, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO,
-    I_DS_DT, I_ETA, I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL,
-    I_FRAC_OPAL_SCVH, I_FRAC_PC, I_FRAC_SKYE, I_GAMMA1, I_GAMMA3, I_GRAD_AD,
-    I_LATENT_DDLNRHO, I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
-    I_MU, I_PHASE,
+    CmsTableSet, EosConfig, EosDtTableSet, EosEvalOutput, FreeEosConfig,
+    HelmTable, OpalScvhConfig, EOS_BASIC_RESULT_NAMES, I_CHI_RHO, I_CHI_T,
+    I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT, I_ETA, I_FRAC_CMS,
+    I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH, I_FRAC_PC,
+    I_FRAC_SKYE, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LATENT_DDLNRHO,
+    I_LATENT_DDLNT, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU, I_PHASE,
 };
-use flexmesa_math::exp10;
+use flexmesa_math::{exp10, with_numerics_mode, NumericsMode};
 
 /// Builds the 7-species composition `(chem_id, xa)` matching `Init_Composition` in `eos_support.f90`.
 fn init_composition(
@@ -434,8 +434,8 @@ const EOS_PGAS_ION_ORACLES: &str = include_str!(
     "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
 );
 
-/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
-fn mesa_pgas_bits(case: &str, role: &str, field: &str) -> u64 {
+/// Return the MESA bit pattern of `(field, part)` in `case` (`role` is `in` or `out`).
+fn mesa_eos_bits(case: &str, role: &str, field: &str, part: &str) -> u64 {
     for line in EOS_PGAS_ION_ORACLES.lines() {
         if line.starts_with('#') {
             continue;
@@ -445,13 +445,77 @@ fn mesa_pgas_bits(case: &str, role: &str, field: &str) -> u64 {
             && cols[0] == case
             && cols[1] == role
             && cols[2] == field
-            && cols[3] == "val"
+            && cols[3] == part
         {
             let hex = cols[4].trim_start_matches("0x");
             return u64::from_str_radix(hex, 16).expect("hex column");
         }
     }
-    panic!("no MESA eosPT_get_Pgas oracle row for {case} {role} {field}");
+    panic!("no MESA eos_pgas_ion oracle row for {case} {role} {field} {part}");
+}
+
+/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
+fn mesa_pgas_bits(case: &str, role: &str, field: &str) -> u64 {
+    mesa_eos_bits(case, role, field, "val")
+}
+
+fn check_get1_bits(
+    case_id: &str,
+    rho: f64,
+    temp: f64,
+    out: &EosEvalOutput,
+    diffs: &mut Vec<String>,
+) {
+    for (fld, val) in [
+        ("rho", rho),
+        ("logRho", flexmesa_math::log10(rho)),
+        ("T", temp),
+        ("logT", flexmesa_math::log10(temp)),
+    ] {
+        let exp = mesa_eos_bits(case_id, "in", fld, "val");
+        if val.to_bits() != exp {
+            diffs.push(format!(
+                "{case_id}.in.{fld}: MESA 0x{exp:016X} vs Flex 0x{:016X} ULP={}",
+                val.to_bits(),
+                val.to_bits().abs_diff(exp),
+            ));
+        }
+    }
+    for idx in 0..16 {
+        let fld = format!("res_{idx}");
+        let name = EOS_BASIC_RESULT_NAMES[idx];
+        for (part, got) in [
+            ("val", out.res[idx]),
+            ("d_dlnd", out.d_dlnd[idx]),
+            ("d_dlnT", out.d_dln_t[idx]),
+        ] {
+            let exp = mesa_eos_bits(case_id, "out", &fld, part);
+            let got_bits = got.to_bits();
+            if got_bits != exp {
+                diffs.push(format!(
+                    "{case_id}.out[{idx}:{name}].{part}: MESA 0x{exp:016X} ({:.17e}) vs Flex 0x{got_bits:016X} ({got:.17e}) ULP={}",
+                    f64::from_bits(exp),
+                    got_bits.abs_diff(exp),
+                ));
+            }
+        }
+    }
+    // d_dxa by charge (eosdt_eval.f90:1618-1627): lnPgas and lnE channels.
+    assert_eq!(out.d_dxa.len(), 7, "{case_id}: d_dxa species count");
+    for (i, row) in out.d_dxa.iter().enumerate() {
+        for (c, got) in row.iter().enumerate() {
+            let fld = format!("dxa_s{i}_c{c}");
+            let exp = mesa_eos_bits(case_id, "out", &fld, "val");
+            let got_bits = got.to_bits();
+            if got_bits != exp {
+                diffs.push(format!(
+                    "{case_id}.out.{fld}: MESA 0x{exp:016X} ({:.17e}) vs Flex 0x{got_bits:016X} ({got:.17e}) ULP={}",
+                    f64::from_bits(exp),
+                    got_bits.abs_diff(exp),
+                ));
+            }
+        }
+    }
 }
 
 fn assert_pgas_bits(label: &str, actual: f64, expected_bits: u64) {
@@ -509,6 +573,48 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         false,
     );
 
+    with_numerics_mode(NumericsMode::Strict, || {
+        let opal_strict = eval_opal_scvh_eos(
+            dt_tables,
+            1.0e-2,
+            1.0e5,
+            &chem_id,
+            &xa,
+            &OpalScvhConfig::default(),
+        )
+        .expect("OPAL/SCVH Strict evaluation");
+        let free_strict = eval_free_eos(
+            dt_tables,
+            1.0e-2,
+            1.0e6,
+            &chem_id,
+            &xa,
+            &FreeEosConfig::default(),
+        )
+        .expect("FreeEOS Strict evaluation");
+        let mut diffs = Vec::new();
+        check_get1_bits(
+            "get1_opal_scvh_solar_1em2_1e5",
+            1.0e-2,
+            1.0e5,
+            &opal_strict,
+            &mut diffs,
+        );
+        check_get1_bits(
+            "get1_free_eos_solar_1em2_1e6",
+            1.0e-2,
+            1.0e6,
+            &free_strict,
+            &mut diffs,
+        );
+        assert!(
+            diffs.is_empty(),
+            "get1_for_eosdt departures ({}):\n{}",
+            diffs.len(),
+            diffs.join("\n")
+        );
+    });
+
     // Verify both gas-only (`norad`, `include_radiation = false`) and default
     // radiation-enabled (`include_radiation = true`, `eos.defaults:163`) `CMS`
     // against compiled MESA `26.4.1` across all 26x3 slots.
@@ -516,15 +622,9 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         include_radiation: false,
         ..CmsConfig::default()
     };
-    let out_cms_norad = eval_cms_eos(
-        cms_tables,
-        &cms_norad_cfg,
-        1.0e-2,
-        1.0e5,
-        &chem_id,
-        &xa,
-    )
-    .expect("CMS standalone evaluation (include_radiation = false)");
+    let out_cms_norad =
+        eval_cms_eos(cms_tables, &cms_norad_cfg, 1.0e-2, 1.0e5, &chem_id, &xa)
+            .expect("CMS standalone evaluation (include_radiation = false)");
     assert_eq!(out_cms_norad.res[I_FRAC_CMS], 1.0);
     common::assert_eos_against_mesa(
         "cms_solar_1em2_1e5_norad",
@@ -559,8 +659,7 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         .expect("reference eosPT");
     let target_lne = pt_ref.eos.res[I_LN_E];
 
-    let exp_pt_t =
-        common::load_scalar_row::<6>("INV", "solar_pt_get_t_15_7p2");
+    let exp_pt_t = common::load_scalar_row::<6>("INV", "solar_pt_get_t_15_7p2");
     let inv_t = eos_pt_get_t(
         ht,
         &chem_id,
@@ -575,7 +674,12 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         &cfg,
     )
     .expect("eos_pt_get_t must converge");
-    assert_rel_close("eosPT_get_T logT", inv_t.log10_result, exp_pt_t[0], 1.0e-12);
+    assert_rel_close(
+        "eosPT_get_T logT",
+        inv_t.log10_result,
+        exp_pt_t[0],
+        1.0e-12,
+    );
     assert_rel_close(
         "eosPT_get_T log10_rho",
         inv_t.pt.log10_rho,

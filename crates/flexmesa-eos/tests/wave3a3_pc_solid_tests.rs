@@ -15,6 +15,49 @@ use flexmesa_eos::{
     eos_dt_get, eval_pc_eos, get_pc_alfa, EosConfig, HelmTable, PcConfig,
     I_FRAC_IDEAL,
 };
+use flexmesa_math::{with_numerics_mode, NumericsMode};
+
+const EOS_PGAS_ION_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+);
+
+fn mesa_pc_bits(case: &str, role: &str, field: &str) -> u64 {
+    for line in EOS_PGAS_ION_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[1] == role
+            && cols[2] == field
+            && cols[3] == "val"
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA Get_PC_alfa oracle row for {case} {role} {field}");
+}
+
+fn check_pc_alfa_bits(case_id: &str, alfa: f64, dt: f64, dr: f64) {
+    let mut bad = Vec::new();
+    for (fld, got) in
+        [("alfa", alfa), ("d_alfa_dlogT", dt), ("d_alfa_dlogRho", dr)]
+    {
+        let exp = mesa_pc_bits(case_id, "out", fld);
+        if got.to_bits() != exp {
+            bad.push(format!(
+                "{case_id}.{fld}: MESA {e:.17e} (0x{exp:016X}) \
+                 vs Flex {got:.17e} (0x{:016X}) ULP={}",
+                got.to_bits(),
+                got.to_bits().abs_diff(exp),
+                e = f64::from_bits(exp),
+            ));
+        }
+    }
+    assert_eq!(bad.len(), 0, "Get_PC_alfa departures:\n{}", bad.join("\n"));
+}
 
 fn make_comp(
     y_in: f64,
@@ -121,7 +164,8 @@ fn test_pc_solid_and_quantum_melting_regimes_match_mesa_26_4_1_oracle() {
 fn test_pc_alfa_and_helm_off_table_skip_match_mesa_26_4_1_oracle() {
     let mut pc_cfg = PcConfig::default();
 
-    let exp1 = common::load_scalar_row::<3>("ALFA", "pc_alfa_gamma_c12_2p9_6p5");
+    let exp1 =
+        common::load_scalar_row::<3>("ALFA", "pc_alfa_gamma_c12_2p9_6p5");
     let (a1, dt1, dr1) = get_pc_alfa(&pc_cfg, 2.9, 6.5, 12.0, 6.0);
     assert!((a1 - exp1[0]).abs() < 1.0e-14);
     assert!((dt1 - exp1[1]).abs() < 1.0e-14);
@@ -141,6 +185,19 @@ fn test_pc_alfa_and_helm_off_table_skip_match_mesa_26_4_1_oracle() {
     assert!((a3 - exp3[0]).abs() < 1.0e-14);
     assert!((dt3 - exp3[1]).abs() < 1.0e-13);
     assert!((dr3 - exp3[2]).abs() < 1.0e-14);
+
+    with_numerics_mode(NumericsMode::Strict, || {
+        let mut pc_s = PcConfig::default();
+        let (a1s, dt1s, dr1s) = get_pc_alfa(&pc_s, 2.9, 6.5, 12.0, 6.0);
+        check_pc_alfa_bits("pc_alfa_gamma_c12_2p9_6p5", a1s, dt1s, dr1s);
+
+        let (a2s, dt2s, dr2s) = get_pc_alfa(&pc_s, 3.5, 8.35, 12.0, 6.0);
+        check_pc_alfa_bits("pc_alfa_gamma_c12_3p5_8p35", a2s, dt2s, dr2s);
+
+        pc_s.pc_use_gamma_limit_instead_of_t = false;
+        let (a3s, dt3s, dr3s) = get_pc_alfa(&pc_s, 3.3, 7.65, 12.0, 6.0);
+        check_pc_alfa_bits("pc_alfa_tlim_c12_3p3_7p65", a3s, dt3s, dr3s);
+    });
 
     // Out-of-range HELM point (`eos/private/helm.f90:192-212`, `eosdt_eval.f90:1511-1514`)
     let ht = HelmTable::builtin().expect("builtin HELM table");

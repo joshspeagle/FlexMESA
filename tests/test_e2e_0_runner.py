@@ -164,6 +164,17 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
     declared_unloadable_mods = {
         "star/test_suite/custom_rates/before_flash.mod": "nco.net",
         "star/test_suite/wd_aic/wd_aic.mod": "wd_aic.net",
+        # These RTI models load only with `inlist_shock_common` (line 51:
+        # RTI_min_dm_behind_shock_for_full_on = 0.01). With the default 0,
+        # the shock taper divides by zero (mix_info.f90:2022-2023) and
+        # eta_RTI is NaN where alpha_RTI = 0, so upstream's set_vars at
+        # load fails too (mix_info.f90:2033-2035, read_model.f90:162).
+        "star/test_suite/ccsn_IIp/standard_shock_part2.mod": (
+            "non-finite eta_RTI"
+        ),
+        "star/test_suite/ccsn_IIp/standard_shock_part3.mod": (
+            "non-finite eta_RTI"
+        ),
     }
     unloadable_seen: set[str] = set()
     # `test_memory` is a standalone memory-leak harness whose `rn` runs

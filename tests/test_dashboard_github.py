@@ -31,7 +31,7 @@ def _issue(
 
 
 def _row(num: int) -> str:
-    return f"| #{num} | `x.f90:1` | desc |"
+    return f"| #{num} | upstream location | desc |"
 
 
 BUG = ("deferred", "upstream-bug")

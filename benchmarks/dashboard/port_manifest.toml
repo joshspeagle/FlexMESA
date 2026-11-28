@@ -6983,7 +6983,10 @@ upstream_lines = 334
 upstream_sha256 = "acb5f2195069675687e30bf7d96489b8a9d9f6de545901f048145911bf47528f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_eval_ecapture_reaction_info"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_eval_ecapture_reaction_info" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: per-pair evaluation from caller-resolved tables instead of the dict lookups; the eta < 2*beta exit returns q = q_tot with zero rates where upstream leaves the outputs untouched; out-of-range state index is an error (#737)
 
 [[files]]
 upstream_path = "rates/private/eval_psi.f90"

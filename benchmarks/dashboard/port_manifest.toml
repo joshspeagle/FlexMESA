@@ -7714,6 +7714,19 @@ flexmesa_files = ["crates/flexmesa-star/src/conv_premix.rs", "crates/flexmesa-st
 notes = "Ported under #155: verbatim do_conv_premix with per-zone ZoneInfo tracking, 1..=1024 subcell advance_bdy_by_one_cell, fixed-(Pgas,T)/(rho,T) EOS + kap + MLT re-evaluation, time_factor, avoid_increase, and dump_snapshots."
 [files.routine_map]
 "do_conv_premix" = "crates/flexmesa-star/src/conv_premix.rs::do_conv_premix"
+"advance_bdy_" = "crates/flexmesa-star/src/conv_premix.rs::advance_bdy"
+"advance_bdy_by_one_cell_" = "crates/flexmesa-star/src/conv_premix.rs::advance_bdy_by_one_cell"
+"init_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::init_zone_info"
+"create_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::create_zone_info"
+"update_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::update_zone_info"
+"set_penetration_velocities_" = "crates/flexmesa-star/src/conv_premix.rs::set_penetration_velocities"
+"set_burn_data_" = "crates/flexmesa-star/src/conv_premix.rs::set_burn_data"
+"set_abund_data_" = "crates/flexmesa-star/src/conv_premix.rs::set_abund_data"
+"validate_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::validate_zone_info"
+"update_model_" = "crates/flexmesa-star/src/conv_premix.rs::update_model"
+"dump_snapshot_" = "crates/flexmesa-star/src/conv_premix.rs::dump_snapshot"
+"save_model_" = "crates/flexmesa-star/src/conv_premix.rs::save_model"
+"restore_model_" = "crates/flexmesa-star/src/conv_premix.rs::restore_model"
 
 [[files]]
 upstream_path = "star/private/create_initial_model.f90"
@@ -7875,6 +7888,10 @@ flexmesa_files = ["crates/flexmesa-star/src/eps_grav.rs"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `do_std_eps_grav` and `do_lnS_eps_grav` present; blend weight differs (C1-20); composition term via partials rather than EOS re-evaluation at `xa_start`"
 [files.routine_map]
 "eval_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
+"eval1_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_cell+pc_lns_blend_weight"
+"do_std_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_std_cell+eval_eps_grav_std_cell_with_ctx"
+"do_lnS_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_lns_cell"
+"eval_eps_grav_composition" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_composition_term+fill_d_eps_grav_dx_cell"
 "zero_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
 
 [[files]]
@@ -8086,11 +8103,22 @@ upstream_sha256 = "a76112b95571180b51fec2a3fecd7a942e4c9f87115fb126c1dfbfb5b1d46
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_momentum.rs"]
 notes = "seeded from coverage-map.md (ported): quick. 6/15 names incl. `do1_momentum_eqn`, `do1_radius_eqn`"
+routine_map_partial = ["expected_non_HSE_term"]
 [files.routine_map]
+"do_surf_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::eval_surf_momentum_bc_pressure_ad+do1_momentum_eqn"
 "do1_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"get1_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"get1_momentum_eqn::init" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+eval_face_dm_bar"
+"get1_momentum_eqn::setup_HSE" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+expected_hse_grav_and_area"
+"get1_momentum_eqn::setup_non_HSE" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+expected_non_hse_term"
+"get1_momentum_eqn::setup_dPtot" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+calc_ptot_ad_tw"
+"get1_momentum_eqn::setup_d_mlt_Pturb" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+wrap_d_00+wrap_d_m1"
+"get1_momentum_eqn::setup_RTI_terms" = "crates/flexmesa-star/src/hydro_momentum.rs::setup_rti_momentum_terms"
+"get1_momentum_eqn::unpack_res18" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"expected_HSE_grav_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_hse_grav_and_area+expected_hse_grav_term"
+"expected_non_HSE_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_non_hse_term"
+"get_dPtot_face_info" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+calc_ptot_ad_tw"
 "do1_radius_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_radius_eqn"
-"do_surf_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::eval_surf_momentum_bc_pressure_ad"
-"expected_HSE_grav_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_hse_grav_term"
 
 [[files]]
 upstream_path = "star/private/hydro_riemann.f90"
@@ -8394,7 +8422,16 @@ status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_plan.rs"]
 notes = "updated for #153: do_mesh_plan, pick_new_points, pick_next_dq, split1, smooth_new_points, and round_off_xq"
 [files.routine_map]
-"do_mesh_plan" = "crates/flexmesa-star/src/mesh_plan.rs::do_mesh_plan"
+"do_mesh_plan" = "crates/flexmesa-star/src/mesh_plan.rs::do_mesh_plan+do_mesh_plan_with_xa"
+"do_mesh_plan::split1" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::split1"
+"do_mesh_plan::okay_to_split1" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::okay_to_split1"
+"do_mesh_plan::smooth_new_points" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::smooth_new_points"
+"do_mesh_plan::pick_new_points" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick_new_points"
+"do_mesh_plan::is_convective_boundary" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::is_convective_boundary"
+"do_mesh_plan::is_crystal_boundary" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::is_crystal_boundary"
+"pick_next_dq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick_next_dq"
+"pick1_dq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick1_dq"
+"round_off_xq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::round_off_xq"
 
 [[files]]
 upstream_path = "star/private/micro.f90"
@@ -8922,6 +8959,11 @@ flexmesa_files = ["crates/flexmesa-star/src/predictive_mix.rs", "crates/flexmesa
 notes = "Ported under #155: verbatim add_predictive_mixing and do_predictive_mixing with trial-mixed Schwarzschild EOS/kap/MLT re-evaluation, Ledoux extension, avoid_reversal, Spruit (2015) limit_ingestion, superad_thresh, cz_bdy_dq via find0, and #266 mix_mask reproduction."
 [files.routine_map]
 "add_predictive_mixing" = "crates/flexmesa-star/src/predictive_mix.rs::add_predictive_mixing"
+"do_predictive_mixing" = "crates/flexmesa-star/src/predictive_mix.rs::do_predictive_mixing+apply_predicted_face+eval_superad_min"
+"eval_abundances" = "crates/flexmesa-star/src/predictive_mix.rs::eval_abundances"
+"eval_mixing_coeffs" = "crates/flexmesa-star/src/predictive_mix.rs::eval_mixing_coeffs"
+"eval_eos" = "crates/flexmesa-star/src/mixing_micro.rs::eval_uniform_xa_eos_kap_range"
+"eval_ingest_limit" = "crates/flexmesa-star/src/predictive_mix.rs::eval_ingest_limit"
 
 [[files]]
 upstream_path = "star/private/profile.f90"
@@ -9756,11 +9798,21 @@ module = "star"
 upstream_lines = 706
 upstream_sha256 = "1d768f3e5185e8cec478b8917b858e274b9fec9b148100d6b80895a538acacde"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs", "crates/flexmesa-star/src/evolve.rs"]
 notes = "updated for #159: all wind schemes + 'other', eval_super_eddington_wind (0.5*vesc2, prev_Ledd), eval_rlo_wind, T_center taper, envelope/He-layer limits, dt ramp, and surface-averaged v_div_v_crit boost shared with flexmesa-binary"
 [files.routine_map]
-"set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::set_mdot"
-"do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot"
+"set_mdot" = "crates/flexmesa-star/src/evolve.rs::set_step_mdot"
+"do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot_with_extras+do_set_mdot+net_h1_he4_surface_center"
+"do_set_mdot::eval_wind_for_scheme" = "crates/flexmesa-star/src/winds_driver.rs::eval_wind_for_scheme+scheme_eta"
+"do_set_mdot::rotation_enhancement" = "crates/flexmesa-star/src/winds_driver.rs::apply_rotation_enhancement"
+"do_set_mdot::eval_Bjorklund_wind" = "crates/flexmesa-star/src/winds.rs::eval_bjorklund_wind"
+"do_set_mdot::eval_Vink_wind" = "crates/flexmesa-star/src/winds.rs::eval_vink_wind"
+"do_set_mdot::eval_blocker_wind" = "crates/flexmesa-star/src/winds.rs::eval_blocker_wind"
+"do_set_mdot::eval_highT_Dutch" = "crates/flexmesa-star/src/winds.rs::eval_nugis_lamers_wind+eval_dutch_wind"
+"do_set_mdot::eval_lowT_Dutch" = "crates/flexmesa-star/src/winds.rs::eval_dutch_wind"
+"do_set_mdot::eval_de_Jager_wind" = "crates/flexmesa-star/src/winds.rs::eval_de_jager_wind"
+"do_set_mdot::eval_van_Loon_wind" = "crates/flexmesa-star/src/winds.rs::eval_van_loon_wind"
+"do_set_mdot::eval_Nieuwenhuijzen_wind" = "crates/flexmesa-star/src/winds.rs::eval_nieuwenhuijzen_wind"
 "eval_super_eddington_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_super_eddington_wind"
 "eval_rlo_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_rlo_wind"
 

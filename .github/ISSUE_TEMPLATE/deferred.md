@@ -6,7 +6,7 @@ labels: deferred
 ---
 
 <!--
-Open as a sub-issue of #169 and add a row to the register in #169.
+Open as a sub-issue of the current deferred register tracker (listed in super-tracker #727; #728 since 2026-11-28) and add a row to the register table in that tracker's body. #169 and its continuations together form the register.
 Add exactly one kind label: `upstream-bug` or `enhancement`.
 Add `parity-pending` if FlexMESA code currently departs from upstream here.
 Add `needs-confirmation` if the upstream lines were not read at tag 26.4.1.

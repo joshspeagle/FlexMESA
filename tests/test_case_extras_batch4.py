@@ -1201,12 +1201,85 @@ def test_example_astero_relocation_and_other_search_cases(
     assert type(newuoa) is astero_extras.SearchAsteroExtras
     assert case_extras.classify_case_extras("astero", newuoa_dir) == "ported"
 
-    for still_unported in ("fast_scan_grid", "fast_simplex", "fast_from_file"):
-        cdir = harness_runner.resolve_case_dir("astero", still_unported)
+    for case_name, expected_cls in (
+        ("fast_scan_grid", astero_extras.SampleFilesAsteroExtras),
+        ("fast_simplex", astero_extras.SampleFilesAsteroExtras),
+        ("fast_from_file", astero_extras.FastFromFileAsteroExtras),
+    ):
+        cdir = harness_runner.resolve_case_dir("astero", case_name)
         handler = case_extras.match_case_extras("astero", cdir)
-        assert handler is not None
-        assert handler.unported_routines
-        assert case_extras.classify_case_extras("astero", cdir) == "unported"
+        assert type(handler) is expected_cls
+        assert handler.unported_routines == ()
+        assert case_extras.classify_case_extras("astero", cdir) == "ported"
+        assert case_extras.resolve_case_extras("astero", cdir) is not None
+
+
+def _sample_files_snapshot(
+    results_dir: pathlib.Path, next_sample_number: int
+) -> dict[str, Any]:
+    """Post-evolve snapshot fields `extras_after_evolve` reads (MESA names)."""
+    return {
+        "astero_results_directory": str(results_dir),
+        "next_sample_number": next_sample_number,
+        "num_digits": 4,
+        "sample_results_prefix": "sample_",
+        "best_model_fgong_filename": "best.fgong",
+        "best_model_gyre_filename": "best.gyre",
+        "best_model_profile_filename": "best.profile",
+        "best_model_save_model_filename": "best.mod",
+    }
+
+
+@pytest.mark.parametrize(
+    "case_name", ["fast_scan_grid", "fast_simplex", "fast_from_file"]
+)
+def test_search_extras_after_evolve_moves_best_model_files(
+    tmp_path: pathlib.Path, case_name: str
+) -> None:
+    """`extras_after_evolve` renames `best.*` to `sample_<N+1>.*`.
+
+    `astero/test_suite/fast_{from_file,scan_grid,simplex}/src/
+    run_star_extras.f90` moves the four `best_model_*` files with
+    `skip_errors=.true.`; an absent file (sample quit on bad chi-squared) is
+    skipped and an existing target is replaced.
+    """
+    handler = case_extras.match_case_extras(
+        "astero", harness_runner.resolve_case_dir("astero", case_name)
+    )
+    assert handler is not None
+    out = tmp_path / "outputs"
+    out.mkdir()
+    for ext in (".fgong", ".gyre", ".profile", ".mod"):
+        (out / f"best{ext}").write_text(f"best{ext}")
+    (out / "sample_0003.mod").write_text("stale")
+
+    # Sample 2 accepted so far, so this track becomes sample 3.
+    assert handler.extras_after_evolve(_sample_files_snapshot(out, 3)) is None
+    for ext in (".fgong", ".gyre", ".profile", ".mod"):
+        assert not (out / f"best{ext}").exists()
+        assert (out / f"sample_0003{ext}").read_text() == f"best{ext}"
+
+    # Nothing left to move for the next track: skipped without error.
+    assert handler.extras_after_evolve(_sample_files_snapshot(out, 4)) is None
+    assert sorted(p.name for p in out.iterdir()) == [
+        "sample_0003.fgong",
+        "sample_0003.gyre",
+        "sample_0003.mod",
+        "sample_0003.profile",
+    ]
+
+
+def test_search_extras_after_evolve_number_field_overflow(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A sample number wider than `num_digits` formats as `(iN.N)` stars."""
+    handler = astero_extras.SampleFilesAsteroExtras()
+    out = tmp_path / "outputs"
+    out.mkdir()
+    (out / "best.mod").write_text("m")
+    snap = _sample_files_snapshot(out, 12345)
+    handler.extras_after_evolve(snap)
+    assert (out / "sample_****.mod").read_text() == "m"
 
 
 def test_astero_after_evolve_pyo3_hook_and_validation(
@@ -1259,6 +1332,20 @@ def test_astero_after_evolve_pyo3_hook_and_validation(
         assert key in snap
     assert snap["model_number"] >= 2
     assert snap["best_chi2"] == -1.0
+    # Search state of `astero_def` that case routines read (`#162`): the
+    # track becomes sample 1 because no sample has been accepted yet.
+    assert pathlib.Path(snap["astero_results_directory"]).name == "outputs"
+    assert pathlib.Path(snap["astero_results_directory"]).is_absolute()
+    assert snap["next_sample_number"] == 1
+    assert snap["num_digits"] == 4
+    assert snap["sample_results_prefix"] == "sample_"
+    for key in (
+        "best_model_fgong_filename",
+        "best_model_gyre_filename",
+        "best_model_profile_filename",
+        "best_model_save_model_filename",
+    ):
+        assert snap[key] == ""
     assert (
         rep["termination_code"]
         == "astero_use_first_values_samples=1_best_chi2=1.000000e99_term=xtra1"

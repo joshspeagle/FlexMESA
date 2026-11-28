@@ -32,10 +32,14 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "wd_aic": star_extras.WdAicStarExtras,
 }
 
-_EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {
+_EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {}
+
+# Search cases whose shared `extras_after_evolve` moves the `best_model_*`
+# files (`astero/test_suite/fast_{from_file,scan_grid,simplex}`).
+_EXPECTED_SAMPLE_FILES_ASTERO: dict[str, type[Any]] = {
     "fast_from_file": astero_extras.FastFromFileAsteroExtras,
-    "fast_scan_grid": astero_extras.SearchAsteroExtras,
-    "fast_simplex": astero_extras.SearchAsteroExtras,
+    "fast_scan_grid": astero_extras.SampleFilesAsteroExtras,
+    "fast_simplex": astero_extras.SampleFilesAsteroExtras,
 }
 
 _SDB_OBS: list[dict[str, Any]] = []
@@ -360,7 +364,7 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_controls(
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 11 unported `star` and 3 `astero` cases match ledger and guards."""
+    """All 11 unported `star` cases and no `astero` case match ledger/guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (
@@ -381,6 +385,14 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
         assert (
             case_extras.classify_case_extras("astero", case_dir) == "unported"
         )
+
+    for case_name, expected_cls in _EXPECTED_SAMPLE_FILES_ASTERO.items():
+        case_dir = harness_runner.resolve_case_dir("astero", case_name)
+        matched = case_extras.match_case_extras("astero", case_dir)
+        assert isinstance(matched, expected_cls)
+        assert matched.unported_routines == ()
+        assert callable(matched.extras_after_evolve)
+        assert case_extras.classify_case_extras("astero", case_dir) == "ported"
 
     ex_dir = harness_runner.resolve_case_dir("astero", "example_astero")
     ex_matched = case_extras.match_case_extras("astero", ex_dir)
@@ -414,4 +426,6 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
         if r["suite"] == "astero" and r["status"] == "unported"
     }
     assert unported_star == set(_EXPECTED_UNPORTED_STAR)
-    assert unported_astero == set(_EXPECTED_UNPORTED_ASTERO)
+    assert unported_astero == set(_EXPECTED_UNPORTED_ASTERO) == set()
+    for case_name in _EXPECTED_SAMPLE_FILES_ASTERO:
+        assert by_case[("astero", case_name)]["status"] == "ported"

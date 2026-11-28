@@ -701,9 +701,30 @@ impl StarExtras for AsteroTrackExtras<'_, '_> {
                 return Err(err);
             }
         }
+        // `save_best_info` writes the `best_model_*` files during the track,
+        // so they exist before `extras_after_evolve` runs
+        // (`extras_support.f90:780-858,1116`). Cases such as
+        // `astero/test_suite/fast_scan_grid/src/run_star_extras.f90:205-244`
+        // move them to `sample_<N>.*` from that routine.
+        let results_dir =
+            self.output_root.join(&self.ctrl.astero_results_directory);
+        if let Some(ref best_model) = self.best_model {
+            write_best_model_artifacts(
+                &results_dir,
+                self.ctrl,
+                best_model,
+                self.case_dir,
+            )?;
+        }
         let best_chi2 = self.best_sample.as_ref().map_or(-1.0, |b| b.chi2);
         if let Some(hook) = self.hooks.as_deref_mut() {
-            if let Some(code) = hook.extras_after_evolve(model, best_chi2)? {
+            if let Some(code) = hook.extras_after_evolve_for_sample(
+                model,
+                best_chi2,
+                self.ctrl,
+                &results_dir,
+                self.sample_number,
+            )? {
                 let trimmed = code.trim();
                 if trimmed.is_empty() {
                     return Err(StarError::InvalidInput(String::from(
@@ -774,6 +795,32 @@ pub trait AsteroCaseHooks {
         _best_chi2: f64,
     ) -> Result<Option<String>, StarError> {
         Ok(None)
+    }
+
+    /// [`Self::extras_after_evolve`] with the search state that
+    /// `astero_def` module variables give a case's routine: the controls
+    /// (`num_digits`, `sample_results_prefix`, `best_model_*_filename`), the
+    /// resolved `astero_results_directory` and the number of the sample the
+    /// track will become, `sample_number + 1` (`sample_number` is not
+    /// incremented until `eval1` returns,
+    /// `astero/private/astero_run_support.f90:241-254`). The default calls
+    /// [`Self::extras_after_evolve`].
+    ///
+    /// The `best_model_*` files of the track have already been written to
+    /// `results_dir` when this runs (`extras_support.f90:780-858`).
+    ///
+    /// # Errors
+    /// Same as [`Self::extras_after_evolve`].
+    fn extras_after_evolve_for_sample(
+        &mut self,
+        model: &StarModel,
+        best_chi2: f64,
+        ctrl: &AsteroSearchControls,
+        results_dir: &Path,
+        next_sample_number: usize,
+    ) -> Result<Option<String>, StarError> {
+        let _ = (ctrl, results_dir, next_sample_number);
+        self.extras_after_evolve(model, best_chi2)
     }
 }
 
@@ -1020,9 +1067,6 @@ fn run_track(
         stage.termination_code = code;
     }
     let results_dir = output_root.join(&ctrl.astero_results_directory);
-    if let Some(ref best_model) = extras.best_model {
-        write_best_model_artifacts(&results_dir, ctrl, best_model, case_dir)?;
-    }
     if ctrl.save_info_for_last_model {
         let vals = extras.eval_constraint_values(&model)?;
         let last_sample = eval_model_astero_sample_with_output_root(
@@ -1403,7 +1447,8 @@ pub fn run_star_astero_with_case_hooks(
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::fs;
+    use std::path::{Path, PathBuf};
 
     use flexmesa_const::SECYER;
     use flexmesa_star::controls::{
@@ -1870,5 +1915,144 @@ mod tests {
         let err = StarExtras::extras_after_evolve(&mut extras, &mut model)
             .expect_err("blank termination code must fail");
         assert!(matches!(err, StarError::InvalidInput(_)));
+    }
+
+    /// Hook that records the search state `extras_after_evolve_for_sample`
+    /// receives and moves `best_model_save_model_filename` to
+    /// `sample_<NNNN>.mod` like `fast_scan_grid`'s `extras_after_evolve`
+    /// (`astero/test_suite/fast_scan_grid/src/run_star_extras.f90:205-244`).
+    struct MoveBestModelHooks {
+        calls: Vec<(PathBuf, usize, bool)>,
+    }
+
+    impl AsteroCaseHooks for MoveBestModelHooks {
+        fn set_param(
+            &mut self,
+            _bundle: &mut InlistBundle,
+            _ctrl: &AsteroSearchControls,
+            _name: &str,
+            _val: f64,
+        ) -> Result<(), StarError> {
+            Ok(())
+        }
+
+        fn set_constraint_value(
+            &mut self,
+            _model: &StarModel,
+            _ctrl: &AsteroSearchControls,
+            _name: &str,
+        ) -> Result<f64, StarError> {
+            Ok(0.0)
+        }
+
+        fn extras_after_evolve_for_sample(
+            &mut self,
+            _model: &StarModel,
+            _best_chi2: f64,
+            ctrl: &AsteroSearchControls,
+            results_dir: &Path,
+            next_sample_number: usize,
+        ) -> Result<Option<String>, StarError> {
+            let src =
+                results_dir.join(ctrl.best_model_save_model_filename.trim());
+            let existed = src.is_file();
+            self.calls.push((
+                results_dir.to_path_buf(),
+                next_sample_number,
+                existed,
+            ));
+            if existed {
+                let tgt = results_dir.join(format!(
+                    "{}{:0width$}.mod",
+                    ctrl.sample_results_prefix.trim(),
+                    next_sample_number,
+                    width = ctrl.num_digits
+                ));
+                fs::rename(&src, &tgt).map_err(|e| {
+                    StarError::IoError(format!("test mv failed: {e}"))
+                })?;
+            }
+            Ok(None)
+        }
+    }
+
+    /// `save_best_info` writes the `best_model_*` files during the track, so
+    /// they must be on disk, in `astero_results_directory` under the output
+    /// root, when `extras_after_evolve` runs; a track without an accepted
+    /// model writes none (`extras_support.f90:780-858,1116`).
+    #[test]
+    fn best_model_files_exist_when_case_extras_after_evolve_runs() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_162_after_evolve_{}", std::process::id()));
+        fs::create_dir_all(&root).expect("create scratch root");
+        let ctrl = AsteroSearchControls {
+            save_model_for_best_model: true,
+            best_model_save_model_filename: String::from("best.mod"),
+            astero_results_directory: String::from("outputs"),
+            sample_results_prefix: String::from("sample_"),
+            num_digits: 4,
+            ..AsteroSearchControls::default()
+        };
+        let mut model = zams_model();
+
+        let mut hooks = MoveBestModelHooks { calls: Vec::new() };
+        {
+            let mut extras = AsteroTrackExtras {
+                ctrl: &ctrl,
+                hooks: Some(&mut hooks),
+                after_evolve_termination: None,
+                params: ctrl.first_params(),
+                sample_number: 5,
+                case_dir: &root,
+                output_root: &root,
+                best_sample: Some(sample(0.5, 1.0e9, 7)),
+                best_model: Some(zams_model()),
+                averages: SampleAverages::NONE,
+                bad_count: 0,
+                astero_using_revised_max_yr_dt: false,
+                astero_revised_max_yr_dt: 1.0e8,
+                astero_max_dt_next: 1.0e99,
+                constraint_values: [0.0; MAX_CONSTRAINTS],
+                checked_model_number: None,
+                eval_error: None,
+            };
+            StarExtras::extras_after_evolve(&mut extras, &mut model)
+                .expect("extras_after_evolve with a best model");
+        }
+        let out = root.join("outputs");
+        assert_eq!(hooks.calls, vec![(out.clone(), 5, true)]);
+        assert!(!out.join("best.mod").exists(), "hook moved best.mod");
+        assert!(out.join("sample_0005.mod").is_file());
+
+        // A track that never accepted a model has no `best_model_*` file to
+        // move (upstream `mv ... skip_errors=.true.`).
+        let mut hooks = MoveBestModelHooks { calls: Vec::new() };
+        {
+            let mut extras = AsteroTrackExtras {
+                ctrl: &ctrl,
+                hooks: Some(&mut hooks),
+                after_evolve_termination: None,
+                params: ctrl.first_params(),
+                sample_number: 6,
+                case_dir: &root,
+                output_root: &root,
+                best_sample: None,
+                best_model: None,
+                averages: SampleAverages::NONE,
+                bad_count: 0,
+                astero_using_revised_max_yr_dt: false,
+                astero_revised_max_yr_dt: 1.0e8,
+                astero_max_dt_next: 1.0e99,
+                constraint_values: [0.0; MAX_CONSTRAINTS],
+                checked_model_number: None,
+                eval_error: None,
+            };
+            StarExtras::extras_after_evolve(&mut extras, &mut model)
+                .expect("extras_after_evolve without a best model");
+        }
+        assert_eq!(hooks.calls, vec![(out.clone(), 6, false)]);
+        assert!(!out.join("sample_0006.mod").exists());
+
+        fs::remove_dir_all(&root).expect("remove scratch root");
     }
 }

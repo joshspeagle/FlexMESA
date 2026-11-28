@@ -7037,6 +7037,8 @@ upstream_sha256 = "d1283b2415329fe39b1f332836d206f41c20e71ca35c25cd86a5302372609
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf_with_derivs"
 
 [[files]]
 upstream_path = "rates/private/ratelib.f90"

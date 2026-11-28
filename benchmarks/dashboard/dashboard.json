@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 23233,
-      "python_testing_bench": 25348
+      "python_testing_bench": 25477
     }
   },
   "numerics": {
@@ -1290,7 +1290,7 @@
   },
   "test_taxonomy": {
     "total_files": 329,
-    "total_tests": 1911,
+    "total_tests": 1915,
     "by_kind": {
       "oracle": {
         "files": 133
@@ -1309,7 +1309,7 @@
       },
       "python": {
         "files": 98,
-        "tests": 768
+        "tests": 772
       }
     },
     "mislabeled_count": 2,
@@ -1696,7 +1696,7 @@
         "invariant_files": 39,
         "regression_files": 1,
         "total_files": 42,
-        "total_tests": 367,
+        "total_tests": 371,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2046,8 +2046,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 683,
-        "title": "ci: tiered testing; trains merge on CI plus a canary, full campaign nightly when main moved (DECISIONS #81)",
+        "number": 687,
+        "title": "Train 17: num, mtx, net, utils and interp_1d parity fixes; per-routine oracle provenance (DECISIONS #80)",
         "draft": false
       }
     ],
@@ -4369,6 +4369,19 @@
     {
       "date_utc": "2026-11-28",
       "commit": "dc390490",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "89"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "b56fcb64",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

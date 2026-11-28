@@ -51,7 +51,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 22,205 | 6,378 | 71,242 | 39,487 | 5,640 | 0 | 142,176 | 6,524 | 31.1% | 3.9% |
 | **Total (all 26 modules)** | 497,703 | 210,855 | 6,378 | 231,783 | 43,047 | 5,640 | 0 | 233,490 | 58,254 | 9.8% | 1.1% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `23,233` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `25,348` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `23,233` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `25,477` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `34` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -121,7 +121,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 - **Python package statement coverage (`pytest --cov`)**: **87.8%** (`23,723` / `27,031` statements across `27` subpackages).
 - **Ignored / skipped tests**: `15` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#162](https://github.com/joshspeagle/FlexMESA/issues/162), [#518](https://github.com/joshspeagle/FlexMESA/issues/518), [#530](https://github.com/joshspeagle/FlexMESA/issues/530)) and `22` Python `xfail`/`skip` ([#43](https://github.com/joshspeagle/FlexMESA/issues/43), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), [#156](https://github.com/joshspeagle/FlexMESA/issues/156), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#291](https://github.com/joshspeagle/FlexMESA/issues/291), [#295](https://github.com/joshspeagle/FlexMESA/issues/295), [#340](https://github.com/joshspeagle/FlexMESA/issues/340), [#349](https://github.com/joshspeagle/FlexMESA/issues/349), [#358](https://github.com/joshspeagle/FlexMESA/issues/358), [#402](https://github.com/joshspeagle/FlexMESA/issues/402), [#413](https://github.com/joshspeagle/FlexMESA/issues/413), [#420](https://github.com/joshspeagle/FlexMESA/issues/420), [#433](https://github.com/joshspeagle/FlexMESA/issues/433); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
-- **Test classification & listed routine oracles (`W4`, `#563`)**: `133` oracle files, `194` invariant files, `2` regression files (out of `329` test files totaling `1,911` test functions); `2` tracked mislabeled files; `69` / `1623` mapped MESA routines (`4.3%`) have a listed oracle test.
+- **Test classification & listed routine oracles (`W4`, `#563`)**: `133` oracle files, `194` invariant files, `2` regression files (out of `329` test files totaling `1,915` test functions); `2` tracked mislabeled files; `69` / `1623` mapped MESA routines (`4.3%`) have a listed oracle test.
 
 #### Test Classification & Routines with a Listed Oracle Test (W4)
 
@@ -230,7 +230,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | Phase E | 1 | 1 | [#173](https://github.com/joshspeagle/FlexMESA/issues/173) |
 | Deferred scope | 0 | 1 | [#477](https://github.com/joshspeagle/FlexMESA/issues/477) |
 
-- **Open pull requests (1)**: [#683](https://github.com/joshspeagle/FlexMESA/pull/683).
+- **Open pull requests (1)**: [#687](https://github.com/joshspeagle/FlexMESA/pull/687).
 - **Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169))**: `89` open issues (`83` `upstream-bug`, `6` `enhancement`; `11` marked `parity-pending` for upstream restoration before `v0.1.0`).
 
 ### 7. Headline History Across Merges
@@ -361,4 +361,5 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 | `2026-11-27` | `964c717` | main merge | 30.7% | 1.1% | 57/106 | 77.0% | 87.8% | 32/56 | 75 |
 | `2026-11-27` | `6197a69` | main merge | 30.7% | 1.1% | 62/106 | 77.0% | 87.8% | 32/56 | 79 |
 | `2026-11-28` | `dc390490` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 32/56 | 89 |
+| `2026-11-28` | `b56fcb64` | main merge | 31.1% | 1.1% | 63/106 | 77.0% | 87.8% | 32/56 | 89 |
 <!-- END GENERATED DASHBOARD -->

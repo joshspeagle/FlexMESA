@@ -340,8 +340,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 683,
-      "title": "ci: tiered testing; trains merge on CI plus a canary, full campaign nightly when main moved (DECISIONS #81)",
+      "number": 687,
+      "title": "Train 17: num, mtx, net, utils and interp_1d parity fixes; per-routine oracle provenance (DECISIONS #80)",
       "draft": false
     }
   ],

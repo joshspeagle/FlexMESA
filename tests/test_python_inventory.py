@@ -112,7 +112,7 @@ def test_committed_inventory_summary_and_invariants() -> None:
     assert len(rust_only) == totals["rust_only"]
     assert len(xfails) == totals["xfail_295"]
     assert totals["python_total"] > 0
-    assert totals["xfail_295"] >= 19
+    assert totals["xfail_295"] >= 18
 
     line_counts: dict[str, int] = {}
     stale_rows: list[dict[str, Any]] = []

@@ -10,12 +10,14 @@ by their rule numbers 4.1 to 4.5). The same file is used for MESA and for
 FlexMESA.
 
 Reading the chain
-    The stage inlist is read as MESA reads it: for each namelist block,
-    its assignments first, then each ``read_extra_<section>_inlist(i)`` file
-    for ``i = 1..5`` in order. The Fortran namelist text is parsed by
-    ``flexmesa.schema.namelist`` (the parser the harness uses). The include
-    walk below mirrors ``InlistBundle::load_file_recursive``
-    (``crates/flexmesa-star/src/inlist.rs``), whose per-section result is not
+    The stage inlist is read as MESA reads it: ``read_section`` transcribes
+    the include loop of ``read_star_job_file``
+    (``star/private/star_job_ctrls_io.f90:597-607``), where the include flags
+    and names are module-level arrays reset in place, so the walk is not a
+    tree. The Fortran namelist text is parsed by ``flexmesa.schema.namelist``
+    (the parser the harness uses). Rust ``InlistBundle`` still walks a tree
+    (``crates/flexmesa-star/src/inlist.rs:655-707``) and differs from MESA,
+    and from this reader, on ``twin_studies``; its flattened result is not
     exposed to Python.
 
 Loud failures
@@ -63,7 +65,10 @@ CHECK_RTOL = 1.0e-12
 
 #: Namelist sections this constructor rewrites or passes through.
 RULED_SECTIONS = ("star_job", "eos", "kap", "controls")
-PASSTHROUGH_SECTIONS = ("pgstar",)
+PASSTHROUGH_SECTIONS = ("pgstar", "colors")
+#: Passed-through sections whose missing include files are skipped and
+#: logged (headless plotting, as the harness does); others must resolve.
+TOLERANT_INCLUDE_SECTIONS = ("pgstar",)
 INCLUDE_SLOTS = range(1, 6)
 
 
@@ -124,6 +129,10 @@ class SnapshotHeader:
         initial_z: ``initial_z``.
         mass_msun: ``M/Msun``.
         net_name: ``net_name`` without quotes.
+        l_center: ``L_center`` (erg/s); the writer omits it when it is 0.
+        v_center: ``v_center`` (cm/s); the writer omits it when it is 0.
+        initial_y: ``initial_y`` when the header carries it (the r26.4.1
+            writer does not), else ``None``.
     """
 
     file_type: int
@@ -132,6 +141,9 @@ class SnapshotHeader:
     initial_z: float
     mass_msun: float
     net_name: str
+    l_center: float = 0.0
+    v_center: float = 0.0
+    initial_y: float | None = None
 
     @property
     def has_rotation(self) -> bool:
@@ -187,6 +199,13 @@ def parse_mod_header(text: str) -> SnapshotHeader:
         initial_z=_fortran_float(fields["initial_z"]),
         mass_msun=_fortran_float(fields["M/Msun"]),
         net_name=fields["net_name"].strip().strip("'\""),
+        l_center=_fortran_float(fields.get("L_center", "0")),
+        v_center=_fortran_float(fields.get("v_center", "0")),
+        initial_y=(
+            _fortran_float(fields["initial_y"])
+            if "initial_y" in fields
+            else None
+        ),
     )
 
 
@@ -210,27 +229,42 @@ def _resolve(case_dir: pathlib.Path, name: str) -> pathlib.Path:
     raise WindowBuildError(f"missing inlist {name!r} for {case_dir}")
 
 
+#: ``max_extra_inlists`` (``const/public/const_def.f90:39``).
+MAX_EXTRA_INLISTS = 5
+#: Nesting limit of the ctrls readers (``level >= 10`` is an error).
+MAX_INCLUDE_LEVEL = 10
+#: Sections whose namelist group must exist in every file read (a missing
+#: group is a read error in ``read_star_job_file`` and
+#: ``read_controls_file``); ``&eos`` and ``&kap`` accept its absence.
+STRICT_SECTIONS = ("star_job", "controls")
+
+
 def _include_slot(section: str, name: str, sub: str | None) -> tuple[str, int]:
     """Classify an include key as ``("read"|"name", slot)`` or ``("", 0)``.
 
-    Slot 0 is an unnumbered ``extra_<section>_inlist_name``, which the
-    harness uses as the fallback name of every slot. Accepted spellings:
-    ``read_extra_<s>_inlist(i)`` and ``read_extra_<s>_inlist<i>``;
-    ``extra_<s>_inlist_name(i)``, ``extra_<s>_inlist<i>_name`` and
-    ``extra_<s>_inlist_name``.
+    The namelist variables are the arrays ``read_extra_<s>_inlist(1:5)`` and
+    ``extra_<s>_inlist_name(1:5)``; an unsubscripted array name assigns
+    element 1.
+
+    Raises:
+        WindowBuildError: For the numbered spelling ``..._inlist<i>``, which
+            is not a MESA namelist variable.
     """
     for kind, pattern in (
-        ("read", rf"read_extra_{section}_inlist(\d?)"),
-        ("name", rf"extra_{section}_inlist(\d?)_name"),
+        ("read", rf"read_extra_{section}_inlist"),
+        ("name", rf"extra_{section}_inlist_name"),
     ):
-        m = re.fullmatch(pattern, name)
-        if not m:
-            continue
-        digit = m.group(1) or sub
-        if digit is None or not digit.strip():
-            return (kind, 0) if kind == "name" else ("", 0)
-        if digit.strip().isdigit():
-            return kind, int(digit)
+        if name == pattern:
+            slot = 1 if sub is None or not sub.strip() else int(sub)
+            return kind, slot
+    if re.fullmatch(
+        rf"(read_extra_{section}_inlist\d|extra_{section}_inlist\d_name)",
+        name,
+    ):
+        raise WindowBuildError(
+            f"{name} is not a MESA namelist variable (use the subscripted "
+            f"array form)"
+        )
     return "", 0
 
 
@@ -240,63 +274,84 @@ def read_section(
     section: str,
     parse: Callable[[pathlib.Path], list[Any]],
     notes: list[str],
-    _seen: set[pathlib.Path] | None = None,
+    files: list[str] | None = None,
 ) -> list[Assign]:
-    """Flatten one namelist section of an inlist chain, in MESA's order.
+    """Flatten one namelist section of an inlist chain as MESA reads it.
 
-    Include directives are consumed, not copied.
+    Transcribes the include loop of ``read_star_job_file``
+    (``star/private/star_job_ctrls_io.f90:597-607``; the same pattern is in
+    ``read_controls_file``, ``star/private/ctrls_io.f90:700-709``, and the
+    ``eos`` and ``kap`` readers). The include flags and names are
+    module-level arrays: a file's namelist read sets some slots, then for
+    ``i = 1..5`` the slot is copied, reset (``.false.`` and ``'undefined'``)
+    and, if it was set, the named file is read at once, recursively. A child
+    that sets slot ``j`` therefore overrides the parent's slot ``j``, and the
+    parent's later slots are already reset when the child returns. This is
+    not a tree walk. Only the first ``&<section>`` group of a file is read
+    (a Fortran namelist read stops at the first match).
 
     Args:
         case_dir: Case directory (extra inlists are found here or in
             ``../shared``).
-        entry: File to read.
+        entry: File to read first.
         section: Lowercase section name.
         parse: ``flexmesa.schema.namelist.parse_namelist_file``.
-        notes: Receives one line per skipped include (see below).
-        _seen: Files already on this include path (cycle guard).
+        notes: Receives one diff line per skipped include of a headless
+            section.
+        files: When given, receives the names of the files read, in order.
 
     Returns:
-        Assignments in chronological order (later ones win).
+        Assignments in the order MESA applies them (later ones win).
+
+    Raises:
+        WindowBuildError: A missing include, a missing group in a strict
+            section, or more than 9 levels of nesting.
     """
-    seen = set() if _seen is None else _seen
-    key = entry.resolve()
-    if key in seen:
-        return []
-    seen = seen | {key}
+    flags = dict.fromkeys(range(1, MAX_EXTRA_INLISTS + 1), False)
+    names = dict.fromkeys(range(1, MAX_EXTRA_INLISTS + 1), "undefined")
     out: list[Assign] = []
-    for block in parse(entry):
-        if block.name.lower() != section:
-            continue
-        flags: dict[int, bool] = {}
-        names: dict[int, str] = {}
-        for a in block.assignments:
-            low = a.name.lower()
-            kind, slot = _include_slot(section, low, a.subscript)
-            if kind == "read":
-                flags[slot] = bool(a.value)
-            elif kind == "name":
-                names[slot] = str(a.value)
-            else:
-                out.append(Assign(low, a.subscript, a.value))
-        for slot in INCLUDE_SLOTS:
-            name = names.get(slot) or names.get(0, "")
-            if flags.get(slot) and name.strip():
-                try:
-                    nxt = _resolve(case_dir, name)
-                except WindowBuildError:
-                    if section not in PASSTHROUGH_SECTIONS:
-                        raise
-                    # Headless plotting section: the harness skips a missing
-                    # include too. Recorded, never silent.
-                    notes.append(
-                        f"4.5 | {section} | extra_{section}_inlist_name"
-                        f"({slot}) | {name!r} not found, skipped "
-                        "(pgstar_flag is .false.)"
-                    )
-                    continue
-                out.extend(
-                    read_section(case_dir, nxt, section, parse, notes, seen)
+
+    def read_file(path: pathlib.Path, level: int) -> None:
+        if level >= MAX_INCLUDE_LEVEL:
+            raise WindowBuildError(
+                f"too many levels of nested extra {section} inlist files "
+                f"at {path.name}"
+            )
+        if files is not None:
+            files.append(path.name)
+        groups = [b for b in parse(path) if b.name.lower() == section]
+        if groups:
+            for a in groups[0].assignments:
+                low = a.name.lower()
+                kind, slot = _include_slot(section, low, a.subscript)
+                if kind == "read":
+                    flags[slot] = bool(a.value)
+                elif kind == "name":
+                    names[slot] = str(a.value)
+                else:
+                    out.append(Assign(low, a.subscript, a.value))
+        elif section in STRICT_SECTIONS:
+            raise WindowBuildError(f"no &{section} namelist in {path.name}")
+        for i in range(1, MAX_EXTRA_INLISTS + 1):
+            read_extra, extra = flags[i], names[i]
+            flags[i], names[i] = False, "undefined"
+            if not read_extra:
+                continue
+            try:
+                nxt = _resolve(case_dir, extra)
+            except WindowBuildError:
+                if section not in TOLERANT_INCLUDE_SECTIONS:
+                    raise
+                # Headless plotting section: the harness skips a missing
+                # include too. Recorded, never silent.
+                notes.append(
+                    f"4.5 | {section} | extra_{section}_inlist_name({i}) | "
+                    f"{extra!r} not found, skipped (pgstar_flag is .false.)"
                 )
+                continue
+            read_file(nxt, level + 1)
+
+    read_file(entry, 1)
     return out
 
 
@@ -307,10 +362,12 @@ class Stage:
     Attributes:
         sections: ``{section: assignments}`` in entry-file order.
         notes: Diff lines for includes skipped while reading.
+        files: ``{section: names of the files read, in order}``.
     """
 
     sections: dict[str, list[Assign]]
     notes: list[str]
+    files: dict[str, list[str]] = dataclasses.field(default_factory=dict)
 
 
 def read_stage(
@@ -338,62 +395,100 @@ def read_stage(
     entry = _resolve(case_dir, entry_name)
     sections: dict[str, list[Assign]] = {}
     notes: list[str] = []
+    files: dict[str, list[str]] = {}
     for block in parse(entry):
         low = block.name.lower()
         if low in sections:
             continue
-        sections[low] = read_section(case_dir, entry, low, parse, notes)
-    return Stage(sections, notes)
+        files[low] = []
+        sections[low] = read_section(
+            case_dir, entry, low, parse, notes, files[low]
+        )
+    return Stage(sections, notes, files)
 
 
 # ---------------------------------------------------------------------------
 # The rules
 # ---------------------------------------------------------------------------
 
-# Rule 4.2 / 4.3: a boolean switch becomes .false.; any other key is removed.
+# Rules 4.2, 4.3, 4.5 and 4.6: a boolean switch becomes .false.; any other
+# key is removed.
 _OFF_PATTERNS: tuple[tuple[str, str], ...] = (
     ("4.2", r"set_initial_age|initial_age"),
     ("4.2", r"set_initial_model_number|initial_model_number"),
     ("4.2", r"set_initial_cumulative_energy_error"),
     ("4.2", r"new_cumulative_energy_error"),
     ("4.2", r"set_initial_dt|years_for_initial_dt|limit_initial_dt"),
+    ("4.2", r"seconds_for_initial_dt"),
     ("4.2", r"set_initial_number_retries"),
     ("4.2", r"pre_ms_.*"),
     ("4.2", r"initial_zfracs|set_uniform_initial_composition"),
     ("4.2", r"initial_(h1|h2|he3|he4)"),
-    ("4.2", r"relax_.*"),
-    ("4.2", r"num_steps_to_relax_.*"),
+    # Rule 4.6: any key containing "relax" (substring, not only prefix).
+    ("4.2", r".*relax.*"),
     ("4.2", r"remove_surface_.*|remove_initial_center_.*|remove_center_.*"),
     ("4.2", r"set_initial_tau_factor|set_tau_factor|set_to_this_tau_factor"),
     ("4.2", r"profile_starting_model|steps_to_take_before_terminate"),
+    # Rule 4.6: parameters of relax, create and removal actions.
+    (
+        "4.2",
+        r"core_avg_eps|core_avg_rho|dlg_core_mass_per_step|dlgm_per_step"
+        r"|lg_max_abs_mdot|dlogtau_factor|irrad_col_depth"
+        r"|mass_in_gm_for_create_initial_model"
+        r"|radius_in_cm_for_create_initial_model"
+        r"|extra_mass_retained_by_remove_h_env"
+        r"|dump_missing_metals_into_heaviest",
+    ),
     (
         "4.3",
         r"replace_initial_element|replace_element.*|set_nzlo"
         r"|set_initial_to_xa_for_accretion",
     ),
+    ("4.5", r"pause_before_terminate"),
 )
 
-# Rule 4.3: off only when the snapshot satisfies the target (checked).
+# Rule 4.3: action flags and targets, checked against the snapshot only
+# when the action flag is on in the stage (rule 4.6 (c)).
 _ROTATION_KEYS = re.compile(
     r"new_omega_div_omega_crit|set_initial_omega.*|new_omega"
     r"|set_initial_surface_rotation_v|new_surface_rotation_v"
 )
+_ROTATION_ACTIONS = re.compile(
+    r"(set|relax)_(initial_)?(omega|omega_div_omega_crit"
+    r"|surface_rotation_v)"
+)
+_ROTATION_TARGETS = (
+    "new_omega",
+    "new_omega_div_omega_crit",
+    "new_surface_rotation_v",
+)
 _MASS_KEYS = re.compile(r"new_mass|new_core_mass|change_mass_years_for_dt")
 _NET_KEYS = re.compile(r"change_net|change_initial_net|new_net_name")
 _Z_KEYS = re.compile(r"change_initial_z|new_z")
+_Y_KEYS = re.compile(r"new_y")
+_CENTER_KEYS = re.compile(r"(set_initial|new)_(l|v)_center")
 
 # Rule 4.3: kept on, not checked (the .mod records only some of these).
 _FLAG_KEEP = re.compile(
     r"(change|change_initial|new)_(v|u|rotation|d_omega|w_div_wc|rti)_flag"
 )
 
-# Rule 4.4: kept.
+# Rule 4.4 and 4.6: kept. The &colors section is kept verbatim as well.
 _KEEP = re.compile(
     r"history_columns_file|profile_columns_file|filename_of_special_rate"
     r"|use_special_weak_rates|use_3a_fl87|remove_fallback_at_each_step"
     r"|remove_fallback_speed_limit|set_to_xa_for_accretion"
     r"|set_cumulative_energy_error_at_step"
     r"|set_cumulative_energy_error_each_step_if_age_less_than|show_.*"
+    r"|adv_net|auto_extend_net|enable_adaptive_network|min_x_for_add"
+    r"|min_x_for_keep|min_x_for_n|electron_coulomb_corrections"
+    r"|ion_coulomb_corrections|num_special_rate_factors"
+    r"|reaction_for_special_factor|special_rate_factor"
+    r"|special_weak_states_file|special_weak_transitions_file"
+    r"|rate_tables_dir|rate_cache_suffix|fallback_check_total_energy"
+    r"|first_model_for_timing|warn_run_star_extras|mesa_dir"
+    r"|required_termination_code_string|save_model_when_terminate"
+    r"|write_profile_when_terminate|save_pulse_data_when_terminate"
 )
 
 # Rules 4.1 and 4.5: set by the constructor, any stage value replaced.
@@ -406,10 +501,16 @@ _SET_KEYS = frozenset(
         "create_rsp_model",
         "save_model_filename",
         "filename_for_profile_when_terminate",
+        "save_photo_filename",
         "pgstar_flag",
         "save_pgstar_files_when_terminate",
         "save_photo_when_terminate",
     }
+)
+#: Filenames rewritten into the window directory when the stage sets them.
+_REWRITE_IF_PRESENT = (
+    "filename_for_profile_when_terminate",
+    "save_photo_filename",
 )
 
 
@@ -424,6 +525,8 @@ def _classify(key: str) -> str | None:
         or _MASS_KEYS.fullmatch(key)
         or _NET_KEYS.fullmatch(key)
         or _Z_KEYS.fullmatch(key)
+        or _Y_KEYS.fullmatch(key)
+        or _CENTER_KEYS.fullmatch(key)
     ):
         return "check"
     for _rule, pat in _OFF_PATTERNS:
@@ -493,10 +596,14 @@ class WindowInlist:
     Attributes:
         sections: Flattened assignments per namelist section.
         diff: One line per change: ``rule | section | key | change``.
+        flags: Manifest flags: ``relax-assumed`` (a core relax was turned
+            off without a check, rule 4.6 (c)) and ``no-prev-model`` (the
+            snapshot has no previous-model block, rule 4.2).
     """
 
     sections: dict[str, list[Assign]]
     diff: list[str]
+    flags: list[str] = dataclasses.field(default_factory=list)
 
 
 class _Editor:
@@ -540,83 +647,141 @@ class _Editor:
         self._log(rule, key, f"{was} -> {_fmt(value)}")
 
 
-def _check_group(
-    ed: _Editor,
-    win: Window,
-    problems: list[str],
-) -> None:
-    """Rules 4.3: net, z, mass and rotation targets against the header."""
-    hdr = win.header
-    star = ed.assigns
-    net_on = any(
-        (a := _last(star, k)) is not None and a.value is True
-        for k in ("change_net", "change_initial_net")
-    )
-    if net_on:
-        target = _last(star, "new_net_name")
-        if target is None:
-            problems.append("change_net is on but new_net_name is absent")
-        elif str(target.value) != hdr.net_name:
-            problems.append(
-                f"new_net_name {target.value!r} != header net_name "
-                f"{hdr.net_name!r}"
-            )
-    z_on = (a := _last(star, "change_initial_z")) is not None and (
-        a.value is True
-    )
-    if z_on:
-        target = _last(star, "new_z")
-        if target is None:
-            problems.append("change_initial_z is on but new_z is absent")
-        elif not _close(float(target.value), hdr.initial_z):
-            problems.append(
-                f"new_z {target.value} != header initial_z {hdr.initial_z!r}"
-            )
-    for a in [x for x in star if x.name == "new_mass"]:
-        if not _close(float(a.value), hdr.mass_msun):
-            problems.append(
-                f"new_mass {a.value} != header M/Msun {hdr.mass_msun!r}"
-            )
-    for a in [x for x in star if x.name == "new_core_mass"]:
-        problems.append(
-            f"new_core_mass {a.value} cannot be checked against the header "
-            "(rule 4.3 names only M/Msun)"
+@dataclasses.dataclass
+class _Plan:
+    """Checks and edits that depend on the snapshot header (rule 4.3)."""
+
+    problems: list[str] = dataclasses.field(default_factory=list)
+    off: list[str] = dataclasses.field(default_factory=list)
+    remove: list[str] = dataclasses.field(default_factory=list)
+    flags: list[str] = dataclasses.field(default_factory=list)
+
+
+def _plan_checks(star: Sequence[Assign], hdr: SnapshotHeader) -> _Plan:
+    """Check each action that is on in the stage against the header.
+
+    A target key is checked only when its action flag is on (rule 4.6 (c));
+    with the flag off the key is inert and passes through unchanged.
+    """
+    plan = _Plan()
+
+    def on(*keys: str) -> bool:
+        return any(
+            (a := _last(star, k)) is not None and a.value is True for k in keys
         )
-    rot = [x for x in star if _ROTATION_KEYS.fullmatch(x.name)]
-    if rot and not hdr.has_rotation:
-        problems.append(
-            "rotation targets ("
-            + ", ".join(sorted({x.name for x in rot}))
-            + ") but rotation is off in the snapshot"
-        )
+
+    def target(key: str, why: str) -> float | None:
+        t = _last(star, key)
+        if t is None:
+            plan.problems.append(f"{why} is on but {key} is absent")
+            return None
+        return float(t.value)
+
+    if on("change_net", "change_initial_net"):
+        t = _last(star, "new_net_name")
+        if t is None:
+            plan.problems.append("change_net is on but new_net_name is absent")
+        elif str(t.value) != hdr.net_name:
+            plan.problems.append(
+                f"new_net_name {t.value!r} != header net_name {hdr.net_name!r}"
+            )
+        else:
+            plan.off += ["change_net", "change_initial_net"]
+    if on("change_initial_z", "relax_z", "relax_initial_z"):
+        z = target("new_z", "a z action")
+        if z is not None and not _close(z, hdr.initial_z):
+            plan.problems.append(
+                f"new_z {z} != header initial_z {hdr.initial_z!r}"
+            )
+        elif z is not None:
+            plan.off.append("change_initial_z")
+    if on("relax_mass", "relax_initial_mass"):
+        m = target("new_mass", "a mass relax")
+        if m is not None and not _close(m, hdr.mass_msun):
+            plan.problems.append(
+                f"new_mass {m} != header M/Msun {hdr.mass_msun!r}"
+            )
+        elif m is not None:
+            plan.remove += ["new_mass", "change_mass_years_for_dt"]
+    if on("relax_core", "relax_initial_core"):
+        # The core mass is not in the header: the window must start after
+        # the relax (rule 2.1) and is flagged (rule 4.6 (c)).
+        plan.flags.append("relax-assumed")
+        plan.remove.append("new_core_mass")
+    if on("relax_y", "relax_initial_y"):
+        y = target("new_y", "a y relax")
+        if y is not None and hdr.initial_y is None:
+            plan.problems.append(
+                f"new_y {y} cannot be checked: the .mod header carries no "
+                "initial_y"
+            )
+        elif y is not None and hdr.initial_y is not None:
+            if _close(y, hdr.initial_y):
+                plan.remove.append("new_y")
+            else:
+                plan.problems.append(
+                    f"new_y {y} != header initial_y {hdr.initial_y!r}"
+                )
+    rot_on = sorted(
+        {
+            a.name
+            for a in star
+            if _ROTATION_ACTIONS.fullmatch(a.name) and on(a.name)
+        }
+    )
+    if rot_on:
+        if not hdr.has_rotation:
+            plan.problems.append(
+                "rotation actions ("
+                + ", ".join(rot_on)
+                + ") but rotation is off in the snapshot"
+            )
+        else:
+            plan.off += [k for k in rot_on if k.startswith("set_")]
+            plan.remove += list(_ROTATION_TARGETS)
+    for axis, value in (("l", hdr.l_center), ("v", hdr.v_center)):
+        flag = f"set_initial_{axis}_center"
+        if on(flag):
+            tv = target(f"new_{axis}_center", flag)
+            if tv is not None and not _close(tv, value):
+                plan.problems.append(
+                    f"new_{axis}_center {tv} != header {axis.upper()}_center "
+                    f"{value!r}"
+                )
+            elif tv is not None:
+                plan.off.append(flag)
+                plan.remove.append(f"new_{axis}_center")
+    return plan
 
 
 def _apply_star_job(
-    assigns: list[Assign], win: Window, diff: list[str]
+    assigns: list[Assign], win: Window, diff: list[str], flags: list[str]
 ) -> list[Assign]:
-    """Apply rules 4.1 to 4.5 to a flattened ``&star_job``."""
+    """Apply rules 4.1 to 4.6 to a flattened ``&star_job``."""
     uncovered = uncovered_star_job_keys(assigns)
     if uncovered:
         raise UncoveredKeyError(uncovered)
     out = list(assigns)
     ed = _Editor("star_job", out, diff)
-    problems: list[str] = []
-    _check_group(ed, win, problems)
-    if problems:
-        raise SnapshotMismatchError(problems)
+    plan = _plan_checks(assigns, win.header)
+    if plan.problems:
+        raise SnapshotMismatchError(plan.problems)
+    for flag in plan.flags:
+        if flag not in flags:
+            flags.append(flag)
+        diff.append(
+            f"4.3 | star_job | {flag} | core mass not in the header; relax "
+            "turned off unchecked"
+        )
     for a in list(out):
-        fam = _classify(a.name)
-        if fam == "off":
+        if _classify(a.name) == "off":
             ed.off(_off_rule(a.name), a)
-        elif fam == "check":
-            if _NET_KEYS.fullmatch(a.name) and a.name != "new_net_name":
-                ed.off("4.3", a)
-            elif _Z_KEYS.fullmatch(a.name) and a.name == "change_initial_z":
-                ed.off("4.3", a)
-            elif _MASS_KEYS.fullmatch(a.name) or _ROTATION_KEYS.fullmatch(
-                a.name
-            ):
-                ed.off("4.3", a)
+    for key in plan.off:
+        for a in [x for x in out if x.name == key]:
+            ed.off("4.3", a)
+    for key in dict.fromkeys(plan.remove):
+        for a in [x for x in out if x.name == key]:
+            ed.remove("4.3", a, "removed")
     # Rule 4.1: load the snapshot.
     ed.set("4.1", "load_saved_model", True)
     ed.set("4.1", "load_model_filename", win.snapshot)
@@ -628,13 +793,10 @@ def _apply_star_job(
         ed.set("4.1", key, False)
     # Rule 4.5: output and headless.
     ed.set("4.5", "save_model_filename", f"{win.prefix}/final.mod")
-    prof = _last(out, "filename_for_profile_when_terminate")
-    if prof is not None:
-        ed.set(
-            "4.5",
-            "filename_for_profile_when_terminate",
-            f"{win.prefix}/{prof.value}",
-        )
+    for key in _REWRITE_IF_PRESENT:
+        old = _last(out, key)
+        if old is not None:
+            ed.set("4.5", key, f"{win.prefix}/{old.value}")
     ed.set("4.5", "pgstar_flag", False)
     ed.set("4.5", "save_pgstar_files_when_terminate", False)
     ed.set("4.5", "save_photo_when_terminate", False)
@@ -673,6 +835,9 @@ def build_window_inlist(stage: Stage, win: Window) -> WindowInlist:
     """
     sections = stage.sections
     diff: list[str] = list(stage.notes)
+    flags: list[str] = []
+    if not win.header.has_prev_model:
+        flags.append("no-prev-model")
     out: dict[str, list[Assign]] = {}
     unknown = [
         f"&{n}"
@@ -684,19 +849,17 @@ def build_window_inlist(stage: Stage, win: Window) -> WindowInlist:
         raise UncoveredKeyError([*unknown, *star_keys])
     for name, assigns in sections.items():
         if name == "star_job":
-            out[name] = _apply_star_job(assigns, win, diff)
+            out[name] = _apply_star_job(assigns, win, diff, flags)
         elif name == "controls":
             out[name] = _apply_controls(assigns, win, diff)
         else:
             out[name] = list(assigns)
     # The rules write these even when the stage's inlist lacks the section.
-    for name, fn in (
-        ("star_job", _apply_star_job),
-        ("controls", _apply_controls),
-    ):
-        if name not in out:
-            out[name] = fn([], win, diff)
-    return WindowInlist(out, diff)
+    if "star_job" not in out:
+        out["star_job"] = _apply_star_job([], win, diff, flags)
+    if "controls" not in out:
+        out["controls"] = _apply_controls([], win, diff)
+    return WindowInlist(out, diff, flags)
 
 
 def format_inlist(sections: dict[str, list[Assign]]) -> str:
@@ -709,13 +872,17 @@ def format_inlist(sections: dict[str, list[Assign]]) -> str:
     return "".join(parts)
 
 
-def format_diff(window: Window, diff: Sequence[str]) -> str:
+def format_diff(
+    window: Window, diff: Sequence[str], flags: Sequence[str] = ()
+) -> str:
     """Write ``window_diff.txt``: every change with its rule number."""
     head = [
         f"# window {window.prefix}: snapshot {window.snapshot}, "
         f"start model {window.header.model_number}, W = {window.length}",
-        "# rule | section | key | change",
     ]
+    if flags:
+        head.append(f"# flags: {', '.join(flags)}")
+    head.append("# rule | section | key | change")
     return "\n".join([*head, *diff, ""])
 
 
@@ -728,7 +895,7 @@ def write_window(
         format_inlist(built.sections), encoding="utf-8"
     )
     (out_dir / "window_diff.txt").write_text(
-        format_diff(window, built.diff), encoding="utf-8"
+        format_diff(window, built.diff, built.flags), encoding="utf-8"
     )
 
 
@@ -774,14 +941,20 @@ def synthetic_header(stage: Stage) -> SnapshotHeader:
     net = _last(star, "new_net_name")
     z = _last(star, "new_z")
     mass = _last(star, "new_mass")
-    rot = any(_ROTATION_KEYS.fullmatch(a.name) for a in star)
+    y = _last(star, "new_y")
+    l_c = _last(star, "new_l_center")
+    v_c = _last(star, "new_v_center")
+    rot = any(_ROTATION_ACTIONS.fullmatch(a.name) for a in star)
     return SnapshotHeader(
-        file_type=BIT_ROTATION if rot else 0,
+        file_type=(BIT_ROTATION if rot else 0) | BIT_PREV_MODEL,
         model_number=1,
         star_age=0.0,
         initial_z=float(z.value) if z is not None else 0.02,
         mass_msun=float(mass.value) if mass is not None else 1.0,
         net_name=str(net.value) if net is not None else "basic.net",
+        l_center=float(l_c.value) if l_c is not None else 0.0,
+        v_center=float(v_c.value) if v_c is not None else 0.0,
+        initial_y=float(y.value) if y is not None else None,
     )
 
 
@@ -807,6 +980,8 @@ class StageReport:
     diff_lines: int
     uncovered: list[str]
     error: str
+    built: bool = False
+    flags: tuple[str, ...] = ()
 
 
 def dry_run_case(
@@ -835,7 +1010,13 @@ def dry_run_case(
             built = build_window_inlist(stage, win)
             reports.append(
                 StageReport(
-                    inlist, nominal_windows(steps), len(built.diff), [], ""
+                    inlist,
+                    nominal_windows(steps),
+                    len(built.diff),
+                    [],
+                    "",
+                    True,
+                    tuple(built.flags),
                 )
             )
         except UncoveredKeyError as exc:
@@ -863,14 +1044,23 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     cases = args.cases or _star_cases(args.manifest)
     key_cases: dict[str, set[str]] = collections.defaultdict(set)
     other_errors: list[str] = []
-    total_windows = 0
-    print("case | stages | windows | diff lines | uncovered keys")
+    n_stages = built_stages = built_cases = 0
+    nominal = built_windows = 0
+    flag_stages: collections.Counter[str] = collections.Counter()
+    print("case | stages | built | windows | diff lines | flags | uncovered")
     for case in cases:
         case_dir = harness_runner.resolve_case_dir("star", case, args.mesa_dir)
         ss = steps.get(f"star/{case}", {}).get("stage_steps")
         reps = dry_run_case(case_dir, ss)
-        wins = sum(r.windows for r in reps)
-        total_windows += wins
+        n_stages += len(reps)
+        nominal += sum(r.windows for r in reps)
+        ok = [r for r in reps if r.built]
+        built_stages += len(ok)
+        built_windows += sum(r.windows for r in ok)
+        built_cases += len(ok) == len(reps)
+        flags = sorted({f for r in ok for f in r.flags})
+        for f in flags:
+            flag_stages[f] += sum(f in r.flags for r in ok)
         unc = sorted({k for r in reps for k in r.uncovered})
         for k in unc:
             key_cases[k].add(case)
@@ -878,13 +1068,19 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
             f"{case}/{r.inlist}: {r.error}" for r in reps if r.error
         )
         print(
-            f"{case} | {len(reps)} | {wins} | "
-            f"{sum(r.diff_lines for r in reps)} | {', '.join(unc) or '-'}"
+            f"{case} | {len(reps)} | {len(ok)} | "
+            f"{sum(r.windows for r in ok)} | "
+            f"{sum(r.diff_lines for r in ok)} | {','.join(flags) or '-'} | "
+            f"{', '.join(unc) or '-'}"
         )
     print(
-        f"\ncases: {len(cases)}; stages: see table; nominal windows: "
-        f"{total_windows}; distinct uncovered keys: {len(key_cases)}"
+        f"\ncases: {len(cases)}; cases fully built: {built_cases}; "
+        f"stages: {n_stages}; stages built: {built_stages}; "
+        f"nominal windows: {nominal}; windows built: {built_windows}; "
+        f"distinct uncovered keys: {len(key_cases)}"
     )
+    for f, n in sorted(flag_stages.items()):
+        print(f"FLAG {f}: {n} stages")
     for k in sorted(key_cases):
         print(f"UNCOVERED {k}: {len(key_cases[k])} cases")
     for e in other_errors:

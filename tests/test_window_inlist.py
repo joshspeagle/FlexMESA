@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 import types
 from typing import Any
@@ -147,15 +148,15 @@ def test_chain_reads_extras_after_their_block_and_consumes_the_includes(
     ]
 
 
-def test_chain_resolves_shared_directory_and_legacy_numbered_keys(
+def test_chain_resolves_shared_directory_and_unsubscripted_array_names(
     tmp_path: pathlib.Path,
 ) -> None:
-    """An include is found in ``../shared``; legacy numbered keys work."""
+    """An include is found in ``../shared``; a bare array name sets slot 1."""
     case = _case(
         tmp_path,
         controls=(
-            "read_extra_controls_inlist1 = .true.\n"
-            "extra_controls_inlist1_name = 'inlist_shared'"
+            "read_extra_controls_inlist = .true.\n"
+            "extra_controls_inlist_name = 'inlist_shared'"
         ),
     )
     shared = case.parent / "shared"
@@ -165,6 +166,96 @@ def test_chain_resolves_shared_directory_and_legacy_numbered_keys(
     )
     ctrl = mw.read_stage(case, "inlist_stage").sections["controls"]
     assert [(a.name, a.value) for a in ctrl] == [("max_model_number", 7)]
+
+
+def test_chain_numbered_spelling_is_not_a_namelist_variable(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``read_extra_<s>_inlist1`` would be a namelist read error in MESA."""
+    case = _case(tmp_path, controls="read_extra_controls_inlist1 = .true.")
+    with pytest.raises(mw.WindowBuildError, match="not a MESA namelist"):
+        mw.read_stage(case, "inlist_stage")
+
+
+def test_chain_child_slot_overrides_the_parents_slot_and_resets_it(
+    tmp_path: pathlib.Path,
+) -> None:
+    """MESA resets slots in place (star_job_ctrls_io.f90:597-607).
+
+    The parent names ``child1`` (slot 1) and ``child2`` (slot 2). ``child1``
+    sets slot 2 to ``child3``. MESA reads parent, child1, child3; the parent's
+    slot 2 was reset by the time the loop reaches it, so ``child2`` is never
+    read. A tree walk would read child2 as well.
+    """
+    case = _case(
+        tmp_path,
+        star_job=(
+            "read_extra_star_job_inlist(1) = .true.\n"
+            "extra_star_job_inlist_name(1) = 'child1'\n"
+            "read_extra_star_job_inlist(2) = .true.\n"
+            "extra_star_job_inlist_name(2) = 'child2'\n"
+            "history_columns_file = 'parent'"
+        ),
+        files={
+            "child1": (
+                "&star_job\nhistory_columns_file = 'c1'\n"
+                "read_extra_star_job_inlist(2) = .true.\n"
+                "extra_star_job_inlist_name(2) = 'child3'\n/\n"
+            ),
+            "child2": "&star_job\nhistory_columns_file = 'c2'\n/\n",
+            "child3": "&star_job\nhistory_columns_file = 'c3'\n/\n",
+        },
+    )
+    stage = mw.read_stage(case, "inlist_stage")
+    assert stage.files["star_job"] == [
+        "inlist_stage",
+        "child1",
+        "child3",
+    ]
+    assert [a.value for a in stage.sections["star_job"]] == [
+        "parent",
+        "c1",
+        "c3",
+    ]
+
+
+def test_chain_reads_only_the_first_group_of_a_name_per_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A Fortran namelist read stops at the first matching group."""
+    case = _case(tmp_path, star_job="history_columns_file = 'one'")
+    with (case / "inlist_stage").open("a", encoding="utf-8") as fh:
+        fh.write("&star_job\nhistory_columns_file = 'two'\n/\n")
+    star = mw.read_stage(case, "inlist_stage").sections["star_job"]
+    assert [a.value for a in star] == ["one"]
+
+
+def test_chain_missing_group_is_an_error_for_star_job_not_for_eos(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``&star_job`` and ``&controls`` must exist in each file read."""
+    case = _case(
+        tmp_path,
+        star_job=(
+            "read_extra_star_job_inlist(1) = .true.\n"
+            "extra_star_job_inlist_name(1) = 'inlist_nogroup'"
+        ),
+        files={"inlist_nogroup": "&controls\n/\n"},
+    )
+    with pytest.raises(mw.WindowBuildError, match="no &star_job"):
+        mw.read_stage(case, "inlist_stage")
+    case2 = _case(
+        tmp_path / "eos",
+        extra="",
+        files={"inlist_nogroup": "&controls\n/\n"},
+    )
+    (case2 / "inlist_stage").write_text(
+        "&star_job\n/\n&eos\nread_extra_eos_inlist(1) = .true.\n"
+        "extra_eos_inlist_name(1) = 'inlist_nogroup'\n/\n&kap\n/\n"
+        "&controls\n/\n",
+        encoding="utf-8",
+    )
+    assert mw.read_stage(case2, "inlist_stage").sections["eos"] == []
 
 
 def test_chain_missing_star_job_include_is_an_error(
@@ -198,10 +289,10 @@ def test_chain_missing_pgstar_include_is_skipped_and_recorded(
     assert any("pgstar" in ln and "skipped" in ln for ln in built.diff)
 
 
-def test_chain_include_cycle_does_not_recurse_forever(
+def test_chain_include_cycle_hits_the_nesting_limit(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A file that includes itself is read once."""
+    """A file that includes itself fails at level 10, as in MESA."""
     case = _case(
         tmp_path,
         star_job=(
@@ -210,8 +301,8 @@ def test_chain_include_cycle_does_not_recurse_forever(
             "history_columns_file = 'x'"
         ),
     )
-    star = mw.read_stage(case, "inlist_stage").sections["star_job"]
-    assert [a.name for a in star] == ["history_columns_file"]
+    with pytest.raises(mw.WindowBuildError, match="too many levels"):
+        mw.read_stage(case, "inlist_stage")
 
 
 # ------------------------------------------------------------- snapshot header
@@ -301,9 +392,6 @@ RULE_4_2_ROWS = [
     ("initial_h2", "0d0"),
     ("initial_he3", "0d0"),
     ("initial_he4", "0.28d0"),
-    ("relax_mass", ".true."),
-    ("relax_initial_mass", ".true."),
-    ("relax_initial_z", ".true."),
     ("relax_to_this_tau_factor", "10d0"),
     ("relax_core_years_for_dt", "1d-3"),
     ("relax_omega_max_yrs_dt", "1d-3"),
@@ -317,155 +405,136 @@ RULE_4_2_ROWS = [
     ("set_to_this_tau_factor", ".true."),
     ("profile_starting_model", ".true."),
     ("steps_to_take_before_terminate", "5"),
+    # rule 4.6: parameters of relax, create and removal actions
+    ("core_avg_eps", "1d0"),
+    ("core_avg_rho", "1d0"),
+    ("dlg_core_mass_per_step", "1d-2"),
+    ("dlgm_per_step", "1d-2"),
+    ("lg_max_abs_mdot", "-3d0"),
+    ("dlogtau_factor", "0.1d0"),
+    ("irrad_col_depth", "1d0"),
+    ("max_dt_for_relax_entropy", "1d3"),
+    ("max_steps_to_relax_entropy", "100"),
+    ("num_timescales_for_relax_entropy", "10"),
+    ("timescale_for_relax_entropy", "1d0"),
+    ("timescale_for_relax_composition", "1d0"),
+    ("near_zams_relax_initial_surface_rotation_v", "100d0"),
+    ("near_zams_relax_omega_div_omega_crit", "0.1d0"),
+    ("initial_model_relax_num_steps", "100"),
+    ("mass_in_gm_for_create_initial_model", "1d33"),
+    ("radius_in_cm_for_create_initial_model", "1d11"),
+    ("extra_mass_retained_by_remove_h_env", "1d-3"),
+    ("seconds_for_initial_dt", "1d0"),
+    ("dump_missing_metals_into_heaviest", ".true."),
+    ("disable_pgstar_during_relax_flag", ".true."),
+    ("some_new_relax_thing", "1"),
 ]
 
 
-@pytest.mark.parametrize(("key", "value"), RULE_4_2_ROWS)
-def test_rule_4_2_one_time_actions_are_off(
-    tmp_path: pathlib.Path, key: str, value: str
+@pytest.mark.parametrize(
+    ("action", "target"),
+    [
+        ("set_initial_omega", "new_omega = 1d-4"),
+        (
+            "set_initial_omega_div_omega_crit",
+            "new_omega_div_omega_crit = 0.2d0",
+        ),
+        (
+            "set_initial_surface_rotation_v",
+            "new_surface_rotation_v = 50d0",
+        ),
+    ],
+)
+def test_rule_4_3_rotation_actions_off_when_snapshot_rotates(
+    tmp_path: pathlib.Path, action: str, target: str
 ) -> None:
-    """Each row of the 4.2 table is turned off and logged with rule 4.2."""
-    built = _build(tmp_path, star_job=f"{key} = {value}")
-    got = _get(built, "star_job", key)
-    if value.startswith("."):
-        assert got == [False]
-    else:
-        assert got == []
-    assert _diff_rules(built, key) == ["4.2"]
+    """A rotation action is turned off and its target removed."""
+    built = _build(
+        tmp_path,
+        star_job=f"{action} = .true.\n{target}",
+        win=_window(file_type=mw.BIT_ROTATION),
+    )
+    assert _get(built, "star_job", action) == [False]
+    assert _get(built, "star_job", target.split(" ")[0]) == []
+    assert _diff_rules(built, action) == ["4.3"]
 
 
-def test_rule_4_2_a_switch_already_off_is_not_logged(
+def test_rule_4_3_rotation_action_errors_when_snapshot_does_not_rotate(
     tmp_path: pathlib.Path,
 ) -> None:
-    """``relax_mass = .false.`` stays and produces no diff line."""
-    built = _build(tmp_path, star_job="relax_mass = .false.")
-    assert _get(built, "star_job", "relax_mass") == [False]
-    assert _diff_rules(built, "relax_mass") == []
+    """A rotation action cannot be satisfied by a static snapshot."""
+    with pytest.raises(mw.SnapshotMismatchError, match="rotation is off"):
+        _build(
+            tmp_path,
+            star_job=(
+                "set_initial_omega_div_omega_crit = .true.\n"
+                "new_omega_div_omega_crit = 0.2d0"
+            ),
+        )
+    inert = _build(tmp_path / "inert", star_job="new_omega = 1d-4")
+    assert _get(inert, "star_job", "new_omega") == [1e-4]
 
 
-# ------------------------------------------------------------------- rule 4.3
-
-
-def test_rule_4_3_net_change_off_when_header_net_matches(
+def test_rule_4_6_relax_rotation_action_needs_the_rotation_bit(
     tmp_path: pathlib.Path,
 ) -> None:
-    """``change_net`` and ``change_initial_net`` go off; the name is kept."""
+    """``relax_initial_omega_div_omega_crit`` is checked like ``set_*``."""
+    with pytest.raises(mw.SnapshotMismatchError, match="rotation is off"):
+        _build(
+            tmp_path,
+            star_job=(
+                "relax_initial_omega_div_omega_crit = .true.\n"
+                "new_omega_div_omega_crit = 0.2d0"
+            ),
+        )
+
+
+@pytest.mark.parametrize("axis", ["l", "v"])
+def test_rule_4_6_center_targets_checked_against_the_header(
+    tmp_path: pathlib.Path, axis: str
+) -> None:
+    """``set_initial_{l,v}_center`` is off when the header matches."""
+    hdr: dict[str, Any] = {f"{axis}_center": 1.5e40}
     built = _build(
         tmp_path,
         star_job=(
-            "change_net = .true.\nchange_initial_net = .true.\n"
-            "new_net_name = 'co_burn.net'"
+            f"set_initial_{axis}_center = .true.\nnew_{axis}_center = 1.5d40"
         ),
-        win=_window(net_name="co_burn.net"),
+        win=_window(**hdr),
     )
-    assert _get(built, "star_job", "change_net") == [False]
-    assert _get(built, "star_job", "change_initial_net") == [False]
-    assert _get(built, "star_job", "new_net_name") == ["co_burn.net"]
-    assert _diff_rules(built, "change_net") == ["4.3"]
-
-
-def test_rule_4_3_net_mismatch_is_an_error(tmp_path: pathlib.Path) -> None:
-    """A snapshot on another net is reported, not built."""
-    with pytest.raises(mw.SnapshotMismatchError, match=r"co_burn\.net"):
+    assert _get(built, "star_job", f"set_initial_{axis}_center") == [False]
+    assert _get(built, "star_job", f"new_{axis}_center") == []
+    with pytest.raises(
+        mw.SnapshotMismatchError, match=f"{axis.upper()}_center"
+    ):
         _build(
-            tmp_path,
-            star_job="change_net = .true.\nnew_net_name = 'co_burn.net'",
-            win=_window(net_name="basic.net"),
+            tmp_path / "bad",
+            star_job=(
+                f"set_initial_{axis}_center = .true.\n"
+                f"new_{axis}_center = 1.5d40"
+            ),
+            win=_window(),
         )
-
-
-def test_rule_4_3_net_change_without_target_name_is_an_error(
-    tmp_path: pathlib.Path,
-) -> None:
-    """``change_net`` with no ``new_net_name`` cannot be checked."""
-    with pytest.raises(mw.SnapshotMismatchError, match="new_net_name"):
-        _build(tmp_path, star_job="change_net = .true.")
-
-
-def test_rule_4_3_z_change_off_when_header_z_matches(
-    tmp_path: pathlib.Path,
-) -> None:
-    """``change_initial_z`` goes off when ``initial_z`` equals ``new_z``."""
-    built = _build(
-        tmp_path,
-        star_job="change_initial_z = .true.\nnew_z = 0.014d0",
-        win=_window(initial_z=0.014),
+    zero = _build(
+        tmp_path / "zero",
+        star_job=f"set_initial_{axis}_center = .true.\nnew_{axis}_center = 0d0",
     )
-    assert _get(built, "star_job", "change_initial_z") == [False]
-    assert _diff_rules(built, "change_initial_z") == ["4.3"]
+    assert _get(zero, "star_job", f"set_initial_{axis}_center") == [False]
 
 
-def test_rule_4_3_z_mismatch_is_an_error(tmp_path: pathlib.Path) -> None:
-    """A header ``initial_z`` that differs from ``new_z`` is reported."""
-    with pytest.raises(mw.SnapshotMismatchError, match="initial_z"):
-        _build(
-            tmp_path,
-            star_job="change_initial_z = .true.\nnew_z = 0.014d0",
-            win=_window(initial_z=0.02),
-        )
-
-
-def test_rule_4_3_mass_targets_off_when_header_mass_matches(
+def test_rule_4_6_new_y_needs_a_header_initial_y(
     tmp_path: pathlib.Path,
 ) -> None:
-    """``new_mass`` and ``change_mass_years_for_dt`` are removed."""
-    built = _build(
-        tmp_path,
-        star_job="new_mass = 15d0\nchange_mass_years_for_dt = 1d-3",
-        win=_window(mass_msun=15.0 * (1 + 1e-14)),
-    )
-    assert _get(built, "star_job", "new_mass") == []
-    assert _get(built, "star_job", "change_mass_years_for_dt") == []
-    assert _diff_rules(built, "new_mass") == ["4.3"]
-
-
-def test_rule_4_3_mass_mismatch_is_an_error(tmp_path: pathlib.Path) -> None:
-    """A stage that relaxes mass over the run is not built from a snapshot."""
-    with pytest.raises(mw.SnapshotMismatchError, match="M/Msun"):
-        _build(
-            tmp_path, star_job="new_mass = 15d0", win=_window(mass_msun=20.0)
-        )
-
-
-def test_rule_4_3_new_core_mass_cannot_be_checked_and_errors(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Rule 4.3 names only M/Msun; ``new_core_mass`` is listed for claude-a."""
-    with pytest.raises(mw.SnapshotMismatchError, match="new_core_mass"):
-        _build(tmp_path, star_job="new_core_mass = 1d0")
-
-
-ROTATION_ROWS = [
-    ("new_omega_div_omega_crit", "0.2d0"),
-    ("set_initial_omega", ".true."),
-    ("set_initial_omega_div_omega_crit", ".true."),
-    ("new_omega", "1d-4"),
-    ("set_initial_surface_rotation_v", ".true."),
-    ("new_surface_rotation_v", "50d0"),
-]
-
-
-@pytest.mark.parametrize(("key", "value"), ROTATION_ROWS)
-def test_rule_4_3_rotation_targets_off_when_snapshot_rotates(
-    tmp_path: pathlib.Path, key: str, value: str
-) -> None:
-    """Rotation actions go off when the file_type has the rotation bit."""
-    built = _build(
-        tmp_path,
-        star_job=f"{key} = {value}",
-        win=_window(file_type=mw.BIT_ROTATION),
-    )
-    got = _get(built, "star_job", key)
-    assert got == ([False] if value.startswith(".") else [])
-    assert _diff_rules(built, key) == ["4.3"]
-
-
-def test_rule_4_3_rotation_targets_error_when_snapshot_does_not_rotate(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The stage's rotation target cannot be satisfied by a static snapshot."""
-    with pytest.raises(mw.SnapshotMismatchError, match="rotation is off"):
-        _build(tmp_path, star_job="new_omega_div_omega_crit = 0.2d0")
+    """A y relax errors when the header has no ``initial_y``; inert if off."""
+    sj = "relax_y = .true.\nnew_y = 0.28d0"
+    with pytest.raises(mw.SnapshotMismatchError, match="initial_y"):
+        _build(tmp_path, star_job=sj)
+    built = _build(tmp_path / "ok", star_job=sj, win=_window(initial_y=0.28))
+    assert _get(built, "star_job", "new_y") == []
+    with pytest.raises(mw.SnapshotMismatchError, match="initial_y"):
+        _build(tmp_path / "bad", star_job=sj, win=_window(initial_y=0.3))
+    inert = _build(tmp_path / "inert", star_job="new_y = 0.28d0")
+    assert _get(inert, "star_job", "new_y") == [0.28]
 
 
 @pytest.mark.parametrize(
@@ -516,7 +585,8 @@ def test_rule_4_3_all_failed_checks_are_reported_together(
             tmp_path,
             star_job=(
                 "change_net = .true.\nnew_net_name = 'x.net'\n"
-                "change_initial_z = .true.\nnew_z = 0.5d0\nnew_mass = 99d0"
+                "change_initial_z = .true.\nnew_z = 0.5d0\n"
+                "relax_mass = .true.\nnew_mass = 99d0"
             ),
         )
     assert len(info.value.problems) == 3
@@ -540,6 +610,30 @@ def test_rule_4_3_all_failed_checks_are_reported_together(
         ("set_cumulative_energy_error_each_step_if_age_less_than", "1d3"),
         ("show_log_description_at_start", ".false."),
         ("show_net_species_info", ".true."),
+        # rule 4.6 keeps
+        ("adv_net", ".true."),
+        ("auto_extend_net", ".true."),
+        ("enable_adaptive_network", ".true."),
+        ("min_x_for_add", "1d-20"),
+        ("min_x_for_keep", "1d-20"),
+        ("min_x_for_n", "1d-20"),
+        ("electron_coulomb_corrections", ".true."),
+        ("ion_coulomb_corrections", ".true."),
+        ("num_special_rate_factors", "1"),
+        ("reaction_for_special_factor", "'r_he4_he4'"),
+        ("special_rate_factor", "2d0"),
+        ("special_weak_states_file", "'states.dat'"),
+        ("special_weak_transitions_file", "'trans.dat'"),
+        ("rate_tables_dir", "'rate_tables'"),
+        ("rate_cache_suffix", "'cache'"),
+        ("fallback_check_total_energy", ".true."),
+        ("first_model_for_timing", "5"),
+        ("warn_run_star_extras", ".false."),
+        ("mesa_dir", "'/x'"),
+        ("required_termination_code_string", "'xa_central_lower_limit'"),
+        ("save_model_when_terminate", ".true."),
+        ("write_profile_when_terminate", ".true."),
+        ("save_pulse_data_when_terminate", ".true."),
     ],
 )
 def test_rule_4_4_per_step_physics_and_file_inputs_are_kept(
@@ -678,24 +772,38 @@ def test_uncovered_star_job_keys_fail_loudly_and_are_all_listed(
         _build(
             tmp_path,
             star_job=(
-                "save_model_when_terminate = .true.\n"
-                "required_termination_code_string = 'x'\n"
+                "mystery_two = .true.\nmystery_one = 'x'\n"
                 "history_columns_file = 'h'"
             ),
         )
-    assert info.value.keys == [
-        "required_termination_code_string",
-        "save_model_when_terminate",
-    ]
+    assert info.value.keys == ["mystery_one", "mystery_two"]
 
 
 def test_uncovered_namelist_section_fails_loudly(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A section outside the rules (``&colors``) is an error."""
+    """A section outside the rules is an error (``&colors`` is not)."""
     with pytest.raises(mw.UncoveredKeyError) as info:
-        _build(tmp_path, extra="&colors\nuse_colors = .true.\n/\n")
-    assert info.value.keys == ["&colors"]
+        _build(tmp_path, extra="&mystery_section\nx = 1\n/\n")
+    assert info.value.keys == ["&mystery_section"]
+
+
+def test_rule_4_6_colors_section_is_kept_verbatim(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``&colors`` passes through unchanged and unlogged."""
+    built = _build(
+        tmp_path,
+        extra=(
+            "&colors\nuse_colors = .true.\n"
+            "colors_per_newton_iter = .false.\n/\n"
+        ),
+    )
+    assert [(a.name, a.value) for a in built.sections["colors"]] == [
+        ("use_colors", True),
+        ("colors_per_newton_iter", False),
+    ]
+    assert not any("| colors |" in ln for ln in built.diff)
 
 
 def test_uncovered_error_wins_over_snapshot_checks(
@@ -751,7 +859,7 @@ def test_every_diff_line_has_a_rule_number(tmp_path: pathlib.Path) -> None:
     """Every change is logged as ``rule | section | key | change``."""
     built = _build(
         tmp_path,
-        star_job="set_initial_age = .true.\nrelax_mass = .true.",
+        star_job="set_initial_age = .true.\nrelax_core = .true.",
         controls="max_model_number = 9999",
     )
     for line in built.diff:
@@ -834,12 +942,12 @@ def test_dry_run_reports_diff_size_and_uncovered_keys(
         tmp_path,
         star_job=(
             "change_net = .true.\nnew_net_name = 'approx21.net'\n"
+            "set_initial_omega_div_omega_crit = .true.\n"
             "new_omega_div_omega_crit = 0.1d0\nset_initial_age = .true."
         ),
     )
     (case / "inlist_bad").write_text(
-        "&star_job\nsave_model_when_terminate = .true.\n/\n"
-        "&eos\n/\n&kap\n/\n&controls\n/\n",
+        "&star_job\nmystery_key = .true.\n/\n&eos\n/\n&kap\n/\n&controls\n/\n",
         encoding="utf-8",
     )
     good, bad = mw.dry_run_case(
@@ -847,5 +955,278 @@ def test_dry_run_reports_diff_size_and_uncovered_keys(
     )
     assert good.error == "" and good.uncovered == []
     assert good.windows == 5 and good.diff_lines >= 8
-    assert bad.uncovered == ["save_model_when_terminate"]
+    assert good.flags == ()
+    assert bad.uncovered == ["mystery_key"]
+    assert good.built and not bad.built
     assert bad.windows == 1 and bad.diff_lines == 0
+
+
+# ------------------------------------------------------------- rule 4.6 output
+
+
+def test_rule_4_6_pause_before_terminate_is_off(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Headless: ``pause_before_terminate`` is set to ``.false.`` (rule 4.5)."""
+    built = _build(tmp_path, star_job="pause_before_terminate = .true.")
+    assert _get(built, "star_job", "pause_before_terminate") == [False]
+    assert _diff_rules(built, "pause_before_terminate") == ["4.5"]
+
+
+def test_rule_4_6_save_photo_filename_is_rewritten_when_present(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``save_photo_filename`` goes into the window directory; absent stays."""
+    built = _build(
+        tmp_path,
+        star_job="save_photo_filename = 'sdb.photo'",
+        win=_window(prefix="w9"),
+    )
+    assert _get(built, "star_job", "save_photo_filename") == ["w9/sdb.photo"]
+    none = _build(tmp_path / "none")
+    assert _get(none, "star_job", "save_photo_filename") == []
+
+
+def test_rule_4_6_save_when_terminate_kept_with_rewritten_filenames(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The ``*_when_terminate`` switches stay on; their files are redirected."""
+    built = _build(
+        tmp_path,
+        star_job=(
+            "save_model_when_terminate = .true.\n"
+            "write_profile_when_terminate = .true.\n"
+            "filename_for_profile_when_terminate = 'final_profile.data'"
+        ),
+        win=_window(prefix="w4"),
+    )
+    assert _get(built, "star_job", "save_model_when_terminate") == [True]
+    assert _get(built, "star_job", "write_profile_when_terminate") == [True]
+    assert _get(built, "star_job", "filename_for_profile_when_terminate") == [
+        "w4/final_profile.data"
+    ]
+
+
+# --------------------------------------------------------- flags and header
+
+
+def test_no_prev_model_flag_and_flags_in_the_diff_header(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A snapshot without the previous-model block is flagged (rule 4.2)."""
+    case = _case(tmp_path, star_job="relax_core = .true.")
+    win = _window(file_type=0)
+    built = mw.build_window_inlist(mw.read_stage(case, "inlist_stage"), win)
+    assert built.flags == ["no-prev-model", "relax-assumed"]
+    text = mw.format_diff(win, built.diff, built.flags)
+    assert "# flags: no-prev-model, relax-assumed" in text
+    ok = mw.build_window_inlist(
+        mw.read_stage(case, "inlist_stage"),
+        _window(file_type=mw.BIT_PREV_MODEL),
+    )
+    assert ok.flags == ["relax-assumed"]
+
+
+def test_mod_header_center_fields_and_initial_y_are_optional() -> None:
+    """``L_center``, ``v_center`` and ``initial_y`` are read when present."""
+    h0 = mw.parse_mod_header(MOD_TEXT)
+    assert (h0.l_center, h0.v_center, h0.initial_y) == (0.0, 0.0, None)
+    text = MOD_TEXT.replace(
+        "                        n_shells",
+        "                        L_center      1.5D+40  ! luminosity of core\n"
+        "                        v_center     -2.5D+06  ! velocity\n"
+        "                        initial_y     2.8D-01\n"
+        "                        n_shells",
+    )
+    h1 = mw.parse_mod_header(text)
+    assert h1.l_center == 1.5e40
+    assert h1.v_center == -2.5e6
+    assert h1.initial_y == 0.28
+
+
+# ----------------------------------------------------- chain parity (rule 4.6)
+
+_SECTIONS = ("star_job", "controls", "eos", "kap")
+_SLOT = re.compile(
+    r"(read_extra|extra)_(\w+?)_inlist(_name)?\s*\(\s*(\d)\s*\)\s*=\s*"
+    r"(\.true\.|\.false\.|'[^']*'|\"[^\"]*\")",
+    re.IGNORECASE,
+)
+
+
+def _groups(path: pathlib.Path) -> dict[str, dict[str, dict[int, Any]]]:
+    """Slot settings per group of a file, by regex (independent of the parser).
+
+    Only the first group of each name counts, as in a namelist read.
+    """
+    out: dict[str, dict[str, dict[int, Any]]] = {}
+    cur: str | None = None
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.split("!")[0]
+        m = re.match(r"\s*&(\w+)", line)
+        if m:
+            name = m.group(1).lower()
+            cur = name if name not in out else None
+            if cur:
+                out[cur] = {"f": {}, "n": {}}
+            continue
+        if line.strip().startswith("/"):
+            cur = None
+            continue
+        if cur is None:
+            continue
+        for m in _SLOT.finditer(line):
+            slot, val = int(m.group(4)), m.group(5)
+            if m.group(1).lower() == "read_extra":
+                out[cur]["f"][slot] = val.lower() == ".true."
+            else:
+                out[cur]["n"][slot] = val[1:-1].strip()
+    return out
+
+
+def _find(case_dir: pathlib.Path, name: str) -> pathlib.Path:
+    for cand in (case_dir / name, case_dir.parent / "shared" / name):
+        if cand.is_file():
+            return cand
+    raise AssertionError(f"missing include {name} for {case_dir}")
+
+
+def _mesa_order(case_dir: pathlib.Path, entry: str, sec: str) -> list[str]:
+    """Files read, with MESA's slot arrays reset in place (reference)."""
+    flags: dict[int, bool] = {}
+    names: dict[int, str] = {}
+    order: list[str] = []
+
+    def read(path: pathlib.Path) -> None:
+        order.append(path.name)
+        grp = _groups(path).get(sec)
+        if grp:
+            flags.update(grp["f"])
+            names.update(grp["n"])
+        for i in range(1, 6):
+            on, nm = flags.get(i, False), names.get(i, "undefined")
+            flags[i], names[i] = False, "undefined"
+            if on:
+                read(_find(case_dir, nm))
+
+    read(_find(case_dir, entry))
+    return order
+
+
+def _tree_order(case_dir: pathlib.Path, entry: str, sec: str) -> list[str]:
+    """Files read by a tree walk (what Rust ``InlistBundle`` does)."""
+    order: list[str] = []
+
+    def read(path: pathlib.Path) -> None:
+        order.append(path.name)
+        grp = _groups(path).get(sec) or {"f": {}, "n": {}}
+        for i in range(1, 6):
+            if grp["f"].get(i) and grp["n"].get(i, "").strip():
+                read(_find(case_dir, grp["n"][i]))
+
+    read(_find(case_dir, entry))
+    return order
+
+
+#: Python key -> field of ``star_parse_inlist_bundle``'s summary, per section.
+_PARITY_FIELDS = {
+    "star_job": {
+        "create_pre_main_sequence_model": "create_pre_ms_model",
+        "create_initial_model": "create_initial_model",
+        "create_rsp_model": "create_rsp_model",
+        "load_saved_model": "load_saved_model",
+        "load_model_filename": "load_model_filename",
+        "save_model_when_terminate": "save_model_when_terminate",
+        "save_model_filename": "save_model_filename",
+        "change_net": "change_net",
+        "new_net_name": "new_net_name",
+        "required_termination_code_string": "required_termination_code_string",
+    },
+    "controls": {
+        "initial_mass": "initial_mass",
+        "initial_z": "initial_z",
+        "initial_y": "initial_y",
+        "max_model_number": "max_model_number",
+        "max_age": "max_age",
+        "stop_near_zams": "stop_near_zams",
+        "v_flag": "v_flag",
+        "u_flag": "u_flag",
+        "rotation_flag": "rotation_flag",
+        "rsp_flag": "rsp_flag",
+        "okay_to_remesh": "okay_to_remesh",
+        "use_gold_tolerances": "use_gold_tolerances",
+        "use_gold2_tolerances": "use_gold2_tolerances",
+        "op_split_burn": "op_split_burn",
+        "solver_max_tries_before_reject": "solver_max_tries_before_reject",
+        "max_tries1": "max_tries1",
+    },
+}
+
+
+def test_chain_reader_follows_mesa_and_cross_checks_inlist_bundle() -> None:
+    """The constructor reads MESA's chain; the Rust bundle is the cross-check.
+
+    For every ``do_one`` stage of the 90 star cases and each of ``star_job``,
+    ``controls``, ``eos`` and ``kap``, the files the constructor reads, in
+    order, equal those of a reference loop that resets the include slots in
+    place (``star_job_ctrls_io.f90:597-607``). Rust ``InlistBundle`` walks a
+    tree; where the two orders agree for all four sections, every key of the
+    bundle's summary that the stage sets carries the same final value as the
+    flattened chain. Where they disagree (``twin_studies`` only, 8
+    (stage, section) pairs) the Rust summary is not compared: MESA's order
+    is the standard and the departure belongs to a ``[Parity]`` issue.
+    """
+    import tomllib
+
+    from flexmesa.star import e2e
+    from flexmesa.testing import known_gaps_gate
+
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
+    manifest = tomllib.loads(
+        (
+            REPO_ROOT / "benchmarks" / "history_harness" / "case_manifest.toml"
+        ).read_text(encoding="utf-8")
+    )
+    cases = [c["case"] for c in manifest["cases"] if c["suite"] == "star"]
+    assert len(cases) == 90
+    compared = stages = pairs = 0
+    disagree: set[tuple[str, str, str]] = set()
+    for case in cases:
+        case_dir = base / "star" / "test_suite" / case
+        for kind, inlist, _out in e2e.parse_rn_stages(case_dir):
+            if kind != "do_one":
+                continue
+            stages += 1
+            flat = mw.read_stage(case_dir, inlist)
+            agree = True
+            for sec in _SECTIONS:
+                if sec not in flat.files:
+                    continue
+                pairs += 1
+                mesa = _mesa_order(case_dir, inlist, sec)
+                assert flat.files[sec] == mesa, (case, inlist, sec)
+                if mesa != _tree_order(case_dir, inlist, sec):
+                    agree = False
+                    disagree.add((case, inlist, sec))
+            if not agree:
+                continue
+            rust = e2e.parse_inlist_bundle(
+                case_dir / inlist, allow_unsupported_controls=True
+            )
+            assert set(flat.sections) <= set(rust["sections"]), (case, inlist)
+            for section, fields in _PARITY_FIELDS.items():
+                for key, field in fields.items():
+                    last = mw._last(flat.sections.get(section, []), key)
+                    if last is None:
+                        continue
+                    compared += 1
+                    got = rust[field]
+                    if isinstance(got, list):
+                        got = got[-1] if got else None
+                    assert got == last.value, (case, inlist, key)
+    assert stages >= 90 and pairs >= 4 * 90
+    assert compared > 500, compared
+    assert {c for c, _i, _s in disagree} == {"twin_studies"}, disagree
+    assert len(disagree) == 8, disagree

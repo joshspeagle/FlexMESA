@@ -6123,7 +6123,14 @@ upstream_lines = 454
 upstream_sha256 = "01e7b2896719984c3c0663219217fbbebb80463123c1ac42bc0a7599dec9a6d9"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["do_in_out", "do_in_out_neu", "do_in_out_neu::check", "do_lhs_iso", "do_rhs_iso"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_in_out" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out" # partial: Q and Qneu come from reactions[i].std_q and std_qneu * reaction_neuqs_factor instead of n% reaction_Qs/reaction_neuQs(j)
+"do_in_out_neu" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out_neu" # partial: clamps the reaction category index; omits check_balance, the checkQs consistency test and the debug prints; an input or output isotope number of 0 underflows and panics instead of the mesa_error
+"do_in_out_neu::check" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out_neu" # partial: a zero isotope number underflows and panics instead of the mesa_error with the reaction name
+"do_lhs_iso" = "crates/flexmesa-net/src/derivs_support.rs::do_signed_iso" # partial: folds do_lhs_iso and do_rhs_iso into one signed routine and updates every positive idr slot, where upstream returns at the first idr <= 0
+"do_rhs_iso" = "crates/flexmesa-net/src/derivs_support.rs::do_signed_iso" # partial: folds do_lhs_iso and do_rhs_iso into one signed routine and updates every positive idr slot, where upstream returns at the first idr <= 0
 
 [[files]]
 upstream_path = "net/private/net_eval.f90"

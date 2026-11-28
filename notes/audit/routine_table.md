@@ -22,10 +22,10 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Measure | Value |
 | :--- | ---: |
 | Upstream lines | 144,952 |
-| Lines in routines mapped in full | 39,527 |
+| Lines in routines mapped in full | 39,575 |
 | Lines in routines mapped in part | 50,766 |
 | Lines in not-applicable routines | 2,550 |
-| Lines in unmapped routines | 30,491 |
+| Lines in unmapped routines | 30,443 |
 | Lines outside routines | 21,618 |
 | Lines in routines with exact oracle evidence | 2,234 |
 | Lines in routines with print-precision oracle evidence only | 779 |
@@ -36,7 +36,7 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Not-applicable fraction of all lines | 1.8% |
 | Line-weighted oracle fraction (exact / print) | 1.5% / 0.5% |
 | Whole-file ported fraction (existing headline) | 31.1% |
-| Routines (full / partial / N/A / unmapped / total) | 801 / 600 / 107 / 1,080 / 2,588 |
+| Routines (full / partial / N/A / unmapped / total) | 802 / 600 / 107 / 1,079 / 2,588 |
 | Routines with oracle evidence (exact / print) | 14 / 4 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
@@ -45,7 +45,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle (exact / print) | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle (exact / print) | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 722 | 470 | 73 | 911 | 14 / 4 | 120,509 | 37,142 | 43,231 | 1,858 | 25,620 | 12,658 | 30.8% | 35.9% | 31.3% | 1.9% / 0.6% | 35.6% |
+| `star` | 173 | 2,176 | 723 | 470 | 73 | 910 | 14 / 4 | 120,509 | 37,190 | 43,231 | 1,858 | 25,572 | 12,658 | 30.9% | 35.9% | 31.3% | 1.9% / 0.6% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 / 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 / 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% / 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 / 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% / 0.0% | 0.0% |
@@ -83,7 +83,7 @@ The ceiling is the highest status that the routine evidence of a file supports. 
 
 `case_level_evidence` is never a ceiling because the `exercised` level is not derived. Contained procedures count as routines. A ceiling over the hand-set status is a candidate for review, not a raise: the table reads no status as evidence and changes none, and nothing gates on this section.
 
-### Hand-set status above the ceiling (36 files)
+### Hand-set status above the ceiling (35 files)
 
 Files whose status needs more than the routine evidence gives. Files with no ceiling claim are not listed; 5 files with a ported status have no ceiling claim. Largest ten:
 
@@ -503,7 +503,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/do_one_utils.f90` | `star` | partial | partial | 1,544 | 16 | 3 | 2 | 7 | 0 / 0 | 901 | 105 | 437 | 34 | 67 |
 | `star/private/element_diffusion.f90` | `star` | ported_unverified | partial | 582 | 6 | 3 | 1 | 0 | 0 / 0 | 38 | 414 | 0 | 94 | 36 |
 | `star/private/eos_support.f90` | `star` | partial | partial | 413 | 8 | 2 | 5 | 0 | 0 / 0 | 102 | 196 | 0 | 38 | 77 |
-| `star/private/eps_grav.f90` | `star` | ported_unverified | partial | 408 | 6 | 5 | 0 | 0 | 0 / 0 | 313 | 0 | 0 | 48 | 47 |
+| `star/private/eps_grav.f90` | `star` | ported_unverified | ported_unverified | 408 | 6 | 6 | 0 | 0 | 0 / 0 | 361 | 0 | 0 | 0 | 47 |
 | `star/private/eps_mdot.f90` | `star` | ported_unverified | ported_unverified | 706 | 6 | 6 | 0 | 0 | 1 / 0 | 634 | 0 | 0 | 0 | 72 |
 | `star/private/evolve.f90` | `star` | partial | partial | 2,403 | 26 | 2 | 14 | 9 | 0 / 0 | 68 | 1,936 | 315 | 12 | 72 |
 | `star/private/evolve_support.f90` | `star` | partial | partial | 305 | 5 | 0 | 2 | 1 | 0 / 0 | 0 | 189 | 19 | 59 | 38 |

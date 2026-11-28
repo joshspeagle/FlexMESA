@@ -8401,7 +8401,7 @@ flexmesa_files = ["crates/flexmesa-star/src/eps_grav.rs"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `do_std_eps_grav` and `do_lnS_eps_grav` present; blend weight differs (C1-20); composition term via partials rather than EOS re-evaluation at `xa_start`"
 [files.routine_map]
 "eval_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
-"eval1_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_cell+pc_lns_blend_weight"
+"eval1_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_cell"
 "do_std_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_std_cell+eval_eps_grav_std_cell_with_ctx"
 "do_lnS_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_lns_cell"
 "eval_eps_grav_composition" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_composition_term+fill_d_eps_grav_dx_cell"

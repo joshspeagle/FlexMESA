@@ -69,6 +69,10 @@ Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for asteroseismol
 - **`GyreMesa`** (`(file: str)`; methods `set_constant`, `set_constant_str`, `set_mesa_constants`, `set_model`, `get_modes`, `get_modes_full`): Wraps `gyre_mesa_m` module state for one run.
 - **`GyreMesaMode`** (properties `n_pg`, `n_p`, `n_g`, `freq`, `x`, `xi_r`, `xi_h`, `dw_dx`): Mode summary and eigenfunctions returned by `GyreMesa.get_modes_full` (`#170`), with frequency in $\mathrm{Hz}$ and radial eigenfunction profiles across the GYRE grid (`1..=md%n`).
 
+### `astero_adipls_py`
+
+- **`AsteroAdipls`** (`(case_dir: str)`; method `get_one_el_info(model: StarModelHandle, el: int, nu1: float, nu2: float, iscan: int, r_cm: float, g_cgs: float, m_g: float, add_center_point: bool, keep_surface_point: bool, add_atmosphere: bool, do_redistribute_mesh: bool, store_for_adipls: bool) -> list[tuple[int, int, int, float, float, float]]`): Runs `run_adipls` startup and `do_adipls_get_one_el_info` for one `astero` run, reading the case's `&astero_search_controls` and initializing ADIPLS from `adipls.c.pruned.in` (`astero/private/astero_run_support.f90:117-124`).
+
 ### `astero_py`
 
 - **`astero_eval_acoustic_profile`** (`(r: _ArrF64, csound: _ArrF64, r_center: float, r_phot: float) -> dict[str, Any]`): Evaluates the acoustic radius profile $\tau(r_k)$, acoustic depth profile $\tau_{\mathrm{depth}}(r_k)$, and photospheric acoustic radius $\tau_0$ ($\mathrm{s}$).
@@ -84,7 +88,14 @@ Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for asteroseismol
 - **`astero_eval_ratios_r01_r10`** (`(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64) -> dict[str, _ArrF64]`): Evaluates 5-point frequency separation ratios $r_{01}, r_{10}$.
 - **`astero_eval_ratios_r02`** (`(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64, l2_freqs: _ArrF64, l2_sigs: _ArrF64) -> tuple[_ArrF64, _ArrF64]`): Evaluates quadrupole-radial separation ratios $r_{02}(n)$ and uncertainties.
 - **`astero_eval_surface_correction`** (`(scheme: str, obs_freqs: _ArrF64, obs_sigmas: _ArrF64, model_freqs: _ArrF64, model_inertias: _ArrF64, l0_obs_freqs: _ArrF64, l0_model_freqs: _ArrF64, l0_inertias: _ArrF64, l0_orders: _ArrF64, delta_nu_obs: float, nu_max: float, b_power: float, correction_factor: float) -> dict[str, Any]`): Evaluates a surface-effect frequency correction (`"kjeldsen"`, `"cubic"`, `"combined"`, `"power_law"`, or `"sonoi"`).
+- **`astero_interpolate_l0_inertia`** (`(freq: float, l0_freqs: _ArrF64, l0_inertias: _ArrF64) -> float`): Linearly interpolates radial ($l=0$) mode inertia at `freq` ($\mu\mathrm{Hz}$) (`astero/private/astero_support.f90:702-724`).
 - **`astero_match_modes_by_degree`** (`(obs_freqs: _ArrF64, cand_freqs: _ArrF64, cand_inertias: _ArrF64, cand_orders: _ArrI32) -> tuple[_ArrF64, _ArrF64, _ArrI32]`): Matches observed mode frequencies to candidate model modes (`find_closest`).
 - **`astero_nelder_mead_minimize`** (`(objective: Any, x_first: list[float], x_lower: list[float], x_upper: list[float], max_evals: int, x_atol: float, x_rtol: float, chi2_tol: float, centroid_weight_power: float) -> dict[str, Any]`): Minimizes `objective(x_vec) -> float` via Nelder-Mead.
+- **`astero_parse_search_controls`** (`(case_dir: str, allow_unsupported_controls: bool = False) -> dict[str, Any]`): Parses `&astero_search_controls` in `case_dir` into a dictionary (`astero/private/astero_run_support.f90:70-155`).
 - **`astero_powell_quadratic_minimize`** (`(objective: Any, x_first: list[float], x_lower: list[float], x_upper: list[float], max_evals: int, rhobeg: float, rhoend: float) -> dict[str, Any]`): Minimizes `objective(x_vec) -> float` via Powell's quadratic trust-region method.
 - **`astero_scan_cartesian_grid`** (`(objective: Any, x_lower: list[float], x_upper: list[float], x_delta: list[float]) -> dict[str, Any]`): Scans a Cartesian parameter grid using `objective(x_vec) -> float`.
+
+
+## Frozen JAX Engine Status (`flexmesa.astero.JAX_ENGINE_STATUS`)
+
+- **`JAX_ENGINE_STATUS`** (`str`, `"frozen-unverified-until-#143"`): Marks the derived JAX `astero` engine twins as frozen and not an upstream parity oracle until the canonical Rust engine passes the upstream-history harness (`#143`, `#166`).

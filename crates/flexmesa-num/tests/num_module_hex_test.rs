@@ -650,11 +650,11 @@ fn test_num_module_hex_zero_ulp() {
         )
         .unwrap();
         let (r3a, _) = safe_root_without_brackets(
-            f_root2, 0.1, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+            f_root2, 0.1, 0.1, 10, 50, 1e-10, 1e-10,
         )
         .unwrap();
         let (r3b, _) = safe_root_without_brackets(
-            f_root2, -1.0, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+            f_root2, -1.0, 0.1, 10, 50, 1e-10, 1e-10,
         )
         .unwrap();
         idx = check_section(

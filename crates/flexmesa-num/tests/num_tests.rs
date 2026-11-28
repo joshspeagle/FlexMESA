@@ -342,13 +342,13 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
 
     // Upstream test_root3 (`test_support.f90:174-209`, `test_output:239-240`):
     let (root3_first, _) = safe_root_without_brackets(
-        f2, 0.1, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+        f2, 0.1, 0.1, 10, 50, 1e-10, 1e-10,
     )
     .unwrap();
     assert!((root3_first - 4.999_999_999_999_936e-1).abs() <= 1e-14);
 
     let (root3_second, _) = safe_root_without_brackets(
-        f2, -1.0, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+        f2, -1.0, 0.1, 10, 50, 1e-10, 1e-10,
     )
     .unwrap();
     assert!((root3_second - 5.000_000_000_000_038e-1).abs() <= 1e-14);
@@ -363,8 +363,6 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
         Some(f2(2.0).unwrap().0),
         5,
         50,
-        -10.0,
-        10.0,
         1e-12,
         1e-12,
     )

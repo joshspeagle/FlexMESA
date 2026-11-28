@@ -483,7 +483,7 @@ contains
       real(dp) :: ddxa_eos(num_eos_basic_results, 7)
       real(dp) :: lr_in, lt_in
       logical :: skip
-      integer :: ierr_loc, k
+      integer :: ierr_loc, k, i
       character(len=16) :: fld
 
       lr_in = log10(rho_in)
@@ -505,6 +505,14 @@ contains
          call emit(unit_no, rc, trim(label), 'out', trim(fld), 'val', res(k))
          call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnd', dlnd(k))
          call emit(unit_no, rc, trim(label), 'out', trim(fld), 'd_dlnT', dlnt(k))
+      end do
+      ! d_dxa by charge (eosdt_eval.f90:1618-1627); the Rust port carries
+      ! only the lnPgas (slot 0) and lnE (slot 1) channels.
+      do i = 1, 7
+         do k = 1, 2
+            write(fld, '(A,I0,A,I0)') 'dxa_s', i - 1, '_c', k - 1
+            call emit(unit_no, rc, trim(label), 'out', trim(fld), 'val', ddxa_eos(k, i))
+         end do
       end do
    end subroutine emit_get1_eosdt_one
 

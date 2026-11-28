@@ -500,6 +500,22 @@ fn check_get1_bits(
             }
         }
     }
+    // d_dxa by charge (eosdt_eval.f90:1618-1627): lnPgas and lnE channels.
+    assert_eq!(out.d_dxa.len(), 7, "{case_id}: d_dxa species count");
+    for (i, row) in out.d_dxa.iter().enumerate() {
+        for (c, got) in row.iter().enumerate() {
+            let fld = format!("dxa_s{i}_c{c}");
+            let exp = mesa_eos_bits(case_id, "out", &fld, "val");
+            let got_bits = got.to_bits();
+            if got_bits != exp {
+                diffs.push(format!(
+                    "{case_id}.out.{fld}: MESA 0x{exp:016X} ({:.17e}) vs Flex 0x{got_bits:016X} ({got:.17e}) ULP={}",
+                    f64::from_bits(exp),
+                    got_bits.abs_diff(exp),
+                ));
+            }
+        }
+    }
 }
 
 fn assert_pgas_bits(label: &str, actual: f64, expected_bits: u64) {

@@ -5511,7 +5511,11 @@ upstream_lines = 527
 upstream_sha256 = "5fdec2f58ad1c46ed2d437a3c4f98f4df46f65a3b19bd1b3e046fe0c3b62fe37"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["set_default_controls", "store_controls"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"set_default_controls" = "crates/flexmesa-kap/src/types.rs::KapConfig::default" # partial: defaults match kap.defaults for every control KapConfig holds (Zbase, prefixes, blend bounds, Type2 limits, conduction flags, ctrl arrays); show_info, use_other_* hooks, dbg limits and extra-inlist controls are not held in KapConfig
+"store_controls" = "crates/flexmesa-star/src/inlist_populate_micro.rs::populate_kap_section" # partial: an unrecognised kap_file_prefix, kap_CO_prefix or kap_lowT_prefix is an error (no user-table switch with user_* arrays, which are only range-checked), and use_other_* hooks set true are rejected; Type2 full-on/off limits are checked as upstream
 
 [[files]]
 upstream_path = "kap/private/kap_eval.f90"

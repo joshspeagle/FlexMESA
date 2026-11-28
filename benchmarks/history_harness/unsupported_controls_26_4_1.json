@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1245,
+      "supported_keys": 1249,
       "unused_keys": 16,
       "headless_gui_keys": 0,
       "terminal_output_keys": 19,
-      "unimplemented_upstream_keys": 168
+      "unimplemented_upstream_keys": 164
     },
     {
       "section": "binary_job",

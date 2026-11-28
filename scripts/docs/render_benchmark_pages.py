@@ -437,10 +437,12 @@ def _render_kernel_scorecards(
         "",
         (
             "Full tables and `star/test` comparisons live in the "
-            "[Wave 4 Benchmark Report](../design/wave-4-benchmark-report.md). "
-            "All five Wave 4 workloads run post-`51e1adc` (`need_to_setvars = "
-            ".true.`), but **do not yet achieve numerical parity or equal "
-            "work scope**:"
+            "[Four-Way Benchmark & `star/test` Report]"
+            "(../design/wave-4-benchmark-report.md). "
+            "All five 1D stellar-structure workloads in that report run "
+            "post-`51e1adc` (`need_to_setvars = "
+            ".true.`), but **do not yet match MESA `26.4.1` numerically or "
+            "execute equal work scope**:"
         ),
         "",
         (
@@ -710,8 +712,8 @@ def _render_overview(
         ),
         "",
         (
-            f"End-to-end evolutionary parity against MESA `26.4.1` currently "
-            f"stands at **{passing} / {total_cases} passing cases** "
+            f"The acceptance pass rate against MESA `26.4.1` references "
+            f"currently stands at **{passing} / {total_cases} passing cases** "
             f"(`{declared_gaps}` declared gaps, `{awaiting}` awaiting "
             "reference runs; see [Declared Known Gaps](known-gaps.md) and "
             "[Port Coverage Map](coverage-map.md))."
@@ -731,7 +733,8 @@ def _render_overview(
             "values by at most "
             f"`{_max_full_vs_printed(suite, _WAVES_1_TO_3B):.2e}`, "
             f"within the `{PRINT_ROUNDING_9_DIGITS:.0e}` rounding of a 9-digit "
-            "print. Wave 4 diverges on all five workloads: across all sizes "
+            "print. The 1D stellar-structure workloads diverge on all five "
+            "cases: across all sizes "
             "the Rust and Fortran checksums differ by between "
             f"`{_printed_checksum_range(suite, 'wave4')[0]:.2e}` and "
             f"{_fmt_factor_or_pct(_printed_checksum_range(suite, 'wave4')[1])} "
@@ -801,7 +804,7 @@ def _render_overview(
         "### 5. 1D Stellar Structure, Henyey Solver & Coupled Evolution Step",
         "",
         (
-            "![MESA 26.4.1 Wave 4 four-way runtime staircase for 1D stellar "
+            "![MESA 26.4.1 four-way runtime staircase for 1D stellar "
             "structure, Henyey Newton step, remeshing, and coupled evolution]"
             "(../assets/figures/wave4_benchmark_staircase.png)"
         ),
@@ -857,7 +860,7 @@ def _render_overview(
         "```",
         "",
         (
-            "For complete 28-workload tables, see "
+            "For all 28 benchmark workload tables, see "
             "**[Kernel Performance Scorecards](kernel-scorecards.md)**. For "
             "tolerance rules and documented discrepancies, see "
             "**[Tolerance & Discrepancy Ledger]"

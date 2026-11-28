@@ -203,7 +203,7 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         f"| Road-to-`v0.1.0` packages ({_issue_link(140)}) & open PRs | "
         f"{head['closed_140']} closed, {head['open_140']} open; "
         f"{len(open_prs)} open PR(s) | {gh_link} |",
-        f"| Post-parity deferred backlog ({_issue_link(169)}) | "
+        f"| Deferred upstream-divergence backlog ({_issue_link(169)}) | "
         f"{len(def_items)} open ({def_bugs} upstream bugs, {def_enh} "
         f"{enh_lbl}, {def_owed} `parity-pending`) | {gh_link} |",
         "",
@@ -262,7 +262,7 @@ def _render_numerics_and_harness(
     link_165 = _issue_link(165)
 
     l1_note = (
-        f"Verified by {link_165} CI jobs (`x86_64` vs `aarch64`)"
+        f"Measured in {link_165} CI jobs (`x86_64` vs `aarch64`)"
         if has_165
         else f"Awaiting {link_165} CI jobs (`x86_64` vs `aarch64`)"
     )
@@ -309,7 +309,7 @@ def _render_numerics_and_harness(
             "",
             "| Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet | "
             "Strict-Validated | Diagnostic Runs | Reach Upstream Term | "
-            "Within Numeric Tol | Verified Pass | Declared Gaps | "
+            "Within Numeric Tol | Acceptance Pass (`pass`) | Declared Gaps | "
             "Undeclared Failures |",
             "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
             "| ---: | ---: |",
@@ -543,7 +543,7 @@ def _render_controls_health_and_work(
             "",
             f"- **Open pull requests ({len(open_prs)})**: "
             f"{', '.join(pr_links) if pr_links else 'none'}.",
-            f"- **Post-parity deferred backlog ({_issue_link(169)})**: "
+            f"- **Deferred upstream-divergence backlog ({_issue_link(169)})**: "
             f"`{len(def_items)}` open issues (`{def_bugs}` `upstream-bug`, "
             f"`{def_enh}` `enhancement`; `{def_owed}` marked `parity-pending` "
             "for upstream restoration before `v0.1.0`).",
@@ -607,15 +607,18 @@ def render_docs_index_summary(data: dict[str, Any]) -> str:
     py_pct = cov["python"]["overall"]["percent"]
     return (
         f"{BEGIN_SUMMARY_MARKER}\n"
-        '!!! info "Development Progress Toward MESA `26.4.1` Parity '
+        '!!! info "Development Status Toward MESA `26.4.1` Targets '
         '(`v0.1.0`)"\n'
-        "    `FlexMESA` is in active parity verification against "
-        f"**MESA release `26.4.1`** ({_issue_link(140)}). Current "
-        f"script-generated status: **{eng['pct_ported']:.1f}%** of "
+        "    `FlexMESA` is measured against **MESA release `26.4.1`** "
+        f"({_issue_link(140)}). Current script-generated status: "
+        f"**{eng['pct_ported']:.1f}%** of "
         "`star`/`star_data`/`binary`/`astero` upstream lines ported "
-        f"(`{all_tot['pct_verified']:.1f}%` verified), "
+        f"(`{all_tot['pct_verified']:.1f}%` at `verified` status in "
+        "`port_manifest.toml`; routine-level evidence is in "
+        "`notes/audit/routine_table.md`), "
         f"**{hh_tot['passing']} / {hh_tot['total']}** end-to-end test-suite "
-        f"cases verified passing (`{hh_tot['declared_gaps']}` declared gaps, "
+        "cases passing acceptance (`pass` in `notes/audit/case_table.md`; "
+        f"`{hh_tot['declared_gaps']}` declared gaps, "
         f"`{hh_tot['undeclared_failures']}` undeclared failures), "
         f"**{rs_pct:.1f}%** Rust / **{py_pct:.1f}%** Python line coverage, "
         f"and **{head['closed_140']} / {head['total_140']}** `#140` packages "

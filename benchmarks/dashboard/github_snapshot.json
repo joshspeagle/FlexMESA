@@ -340,8 +340,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 724,
-      "title": "Train 18: near-miss fixes, hydro and momentum departures, band LAPACK, exact diffusion oracles, Python mirrors, docs API checker",
+      "number": 746,
+      "title": "ci: manual runs default to T0; the canary gate job stops on cancel",
       "draft": false
     }
   ],

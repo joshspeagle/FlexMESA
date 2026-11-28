@@ -350,8 +350,8 @@
       "draft": false
     },
     {
-      "number": 770,
-      "title": "gaps, manifest: correct the stale GYRE/ADIPLS records (stream G)",
+      "number": 771,
+      "title": "interp2d: fvbicub_db implicit-REAL basis in strict mode (#672), Train 18 CI faults fixed",
       "draft": false
     }
   ],

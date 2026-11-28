@@ -2046,8 +2046,8 @@
         "draft": false
       },
       {
-        "number": 770,
-        "title": "gaps, manifest: correct the stale GYRE/ADIPLS records (stream G)",
+        "number": 771,
+        "title": "interp2d: fvbicub_db implicit-REAL basis in strict mode (#672), Train 18 CI faults fixed",
         "draft": false
       }
     ],
@@ -4650,6 +4650,19 @@
     {
       "date_utc": "2026-11-28",
       "commit": "cd7dd193",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "e59e923a",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

@@ -340,33 +340,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 759,
-      "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
-      "draft": false
-    },
-    {
-      "number": 760,
-      "title": "star: inlist includes follow MESA's in-place slot reset (#705)",
-      "draft": false
-    },
-    {
-      "number": 762,
-      "title": "star, mtx, binary: DECISIONS #43 errors where upstream is undefined (#566, #674, #717)",
-      "draft": false
-    },
-    {
-      "number": 763,
-      "title": "net, eos: pass lgRho and lgT to the EOS in the const-density split burn (#580)",
-      "draft": false
-    },
-    {
       "number": 765,
       "title": "star: RTI_* mixing controls and RTI departures (P1.2, ccsn_IIp)",
-      "draft": false
-    },
-    {
-      "number": 767,
-      "title": "star: clear okay_to_set_mlt_vc after set_final_vars as MESA (make_planets, #587; ns_c, star_plus_point_mass, wd_nova_burst pass)",
       "draft": false
     },
     {
@@ -375,8 +350,8 @@
       "draft": false
     },
     {
-      "number": 769,
-      "title": "Engine batch 1: make_planets mlt_vc flag, #705 include slots, #633 rotation, #580 split burn, DECISIONS #43 fixes",
+      "number": 770,
+      "title": "gaps, manifest: correct the stale GYRE/ADIPLS records (stream G)",
       "draft": false
     }
   ],
@@ -978,7 +953,7 @@
       "title": "[Deferred bug] get_xa_for_accretion reads accretion_species arrays out of bounds when num_accretion_species > 250",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -1162,7 +1137,7 @@
       "title": "[Deferred bug] Kolb thick mass transfer reads r(nz+1) when the whole donor is outside its Roche lobe (binary_mdot.f90:776-778)",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {

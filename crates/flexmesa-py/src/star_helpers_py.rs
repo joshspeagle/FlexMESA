@@ -272,6 +272,12 @@ impl PyStarModel {
             ));
         }
         self.inner.omega.copy_from_slice(w_s);
+        if self.inner.controls.rotation_flag {
+            // `j_rot` is set wherever `omega` is set
+            // (`star/private/hydro_rotation.f90:382-397`, called from
+            // `set_uniform_omega` at :508 and `read_model.f90:118-120`).
+            flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut self.inner);
+        }
         solve_omega_mix(&mut self.inner, dt, nu_s, n_substeps);
         Ok(())
     }

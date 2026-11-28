@@ -14,6 +14,7 @@ pub use crate::mdot_implicit::{
     ImplicitStepAction,
 };
 use crate::orbit::{build_anomaly_grid, eval_rlobe};
+use flexmesa_star::controls::StarError;
 
 /// Evaluates the Ritter (1988, A&A 202, 93) optically thin Roche-lobe overflow
 /// mass transfer rate $\dot{M}_{\mathrm{thin}} \le 0$ ($\mathrm{g\,s^{-1}}$).
@@ -187,8 +188,13 @@ pub fn kolb_f3(gamma1: f64) -> f64 {
 ///
 /// Corresponds to `calculate_kolb_mdot_thick` and `get_info_for_kolb` in
 /// `binary/private/binary_mdot.f90:729-788`.
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] where upstream's zone search
+/// `do while (r(i) > rl)` (`binary_mdot.f90:773-779`) reads past the donor
+/// profile: an empty profile, or every zone outside the Roche lobe
+/// (deferred upstream bug `#717`, `DECISIONS #43`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_kolb_mdot_thick(
     m_donor: f64,
     m_accretor: f64,
@@ -198,17 +204,29 @@ pub fn eval_kolb_mdot_thick(
     t_profile: &[f64],
     mu_profile: &[f64],
     gamma1_profile: &[f64],
-) -> f64 {
+) -> Result<f64, StarError> {
     let nz = r_profile.len();
-    if nz < 2 || r_profile[0] <= rl_donor {
-        return 0.0;
-    }
+    // `binary_mdot.f90:773-779`: `i=1; do while (r(i) > rl) i=i+1`, with no
+    // `i <= nz` bound. The loop reads `r(1)` of an empty profile and `r(nz+1)`
+    // when every zone lies outside the Roche lobe. Both are out-of-bounds reads
+    // upstream (deferred bug #717, DECISIONS #43). `i == 1` (`r(1) <= rl`) is
+    // defined and gives `mdot_thick = 0` (`binary_mdot.f90:781-782`).
     let mut i = 0usize;
-    while i < nz && r_profile[i] > rl_donor {
+    loop {
+        if i >= nz {
+            return Err(StarError::InvalidInput(format!(
+                "eval_kolb_mdot_thick: donor zone search reads r({}) past nz = {nz} \
+                 (binary/private/binary_mdot.f90:773-779; DECISIONS #43, deferred #717)",
+                i + 1
+            )));
+        }
+        if r_profile[i] <= rl_donor {
+            break;
+        }
         i += 1;
     }
-    if i == 0 || i >= nz {
-        return 0.0;
+    if i == 0 {
+        return Ok(0.0);
     }
     let index_r = i - 1;
     let mut integral = 0.0_f64;
@@ -231,8 +249,9 @@ pub fn eval_kolb_mdot_thick(
     let f1 = 1.23 + 0.5 * log10(q_temp);
     // `-2.0D0*pi*F1*rl_d*rl_d*rl_d/(standard_cgrav*m)*mdot_thick`, left to
     // right (`binary_mdot.f90:760`).
-    -2.0 * PI * f1 * rl_donor * rl_donor * rl_donor / (STANDARD_CGRAV * m_donor)
-        * integral
+    Ok(-2.0 * PI * f1 * rl_donor * rl_donor * rl_donor
+        / (STANDARD_CGRAV * m_donor)
+        * integral)
 }
 
 /// Evaluates the Kolb & Ritter (1990) optically thick Roche-lobe overflow
@@ -240,7 +259,6 @@ pub fn eval_kolb_mdot_thick(
 /// gated on photospheric overflow `r_donor > rl_donor`
 /// (`get_info_for_kolb` in `binary/private/binary_mdot.f90:764-788`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_kolb_mdot_thick_photosphere(
     m_donor: f64,
     m_accretor: f64,
@@ -251,10 +269,10 @@ pub fn eval_kolb_mdot_thick_photosphere(
     t_profile: &[f64],
     mu_profile: &[f64],
     gamma1_profile: &[f64],
-) -> f64 {
+) -> Result<f64, StarError> {
     // `binary/private/binary_mdot.f90:775`: `if (b% r(b% d_i) - b% rl(b% d_i) > 0.0d0)`
     if r_donor <= rl_donor {
-        return 0.0;
+        return Ok(0.0);
     }
     eval_kolb_mdot_thick(
         m_donor,
@@ -280,7 +298,7 @@ fn integrate_kolb_mdot_eccentric(
     mu_profile: &[f64],
     gamma1_profile: &[f64],
     anomaly_steps: usize,
-) -> f64 {
+) -> Result<f64, StarError> {
     let one_m_e2 = 1.0 - eccentricity * eccentricity;
     let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
     let n = theta_co.len();
@@ -298,13 +316,13 @@ fn integrate_kolb_mdot_eccentric(
             t_profile,
             mu_profile,
             gamma1_profile,
-        );
+        )?;
         if i > 0 {
             dm += 0.5 * (mdot_prev + mdot_i) * (time_co[i] - time_co[i - 1]);
         }
         mdot_prev = mdot_i;
     }
-    dm
+    Ok(dm)
 }
 
 /// Evaluates the phase-averaged Kolb & Ritter (1990) optically thick mass
@@ -313,7 +331,6 @@ fn integrate_kolb_mdot_eccentric(
 /// checking `r_profile[0]` against periastron Roche radius when photospheric
 /// `r_donor` is not supplied separately.
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_kolb_mdot_eccentric(
     m_donor: f64,
     m_accretor: f64,
@@ -325,9 +342,9 @@ pub fn eval_kolb_mdot_eccentric(
     mu_profile: &[f64],
     gamma1_profile: &[f64],
     anomaly_steps: usize,
-) -> f64 {
+) -> Result<f64, StarError> {
     if r_profile.is_empty() {
-        return 0.0;
+        return Ok(0.0);
     }
     if eccentricity <= 0.0 {
         return eval_kolb_mdot_thick(
@@ -343,7 +360,7 @@ pub fn eval_kolb_mdot_eccentric(
     }
     let one_m_e2 = 1.0 - eccentricity * eccentricity;
     if r_profile[0] < rl_donor * one_m_e2 / (1.0 + eccentricity) {
-        return 0.0;
+        return Ok(0.0);
     }
     integrate_kolb_mdot_eccentric(
         m_donor,
@@ -365,7 +382,6 @@ pub fn eval_kolb_mdot_eccentric(
 /// (`get_info_for_kolb` in `binary/private/binary_mdot.f90:775` and
 /// `get_info_for_kolb_eccentric` in `binary/private/binary_mdot.f90:913`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_kolb_mdot_eccentric_photosphere(
     m_donor: f64,
     m_accretor: f64,
@@ -378,9 +394,9 @@ pub fn eval_kolb_mdot_eccentric_photosphere(
     mu_profile: &[f64],
     gamma1_profile: &[f64],
     anomaly_steps: usize,
-) -> f64 {
+) -> Result<f64, StarError> {
     if r_profile.is_empty() {
-        return 0.0;
+        return Ok(0.0);
     }
     if eccentricity <= 0.0 {
         return eval_kolb_mdot_thick_photosphere(
@@ -398,7 +414,7 @@ pub fn eval_kolb_mdot_eccentric_photosphere(
     let one_m_e2 = 1.0 - eccentricity * eccentricity;
     // `binary/private/binary_mdot.f90:913`: `if (b% r(b% d_i) < b% rl(b% d_i) * (1-e*e)/(1+e)) return`
     if r_donor < rl_donor * one_m_e2 / (1.0 + eccentricity) {
-        return 0.0;
+        return Ok(0.0);
     }
     integrate_kolb_mdot_eccentric(
         m_donor,
@@ -458,7 +474,6 @@ pub fn eval_arras_mdot_thin(
 /// enhancement $\dot{e}_{\mathrm{enhance}}$ ($\mathrm{s}^{-1}$) over an
 /// eccentric orbit (`edot_enhancement_Isotropic` in `binary/private/binary_edot.f90:188-228`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_edot_enhancement_isotropic(
     m_donor: f64,
     m_accretor: f64,
@@ -476,9 +491,9 @@ pub fn eval_edot_enhancement_isotropic(
     gamma1_profile: &[f64],
     is_kolb_scheme: bool,
     anomaly_steps: usize,
-) -> f64 {
+) -> Result<f64, StarError> {
     if eccentricity <= 0.0 || (m_donor + m_accretor) <= 0.0 {
-        return 0.0;
+        return Ok(0.0);
     }
     let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
     let n = theta_co.len();
@@ -519,7 +534,7 @@ pub fn eval_edot_enhancement_isotropic(
                 t_profile,
                 mu_profile,
                 gamma1_profile,
-            );
+            )?;
         }
         let edot_i = -mdot_i / m_tot * (eccentricity + cos_th);
         if i > 0 {
@@ -527,5 +542,5 @@ pub fn eval_edot_enhancement_isotropic(
         }
         edot_prev = edot_i;
     }
-    de
+    Ok(de)
 }

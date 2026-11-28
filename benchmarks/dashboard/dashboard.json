@@ -21,7 +21,7 @@
         "verified_total": 5640,
         "pct_ported": 35.6,
         "pct_verified": 4.7,
-        "rust_lines": 116115,
+        "rust_lines": 115878,
         "python_jax_lines": 3985
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 14868,
+        "rust_lines": 14840,
         "python_jax_lines": 1244
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 16040,
+        "rust_lines": 16060,
         "python_jax_lines": 9911
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 12924,
+        "rust_lines": 12989,
         "python_jax_lines": 728
       },
       {
@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 9549,
+        "rust_lines": 10692,
         "python_jax_lines": 1851
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 23307,
-      "python_testing_bench": 26504
+      "rust_bridge_testing_bench": 23123,
+      "python_testing_bench": 26413
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 complete, 16 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 with every probed value at 0 ULP, 16 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -1173,7 +1173,7 @@
         "issues": "#154"
       }
     ],
-    "python_xfail_or_skip_count": 22,
+    "python_xfail_or_skip_count": 21,
     "python_skips": [
       {
         "location": "tests/test_bench.py:142",
@@ -1246,17 +1246,17 @@
         "issues": "#154, #358"
       },
       {
-        "location": "tests/test_star_wave5_1.py:231",
+        "location": "tests/test_star_wave5_1.py:122",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 \" \"get_Dstar_OCP (#156); the frozen JAX twin keeps its earlier \" \"expression.\" ), )",
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_star_wave5_1.py:256",
+        "location": "tests/test_star_wave5_1.py:147",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_burgers_velocities follows MESA 26.4.1 element \" \"diffusion (#156); the frozen JAX twin keeps its earlier \" \"expressions.\" ), )",
         "issues": "#156, #295"
       },
       {
-        "location": "tests/test_star_wave5_1.py:297",
+        "location": "tests/test_star_wave5_1.py:188",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_phase_separation_shift follows the MESA 26.4.1 \" \"Blouin fits (#156); the frozen JAX twin keeps its earlier \" \"expression.\" ), )",
         "issues": "#156, #295"
       },
@@ -1269,11 +1269,6 @@
         "location": "tests/test_wave4_bench.py:169",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) \" \"(MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); \" \"frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1] \" \"(measured max_rel_err 9.73e-3).\" ), )",
         "issues": "#295, #340"
-      },
-      {
-        "location": "tests/test_wave5_bench.py:84",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP \" \"(diffusion_support.f90:1716-1743, #156); the frozen JAX twin \" \"eval_caplan_ocp_dstar_jax keeps its earlier fit (max_rel_err about \" \"5.4e-5).\" ), )",
-        "issues": "#156, #295"
       },
       {
         "location": "tests/unit/test_kap_wave3b2.py:325",
@@ -1289,14 +1284,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 335,
-    "total_tests": 2022,
+    "total_files": 337,
+    "total_tests": 2052,
     "by_kind": {
       "oracle": {
         "files": 133
       },
       "invariant": {
-        "files": 200
+        "files": 202
       },
       "regression": {
         "files": 2
@@ -1304,12 +1299,12 @@
     },
     "by_language": {
       "rust": {
-        "files": 232,
-        "tests": 1170
+        "files": 234,
+        "tests": 1203
       },
       "python": {
         "files": 103,
-        "tests": 852
+        "tests": 849
       }
     },
     "mislabeled_count": 2,
@@ -1327,9 +1322,9 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 1623,
+    "mapped_routines_total": 2290,
     "listed_oracle_routines_total": 64,
-    "listed_oracle_routines_pct": 3.9,
+    "listed_oracle_routines_pct": 2.8,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1400,14 +1395,14 @@
       {
         "module": "star",
         "oracle_files": 39,
-        "invariant_files": 84,
+        "invariant_files": 86,
         "regression_files": 1,
-        "total_files": 124,
-        "total_tests": 754,
+        "total_files": 126,
+        "total_tests": 757,
         "mislabeled_files": 2,
-        "mapped_routines": 924,
+        "mapped_routines": 1197,
         "listed_oracle_routines": 20,
-        "listed_oracle_routines_pct": 2.2
+        "listed_oracle_routines_pct": 1.7
       },
       {
         "module": "binary",
@@ -1415,7 +1410,7 @@
         "invariant_files": 15,
         "regression_files": 0,
         "total_files": 20,
-        "total_tests": 103,
+        "total_tests": 104,
         "mislabeled_files": 0,
         "mapped_routines": 116,
         "listed_oracle_routines": 0,
@@ -1453,7 +1448,7 @@
         "total_files": 7,
         "total_tests": 34,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 91,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1465,7 +1460,7 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 12,
+        "mapped_routines": 119,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,7 +1472,7 @@
         "total_files": 6,
         "total_tests": 27,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 196,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1571,7 +1566,7 @@
         "invariant_files": 2,
         "regression_files": 0,
         "total_files": 7,
-        "total_tests": 54,
+        "total_tests": 80,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2041,13 +2036,18 @@
     ],
     "open_pull_requests": [
       {
-        "number": 747,
-        "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
+        "number": 765,
+        "title": "star: RTI_* mixing controls and RTI departures (P1.2, ccsn_IIp)",
         "draft": false
       },
       {
-        "number": 757,
-        "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+        "number": 768,
+        "title": "num: transcribe NEWUOA with an exact libnum oracle; astero calls it with upstream's arguments (stream G2, N1-1)",
+        "draft": false
+      },
+      {
+        "number": 770,
+        "title": "gaps, manifest: correct the stale GYRE/ADIPLS records (stream G)",
         "draft": false
       }
     ],
@@ -2633,7 +2633,7 @@
         "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2649,7 +2649,7 @@
         "title": "[Deferred bug] get_xa_for_accretion reads accretion_species arrays out of bounds when num_accretion_species > 250",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2657,7 +2657,7 @@
         "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2705,7 +2705,7 @@
         "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2713,7 +2713,7 @@
         "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2721,7 +2721,7 @@
         "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2833,7 +2833,7 @@
         "title": "[Deferred bug] Kolb thick mass transfer reads r(nz+1) when the whole donor is outside its Roche lobe (binary_mdot.f90:776-778)",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -4598,6 +4598,58 @@
     {
       "date_utc": "2026-11-28",
       "commit": "af8e2a38",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "17464744",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "7dc49a46",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "62fa7e02",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "cd7dd193",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

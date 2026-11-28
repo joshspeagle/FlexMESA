@@ -190,7 +190,8 @@ fn test_primary_state_buffer_preserves_omega_when_solver_iter_nonzero() {
         let kf = f64::from(u32::try_from(k).unwrap_or(0));
         *om = 1.0e-5 * (1.0 + 0.01 * kf);
     }
-    flexmesa_star::update_rotation_distortion_factors(&mut model);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut model);
+    flexmesa_star::set_rotation_info(&mut model, false);
     set_hydro_vars(&mut model, false, false).expect("initial set_hydro_vars");
     // Apply shellular angular-momentum / distortion update so `fp_rot` scales `grav`.
     flexmesa_star::sync_post_henyey_rotation(&mut model, 1.0)

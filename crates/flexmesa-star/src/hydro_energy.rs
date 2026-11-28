@@ -471,8 +471,9 @@ pub fn eval_face_area_time_centered_ad(
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] when `total_internal_energy_old` has
-/// not been recorded for the step: upstream would read it undefined
-/// (DECISIONS #43).
+/// not been recorded for the step. Upstream always sets it at the start of a
+/// step (`evolve.f90:420-436`, `evolve_support.f90:92`), so a missing value
+/// means FlexMESA's caller skipped that step-start bookkeeping.
 pub fn set_energy_eqn_scal(
     model: &StarModel,
     k: usize,
@@ -485,7 +486,7 @@ pub fn set_energy_eqn_scal(
         let total_internal_energy_old =
             model.aux.total_internal_energy_start.ok_or_else(|| {
                 StarError::InvalidInput(String::from(
-                    "set_energy_eqn_scal: total_internal_energy_old is not set for this step; upstream reads it undefined (star_utils.f90:3693, evolve.f90:427-436; DECISIONS #43)",
+                    "set_energy_eqn_scal: total_internal_energy_old has not been recorded for this step; upstream sets it at step start (evolve.f90:420-436, evolve_support.f90:92) before reading it at star_utils.f90:3693",
                 ))
             })?;
         let cell_energy_fraction_start =

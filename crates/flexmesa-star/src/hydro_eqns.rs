@@ -513,9 +513,13 @@ fn set_fixed_vsurf_outer_bc(
             "set_fixed_vsurf_outer_BC requires u_flag or v_flag true (star/private/hydro_eqns.f90:1113-1115)",
         )));
     };
+    // Upstream sets `csound_start(k)` for every cell before the solve
+    // (`star/private/micro.f90:85-87`) and reads `csound_start(1)` at
+    // `hydro_eqns.f90:1117`; an empty array means FlexMESA's step-start
+    // bookkeeping did not record it.
     let Some(&cs_start) = model.aux.csound_start.first() else {
         return Err(StarError::InvalidInput(String::from(
-            "use_fixed_vsurf_outer_BC needs csound_start(1) (star/private/hydro_eqns.f90:1118; DECISIONS #43)",
+            "use_fixed_vsurf_outer_BC needs csound_start(1), which upstream sets before the solve (star/private/micro.f90:85-87, hydro_eqns.f90:1117)",
         )));
     };
     let vsurf = StarAdOrder1::variable(vsurf_val, I_V_00);

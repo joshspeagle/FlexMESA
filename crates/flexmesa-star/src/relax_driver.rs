@@ -361,7 +361,9 @@ pub(crate) fn turn_off_winds(model: &mut StarModel) {
 
 /// Per-step refresh the single-star run loop applies after every accepted
 /// step (`inlist_runner::run_bundle_steps`), so a relax step leaves the model
-/// in the same state a run step does.
+/// in the same state a run step does. Upstream's relax loop has no such
+/// refresh (`star/private/relax.f90` `do_internal_evolve`, :3905-4166): see
+/// [Parity] #761.
 fn refresh_after_accepted_step(model: &mut StarModel) -> Result<(), StarError> {
     model.mstar_start = model.mstar;
     model.sync_mesh_and_pack()?;

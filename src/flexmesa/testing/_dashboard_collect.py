@@ -337,7 +337,8 @@ def collect_numerics_and_module_verification(
                 f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
                 f"({plat_n:,} libm <= 1 ULP); "
                 f"{zero_tot:,}/{chk_tot:,} probed module hex 0 ULP "
-                f"({pass_mods} complete, {probed_non_math} non-math probed)"
+                f"({pass_mods} with every probed value at 0 ULP, "
+                f"{probed_non_math} non-math probed)"
             )
         else:
             level2 = (

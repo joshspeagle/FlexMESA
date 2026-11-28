@@ -1,27 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Wave 5 four-stage advanced stellar physics, interacting binary, and
-//! asteroseismology benchmarks (`w5_diff_rot`, `w5_riemann_rsp2`,
-//! `w5_binary_rlof`, and `w5_astero_seism`).
+//! asteroseismology benchmarks (`w5_riemann_rsp2`, `w5_binary_rlof`, and
+//! `w5_astero_seism`).
 //!
-//! Evaluates the four Wave 5 workloads across four progressive optimization
+//! Evaluates the three Wave 5 workloads across four progressive optimization
 //! stages in Safe Rust (`flexmesa-star`, `flexmesa-binary`, `flexmesa-astero`),
 //! matching `benchmarks/fortran_mesa/bench_kernels_wave5.f90`:
-//! 1. `bench_w5_diff_rot`: Roche shellular rotation distortion (`f_P, f_T`),
-//!    Caplan, Bauer & Freeman (2022) strong-coupling OCP self-diffusion
-//!    $D^*(\Gamma, \kappa)$, five hydrodynamic rotational mixing instabilities
-//!    (`DSI`, `SH`, `SSI`, `ES`, `GSF`), and the Spruit-Tayler (2002) magnetic
-//!    dynamo (`D_ST`, `nu_ST`, `B_phi`, `B_r`).
-//! 2. `bench_w5_riemann_rsp2`: Well-balanced 1D spherical Lagrangian HLLC
+//! 1. `bench_w5_riemann_rsp2`: Well-balanced 1D spherical Lagrangian HLLC
 //!    Riemann solver, momentum residual assembly, Kuhfuss (1986) / Smolec &
 //!    Moskalik (2008) `RSP2` turbulent convection equations, and Dziembowski
 //!    dimensionless pulsation variables $(V, V_g, A^*, U, c_1)$.
-//! 3. `bench_w5_binary_rlof`: Eggleton (1983) Roche-lobe radius, Keplerian
+//! 2. `bench_w5_binary_rlof`: Eggleton (1983) Roche-lobe radius, Keplerian
 //!    orbital mechanics, Ritter (1988) optically thin RLOF mass transfer,
 //!    Bardeen (1972) / King & Kolb (1999) / Podsiadlowski (2003) Kerr black
 //!    hole ISCO spin and Eddington accretion, Peters (1964) + Rappaport,
 //!    Verbunt & Joss (1983) orbital $\dot{J}$, and Hut (1981) tidal
 //!    eccentricity evolution.
-//! 4. `bench_w5_astero_seism`: Cumulative acoustic radius/depth integrals,
+//! 3. `bench_w5_astero_seism`: Cumulative acoustic radius/depth integrals,
 //!    asymptotic and solar-scaled $\Delta\nu, \nu_{\max}, \nu_{\mathrm{ac}},
 //!    \Delta\Pi_1$, Ball & Gizon (2014) 1-term cubic and 2-term combined
 //!    surface-effect frequency corrections, and Roxburgh & Vorontsov (2003)
@@ -39,79 +34,12 @@ use flexmesa_binary::{
 };
 use flexmesa_const::{LN10, LSUN, MSUN, PI, PI4, RSUN, SECYER, STANDARD_CGRAV};
 use flexmesa_star::{
-    eval_caplan_ocp_dstar, eval_hllc_face, eval_hllc_surface_face,
-    eval_omega_crit, eval_riemann_momentum_residual, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_rsp2_zone, solve_stationary_rsp2_w,
-    Rsp2Config,
+    eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
+    eval_rsp2_zone, solve_stationary_rsp2_w, Rsp2Config,
 };
 
 use crate::kernels_micro::bench_zone_fn;
 use crate::{max_err3, max_rel_diff, measure_us, BenchRecord};
-
-/// Evaluates zone `k` (`0..nz`) of the `w5_diff_rot` benchmark workload,
-/// matching `eval_diff_rot_zone` in `bench_kernels_wave5.f90`.
-#[must_use]
-pub fn eval_diff_rot_zone(k: usize, nz: usize) -> f64 {
-    let s = ((k as f64) + 0.5) / (nz as f64);
-    let r = RSUN * (0.08 + 0.88 * s);
-    let m_grav = MSUN * (0.05 + 0.95 * s * s);
-    let cgrav = STANDARD_CGRAV;
-    let lum = LSUN * (0.04 + 0.96 * s);
-    let opacity = 0.34 + 1.40 * (1.0 - s);
-    let rho = flexmesa_math::exp(LN10 * (2.0 * (1.0 - s) - 0.8 * s));
-    let t = flexmesa_math::exp(LN10 * (7.15 - 1.35 * s));
-    let cp = 2.4e8 * (1.0 + 0.25 * s);
-    let hp = 0.085 * r;
-    let grada = 0.398;
-    let gradt = 0.26 + 0.06 * flexmesa_math::sin(5.0 * s);
-    let brunt_n2_t = 1.6e-6 * (0.4 + s);
-    let brunt_n2_mu = 4.5e-7 * (1.0 - 0.4 * s);
-    let w_div_wc = 0.12 + 0.58 * s;
-    let dln_om = -0.40 - 0.30 * s;
-    let abar = 1.28 + 0.42 * (1.0 - s);
-    let zbar = 1.08 + 0.22 * (1.0 - s);
-    let gam_ocp = 4.0 + 14.0 * (1.0 - s);
-    let kap_ocp = 0.20 + 0.55 * s;
-
-    let om_crit = eval_omega_crit(cgrav, m_grav, r, lum, opacity, 0.99);
-    let om = w_div_wc * om_crit;
-    let (fp, ft, i_rot_r2) = eval_rotation_fp_ft(w_div_wc, 0.75, 0.95);
-    let d_star = eval_caplan_ocp_dstar(gam_ocp, kap_ocp);
-    let grav = fp * (cgrav * m_grav / (r * r));
-    let rot = eval_rotational_mixing_zone(
-        r,
-        hp,
-        grav,
-        rho,
-        t,
-        cp,
-        opacity,
-        1.0,
-        1.0,
-        grada,
-        gradt,
-        brunt_n2_t,
-        brunt_n2_mu,
-        om,
-        dln_om,
-        abar,
-        zbar,
-        0.0,
-    );
-
-    fp + ft
-        + i_rot_r2
-        + d_star
-        + 1.0e-12
-            * (rot.d_dsi
-                + rot.d_sh
-                + rot.d_ssi
-                + rot.d_es
-                + rot.d_gsf
-                + rot.d_st
-                + rot.nu_st)
-        + 1.0e-5 * (rot.b_phi + rot.b_r)
-}
 
 /// Per-zone hydrodynamic and thermodynamic state for `RiemannRsp2Grid`.
 #[derive(Clone, Copy)]
@@ -437,19 +365,6 @@ where
     rec
 }
 
-/// Benchmarks Wave 5.1 diffusion, rotation, and Spruit-Tayler magnetic dynamo
-/// kernels (`w5_diff_rot`) across Stages 0..3 for `nz` zones.
-#[must_use]
-pub fn bench_w5_diff_rot(
-    nz: usize,
-    n_warmup: usize,
-    n_repeats: usize,
-) -> BenchRecord {
-    bench_w5_zone_1d("w5_diff_rot", nz, n_warmup, n_repeats, |k| {
-        eval_diff_rot_zone(k, nz)
-    })
-}
-
 /// Benchmarks Wave 5.2 HLLC Riemann hydrodynamics, `RSP2` turbulent convection,
 /// and Dziembowski pulsation variables (`w5_riemann_rsp2`) across Stages 0..3
 /// for `nz` zones.
@@ -523,16 +438,15 @@ pub fn bench_w5_astero_seism(
     }
 }
 
-/// Runs all four Wave 5 benchmarks across `zone_counts`.
+/// Runs all three Wave 5 benchmarks across `zone_counts`.
 #[must_use]
 pub fn run_all_wave5_benchmarks(
     zone_counts: &[usize],
     n_warmup: usize,
     n_repeats: usize,
 ) -> Vec<BenchRecord> {
-    let mut records = Vec::with_capacity(zone_counts.len() * 4);
+    let mut records = Vec::with_capacity(zone_counts.len() * 3);
     for &nz in zone_counts {
-        records.push(bench_w5_diff_rot(nz, n_warmup, n_repeats));
         records.push(bench_w5_riemann_rsp2(nz, n_warmup, n_repeats));
         records.push(bench_w5_binary_rlof(nz, n_warmup, n_repeats));
         records.push(bench_w5_astero_seism(nz, n_warmup, n_repeats));

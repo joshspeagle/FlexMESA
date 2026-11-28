@@ -20,10 +20,21 @@ use crate::model::StarModel;
 /// Returns [`StarError::InvalidInput`] if `accrete_given_mass_fractions` sums
 /// outside `1 +/- 1e-2`, if `accretion_zfracs` is invalid for nonzero metals,
 /// if custom `z_fraction_*` entries are negative or do not sum to `1`, or if
-/// `h1` is absent from the network when using standard-metal accretion.
+/// `h1` is absent from the network when using standard-metal accretion, or if
+/// `accrete_given_mass_fractions` is set with `num_accretion_species` greater
+/// than [`MAX_NUM_ACCRETION_SPECIES`] (upstream indexes
+/// `accretion_species_id(j)` past its 250 entries; deferred bug `#566`,
+/// `DECISIONS #43`).
 pub fn get_xa_for_accretion(model: &StarModel) -> Result<Vec<f64>, StarError> {
     let species = model.species;
     if species == 0 {
+        // Upstream still runs the `do j = 1, num_accretion_species` loop when
+        // `accrete_given_mass_fractions` is set, even with no species.
+        if !model.controls.accrete_same_as_surface
+            && model.controls.accrete_given_mass_fractions
+        {
+            check_num_accretion_species(model)?;
+        }
         return Ok(Vec::new());
     }
     if model.controls.accrete_same_as_surface {
@@ -31,6 +42,7 @@ pub fn get_xa_for_accretion(model: &StarModel) -> Result<Vec<f64>, StarError> {
     }
 
     if model.controls.accrete_given_mass_fractions {
+        check_num_accretion_species(model)?;
         let mut xa = vec![0.0_f64; species];
         let n_spec = model
             .controls
@@ -64,6 +76,30 @@ pub fn get_xa_for_accretion(model: &StarModel) -> Result<Vec<f64>, StarError> {
     }
 
     get_xa_for_standard_metals(model)
+}
+
+/// Maximum length of `accretion_species_id` and `accretion_species_xa`
+/// (`max_num_accretion_species`, `star_data/public/star_data_def.inc:365`;
+/// arrays declared at `star_data/private/star_controls.inc:507-509`).
+pub const MAX_NUM_ACCRETION_SPECIES: usize = 250;
+
+/// Errors where `get_xa_for_accretion`'s `do j=1,s% num_accretion_species`
+/// loop (`star/private/adjust_xyz.f90:921-927`) would index
+/// `accretion_species_id(j)` past `max_num_accretion_species` (deferred bug
+/// `#566`, `DECISIONS #43`). Entries `j <= 250` that the inlist left unset are
+/// blank/zero upstream and are skipped by the `len_trim == 0` cycle.
+fn check_num_accretion_species(model: &StarModel) -> Result<(), StarError> {
+    let n = model.controls.mix_wind.num_accretion_species;
+    if n > MAX_NUM_ACCRETION_SPECIES {
+        // Deferred upstream bug #566 (DECISIONS #43).
+        return Err(StarError::InvalidInput(format!(
+            "get_xa_for_accretion: num_accretion_species ({n}) exceeds \
+             max_num_accretion_species ({MAX_NUM_ACCRETION_SPECIES}); upstream \
+             reads accretion_species_id(j) out of bounds \
+             (star/private/adjust_xyz.f90:921-927; DECISIONS #43, deferred #566)"
+        )));
+    }
+    Ok(())
 }
 
 /// Legacy infallible wrapper around [`get_xa_for_accretion`], falling back to

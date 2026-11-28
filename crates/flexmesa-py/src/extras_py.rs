@@ -668,9 +668,12 @@ fn build_pre_load_snapshot<'py>(
     Ok(d)
 }
 
-/// Read-only state handed to `extras_controls`. A key that is not set
-/// raises `KeyError` naming the upstream order: the model is not loaded yet
-/// when `extras_controls` runs (DECISIONS #43).
+/// Read-only state handed to `extras_controls`. Upstream runs
+/// `extras_controls` after `star_setup` has read the controls and before
+/// `do_load1_star` loads the model (`star/job/run_star_support.f90:430-459`),
+/// so no loaded model state exists yet. FlexMESA exposes the controls only
+/// and raises `KeyError` for any other key, instead of returning the
+/// allocation-time defaults upstream's `star_info` would hold.
 #[pyclass(module = "flexmesa._rust")]
 pub struct PreLoadStarState {
     d: Py<PyDict>,
@@ -2679,8 +2682,8 @@ impl StarExtras for PyStarExtrasAdapter {
         Python::attach(|py| {
             // Upstream calls `extras_controls` before the model is loaded
             // (`star/job/run_star_support.f90:430-459`), so the hook sees the
-            // controls only; reading model state raises an error (DECISIONS
-            // #43).
+            // controls only; FlexMESA raises `KeyError` for model state rather
+            // than returning allocation-time defaults.
             let snap = build_pre_load_snapshot(py, model, &case_dir)
                 .and_then(|snap| self.add_model_handle(py, snap, model))
                 .and_then(|snap| {

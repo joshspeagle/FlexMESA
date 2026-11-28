@@ -111,7 +111,7 @@ pub enum StarStepAttemptOutcome {
 #[derive(Debug)]
 pub enum StarPickTimestepOutcome {
     /// Step accepted and finalized (`dt_next`, `dt_old`, `mstar_dot_old`,
-    /// `have_mlt_vc = true`, `doing_first_model_of_run = false`).
+    /// `doing_first_model_of_run = false`).
     KeepGoing(EvolveStepReport),
     /// A stellar hard timestep limit requested a retry (`TimestepAction::Retry`).
     Retry {
@@ -762,6 +762,7 @@ pub fn star_evolve_step_part2(
 
     if let Ok(rep) = attempt {
         if rep.converged && !force_outer_retry {
+            finish_set_final_vars_mlt_vc(model);
             model.aux.step_hist.time_old_sec = saved.time_sec;
             model.aux.step_hist.time_sec = saved.time_sec + dt_try;
             model.time_old_sec = saved.time_sec;
@@ -1428,6 +1429,7 @@ pub(crate) fn star_evolve_step_outcome_checked(
 
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
+                finish_set_final_vars_mlt_vc(model);
                 model.aux.step_hist.time_old_sec = pre_step_time_sec;
                 model.aux.step_hist.time_sec = pre_step_time_sec + dt_try;
                 model.time_old_sec = pre_step_time_sec;
@@ -2080,6 +2082,24 @@ fn ensure_no_unported_evolve_controls(
     Ok(())
 }
 
+/// `have_mlt_vc` and `okay_to_set_mlt_vc` after `set_final_vars`
+/// (`star/private/evolve.f90:694-701`, skipped when `RSP_flag`): `mlt_vc`
+/// keeps its `set_final_vars` value until the next step starts
+/// (`evolve.f90:321` keeps the flag false until `new_generation` has saved
+/// `mlt_vc_old`), or until a redo or retry restores `mlt_vc_old` in
+/// `set_current_to_old` (`star/private/evolve_support.f90:193-195`).
+///
+/// `set_final_vars` runs at the end of [`do_struct_burn_mix`]; between it and
+/// the exit of the `implicit_mdot_loop` (`evolve.f90:690`) only the omega
+/// mix and `select_mdot_action` run, and neither calls `set_hydro_vars`,
+/// reads `mlt_vc` or writes the two flags, so this runs at the loop exit.
+fn finish_set_final_vars_mlt_vc(model: &mut StarModel) {
+    if model.aux.okay_to_set_mlt_vc && !model.aux.have_mlt_vc {
+        model.aux.have_mlt_vc = true;
+    }
+    model.aux.okay_to_set_mlt_vc = false;
+}
+
 #[allow(clippy::too_many_arguments)]
 fn finalize_accepted_step(
     model: &mut StarModel,
@@ -2131,7 +2151,6 @@ fn finalize_accepted_step(
 
     model.dt_old = dt_try;
     model.aux.step_hist.mstar_dot_old = model.mstar_dot;
-    model.aux.have_mlt_vc = true;
     model.doing_first_model_of_run = false;
 
     EvolveStepReport {

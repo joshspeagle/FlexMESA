@@ -17,12 +17,14 @@ use flexmesa_const::{MixingType, L_SUN, M_SUN};
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{AtmOption, StarControls, StarJobControls};
+use crate::hydro_rotation::{
+    set_rotation_info, use_xh_to_update_i_rot_and_j_rot,
+};
 use crate::hydro_vars::{
     do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars, set_mlt_vars,
 };
 use crate::micro::{change_model_network, do_kap, set_basic_vars};
 use crate::premix::do_phase_separation;
-use crate::rotation::update_rotation_distortion_factors;
 use crate::rotation_mix_info::set_rotation_mixing_info;
 use crate::star_ad::{I_LND_00, I_LNR_00, I_LNT_00, I_L_00};
 use crate::struct_burn_mix::solve_omega_mix;
@@ -218,7 +220,8 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
     model.controls.rotation_flag = true;
     model.controls.use_gravity_rotation_correction = true;
     model.omega.fill(5.0e-5);
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     let fp_k = model.aux.fp_rot[k];
     let ft_k = model.aux.ft_rot[k];
     assert!((0.75..1.0).contains(&fp_k));
@@ -310,7 +313,8 @@ fn test_do_kap_multi_isotope_cno_and_nugis_lamers_and_omega_mix() {
     for k in 0..model.nz {
         model.omega[k] = 1.0e-4 * (1.0 + 0.5 * (k as f64) / (model.nz as f64));
     }
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     let j_before: f64 = (0..model.nz)
         .map(|k| model.dm_bar[k] * model.j_rot[k])
         .sum();

@@ -3,11 +3,11 @@
 
 `FlexMESA` tracks all **106** end-to-end `test_suite` cases of **MESA release `26.4.1`** (`90` `star`, `8` `binary`, `8` `astero`; Zenodo record `19722306`). An upstream case counts as passing only when unmodified release inlists run uncapped in Rust `strict` mode to upstream's own termination code without in-library case overrides or pulsation scaffolding and match stored real-MESA history tracks within manifest tolerances (`notes/SCOPE.md`, `DECISIONS #17`, `DECISIONS #19`).
 
-Instead of capping steps or loosening checks to force green runs, unfinished or diverging cases are declared in `benchmarks/history_harness/known_gaps.toml` with a linked tracking issue under `#140` (`#144`). CI fails on any undeclared failure and alerts if a declared gap starts passing so its entry can be promoted.
+Instead of capping steps or loosening checks to force passing runs, unfinished or diverging cases are declared in `benchmarks/history_harness/known_gaps.toml` with a linked tracking issue under `#140` (`#144`). CI fails on any undeclared failure and alerts if a declared gap starts passing so its entry can be promoted.
 
 ## Suite Summary
 
-| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
+| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Acceptance Pass (`pass`) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 90 | 87 | 3 | 78 | 12 | 75 | 30 | 56 |
 | `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
@@ -38,11 +38,11 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 5 | Align `astero` search and chi-squared drivers |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 4 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
-| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 3 | Open #140 parity sub-issue |
+| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 3 | Open #140 gap issue |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
+| [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 gap issue |
 
-## Complete Known-Gaps Registry (36 Cases)
+## Known-Gaps Registry (36 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -83,7 +83,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `example_astero` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2` (737 steps; strict) | Strict run reaches astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2 in [734] steps (MESA [737]); every compared column is within tolerance; the after-evolve step is not ported and search-stage step accounting differs (#162) (Train 14 campaign; #162). |
 | `astero` | `fast_newuoa` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `age_target` | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` (3835 steps; strict) | Strict run reaches astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target in [480] steps (MESA [480, 479, 479, 479, 480, 479, 480, 479]); every compared column is within tolerance; it calls no oscillation code; the search run is reported as one stage against MESA's eight (#162) (Train 14 campaign; #162). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 37 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 36 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -108,7 +108,6 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/test_star_wave4_2.py` | `test_solve_henyey_damped_newton_converges_for_all_modes` | `physics_gap` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | With the upstream pre-MS builder (pre_ms_model.f90) the forced 10-yr step on the unrelaxed 1 Msun model (d_log10_P = 0.05) converges in 19 iterations against this test's own bound of 10; upstream relaxes a new pre-MS model first (init.f90:1077-1109, #402) and never runs this setup. |
 | `python_xfail` | `tests/test_star_wave4_4.py` | `test_adaptive_remeshing_and_mesh_gval_jax_consistency` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | The Rust pre-MS model is now upstream's build_pre_ms_model (#154); at its 4 Msun inputs the frozen JAX eval_mesh_gval_jax (max/abs, not smooth) fails check_grads: JVP 322.85 against numerical 227.43 at rtol=1e-5. |
 | `python_xfail` | `tests/test_star_wave4_2.py` | `test_eval_equations_rust_jax_residual_consistency` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_face_dm_bar at k = nz - 1 uses 0.5*(dm[k-1] + dm[k]) (MESA 26.4.1 star/private/hydro_momentum.f90:191-196, #340); frozen JAX eval_hydro_residuals_jax still uses dm_bar[nz - 1], so zone nz - 1 momentum residual differs by 1.12e-5 against rtol=1e-13, atol=1e-13. |
-| `python_xfail` | `tests/test_wave5_bench.py` | `test_wave5_diff_rot_rust_matches_frozen_jax` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier fit, so the cross-stage difference is about 5.4e-5 against bounds of 1.0e-12 (8 zones) and 2.0e-14 (128 zones). |
 | `python_xfail` | `tests/test_star_wave4_1.py` | `test_star_jax_face_gradr_and_gradt_match_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust do1_mlt_2 computes the face radiation pressure from the face temperature as MESA 26.4.1 get_Prad_face does (star_utils.f90:3838-3843, #291); the frozen JAX twin interpolates it from the two cell values, so gradr differs by up to 3.8e-4 against a bound of 1.0e-12 and gradt by up to 3.2e-4 against 1.0e-6. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_caplan_ocp_dstar_jax_matches_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_caplan_ocp_dstar follows MESA 26.4.1 get_Dstar_OCP (diffusion_support.f90:1716-1743, #156); the frozen JAX twin keeps its earlier expression, so the relative difference is 0.87 to 0.996 at the three test points against a bound of 1.0e-14. |
 | `python_xfail` | `tests/test_star_wave5_1.py` | `test_burgers_velocities_jax_match_rust` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust eval_burgers_velocities follows MESA 26.4.1 element diffusion (#156); the frozen JAX twin keeps its earlier expressions, so velocities differ by up to 0.72 relative, diffusion coefficients by up to a factor of 56, and the electric field by 0.54 relative, against bounds of 1.0e-12. |
@@ -129,7 +128,7 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,966` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `305,966` / `305,967` outputs at `0 ULP` across `17` probed modules (`12` modules with every probed value at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |

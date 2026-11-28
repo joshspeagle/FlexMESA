@@ -7872,10 +7872,13 @@ upstream_lines = 1544
 upstream_sha256 = "4c2ea8db6b0de26687eacbd46aa268185fe2740838d1d8d64ae55217f19e9950"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/termination.rs"]
+routine_map_partial = ["do_one_check_model", "get_history_info"]
 notes = "updated for #159: full do_check_limits, compare_to_target (when_to_stop_rtol/atol), all 13 stop_at_phase_* checks, verbatim #264/#265; terminal/log formatting not ported"
 [files.routine_map]
 "compare_to_target" = "crates/flexmesa-star/src/termination.rs::compare_to_target"
 "do_check_limits" = "crates/flexmesa-star/src/termination.rs::do_check_limits+eval_check_limits_core"
+"do_one_check_model" = "crates/flexmesa-star/src/mesa_profile.rs::StarLogsWriter::due_flags+StarLogsWriter::record_step_with_extras" # partial: history/profile cadence and priority selection in StarLogsWriter; do_check_limits runs in evolve.rs, termination uses priority 3 vs 2, omits terminal output and logged gate
+"get_history_info" = "crates/flexmesa-star/src/mesa_profile.rs::StarLogsWriter::due_flags+StarLogsWriter::is_history_due" # partial: history cadence only in StarLogsWriter::due_flags; omits terminal_interval/header/summary output and forces history on first step and profile steps
 "get_species_mass" = "crates/flexmesa-star/src/termination.rs::get_species_mass_msun"
 
 [[files]]
@@ -7900,10 +7903,14 @@ upstream_lines = 413
 upstream_sha256 = "b5a0f3896d61be48fb9eec226c24810ad2068ddf1245d10d43ed3f923c4c9b7c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/pre_ms.rs", "crates/flexmesa-star/src/star_lib.rs"]
-routine_map_partial = ["solve_eos_given_PgasT_auto"]
+routine_map_partial = ["solve_eos_given_DE", "solve_eos_given_DEgas", "solve_eos_given_DP", "solve_eos_given_PT", "solve_eos_given_PgasT_auto"]
 notes = "seeded from coverage-map.md (partial): quick. `get_eos` path only; `solve_eos_given_DE/PgasT/...` helpers and `eos_frac_*` reporting not found (0/8 names)"
 [files.routine_map]
 "get_eos" = "crates/flexmesa-star/src/micro.rs::eval_cell"
+"solve_eos_given_DE" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy" # partial: inlined eos_dt_get_t on I_LN_E in mesh_remap with shared tol and (lnT, energy) return; omits full dres outputs and timing_num_solve_eos_calls
+"solve_eos_given_DEgas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_eos_degas_and_kap" # partial: inlined eos_dt_get_t on WHICH_OTHER_EGAS in rsp_eos_inv with fixed 1e-11 tol; omits standalone wrapper, dres outputs, and timing counter
+"solve_eos_given_DP" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_t_given_dp" # partial: inlined eos_dt_get_t on WHICH_OTHER_LOG_PTOT in rsp_eos_inv with fixed 1e-11 tol; omits standalone wrapper, dres outputs, and timing counter
+"solve_eos_given_PT" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_rho_given_pt" # partial: inlined eos_dt_get_rho on WHICH_OTHER_LOG_PTOT in rsp_eos_inv with 9x tolerance relaxation; omits standalone wrapper, dres outputs, and timing counter
 "solve_eos_given_PgasT" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t"
 "solve_eos_given_PgasT_auto" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t_auto"
 
@@ -7994,7 +8001,7 @@ upstream_lines = 3449
 upstream_sha256 = "9e812742db79a735453226882aa07ca92a9fabc8200885d5c86f565e316e37fe"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/report_utils.rs"]
-routine_map_partial = ["do_binary_col", "do_col", "do_col_pass2", "do_col_pass3", "do_color_col", "do_extra_col", "do_get_data_for_history_columns", "do_history_info", "do_int_val", "do_name", "do_val", "get1_hist_value", "get_history_specs", "history_getval", "set_burn_types", "write_history_info", "write_integer", "write_string", "write_val"]
+routine_map_partial = ["do_binary_col", "do_col", "do_col_pass2", "do_col_pass3", "do_color_col", "do_extra_col", "do_get_data_for_history_columns", "do_history_info", "do_history_info::do_extra_binary_col", "do_int_val", "do_name", "do_val", "get1_hist_value", "get_history_specs", "get_history_values", "get_iso_val", "history_getval", "set_burn_types", "write_history_info", "write_integer", "write_string", "write_val"]
 notes = "updated for #163: selectable history_columns.list writer (partial; microphysics columns under #161)"
 [files.routine_map]
 "category_L" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row_with_ctx"
@@ -8012,12 +8019,15 @@ notes = "updated for #163: selectable history_columns.list writer (partial; micr
 "do_extra_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
 "do_get_data_for_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row+evaluate_star_history_row_with_ctx"
 "do_history_info" = "crates/flexmesa-star/src/mesa_history.rs::write_step_with_ctx_and_extras+format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
+"do_history_info::do_extra_binary_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra" # partial: appended via combined extra_cols slice in binary_history rather than separate extra_binary_col pass
 "do_int_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
 "do_name" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras"
 "do_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
 "find_weakest_mixing_region" = "crates/flexmesa-star/src/report_utils.rs::eval_history_mixing_regions"
 "get1_hist_value" = "crates/flexmesa-star/src/mesa_history.rs::star_get_history_output"
 "get_history_specs" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns"
+"get_history_values" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row+evaluate_star_history_row_with_ctx" # partial: evaluates parsed HistoryColumnSpec slice into typed Int/Float cells returning Err on first failure instead of per-slot failed_to_find_value flags; supported column subset
+"get_iso_val" = "crates/flexmesa-star/src/mesa_history.rs::parse_iso_prefix_query+evaluate_star_history_row_with_ctx+star_get_history_output" # partial: matches all 8 prefix+iso formulas via parse_iso_prefix_query and evaluate_star_history_row_with_ctx with case-insensitive whitespace splitting rather than standalone single-space get_iso_val
 "history_getval" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column+evaluate_star_history_row_with_ctx"
 "if_rot" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
 "interpolate_burn_bdy_q" = "crates/flexmesa-star/src/report_utils.rs::eval_history_burning_regions"
@@ -9058,7 +9068,7 @@ upstream_lines = 2466
 upstream_sha256 = "36d8b7f9b3a98ff636be758419269eb992279439e1f99c0dcdfe4662bcea3d1c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_profile.rs"]
-routine_map_partial = ["do1_nuclide", "do1_profile_spec", "get_profile_id", "get_profile_val", "getval_for_profile"]
+routine_map_partial = ["do1_nuclide", "do1_profile_spec", "get_profile_id", "get_profile_val", "getval_for_profile", "getval_for_profile::if_rot", "getval_for_profile::if_rot_ad"]
 notes = "updated for #163: profile column evaluator (partial; #161)"
 [files.routine_map]
 "do1_nuclide" = "crates/flexmesa-star/src/mesa_profile.rs::parse_profile_columns_inner"
@@ -9066,6 +9076,8 @@ notes = "updated for #163: profile column evaluator (partial; #161)"
 "get_profile_id" = "crates/flexmesa-star/src/mesa_profile.rs::resolve_single_map_token+match_profile_scalar"
 "get_profile_val" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar"
 "getval_for_profile" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar+build"
+"getval_for_profile::if_rot" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar" # partial: inlined for supported rotation columns in eval_profile_scalar; log_j_rot uses abs(j_rot) and omits unsupported rotation/dynamo columns
+"getval_for_profile::if_rot_ad" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar" # partial: inlined for i_rot (alt=0) and fp_rot/ft_rot (alt=1) over plain f64 aux fields in eval_profile_scalar
 
 [[files]]
 upstream_path = "star/private/pulse.f90"
@@ -9587,9 +9599,13 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/omega_mix.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/omega_mix_158_test.rs"]
+routine_map_partial = ["do_solve_omega_mix::solve_tridiag"]
 notes = "updated for #158: Quad (binary128) port of do_solve_omega_mix, solve_tridiag, min_mixing_timescale, create_matrix_and_rhs (am_sig_j/d2irot), adaptive substepping (4..20), other_torque/other_torque_implicit hooks, and angular_momentum_error_retry/warn verified at 0 ULP (bit-exact) across 12 MESA 26.4.1 hex oracle regimes (diffusive shear, pure-j, mixed omega+j, 1e13 stiffness, explicit extra_jdot/extra_omegadot, 3-point nonlinear implicit torque with all 6 derivatives, adaptive substepping, max_iters retry, conservation retry triggered/passed, and simple_i_rot_flag); recalc_mixing_info_each_substep and binary_other_torque/binary_other_torque_implicit are ported in omega_mix.rs but disabled in the current oracle generator (gen_omega_mix_oracles.f90:503,514-515)"
 [files.routine_map]
 "do_solve_omega_mix" = "crates/flexmesa-star/src/omega_mix.rs::do_solve_omega_mix_with_extras"
+"do_solve_omega_mix::create_matrix_and_rhs" = "crates/flexmesa-star/src/omega_mix.rs::create_matrix_and_rhs"
+"do_solve_omega_mix::min_mixing_timescale" = "crates/flexmesa-star/src/omega_mix.rs::min_mixing_timescale"
+"do_solve_omega_mix::solve_tridiag" = "crates/flexmesa-star/src/omega_mix.rs::solve_tridiag" # partial: adds n==0, zero/non-finite pivot bp, and non-finite solution x error returns absent in upstream solve_tridiag
 
 [[files]]
 upstream_path = "star/private/solver_support.f90"

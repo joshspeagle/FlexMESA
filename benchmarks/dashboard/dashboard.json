@@ -1327,9 +1327,9 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 1623,
+    "mapped_routines_total": 2290,
     "listed_oracle_routines_total": 64,
-    "listed_oracle_routines_pct": 3.9,
+    "listed_oracle_routines_pct": 2.8,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1405,9 +1405,9 @@
         "total_files": 124,
         "total_tests": 754,
         "mislabeled_files": 2,
-        "mapped_routines": 924,
+        "mapped_routines": 1197,
         "listed_oracle_routines": 20,
-        "listed_oracle_routines_pct": 2.2
+        "listed_oracle_routines_pct": 1.7
       },
       {
         "module": "binary",
@@ -1453,7 +1453,7 @@
         "total_files": 7,
         "total_tests": 34,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 91,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1465,7 +1465,7 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 12,
+        "mapped_routines": 119,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,7 +1477,7 @@
         "total_files": 6,
         "total_tests": 27,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 196,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -2041,13 +2041,13 @@
     ],
     "open_pull_requests": [
       {
-        "number": 747,
-        "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
+        "number": 757,
+        "title": "docs: replace unmeasured status wording (P1.4 part 3)",
         "draft": false
       },
       {
-        "number": 757,
-        "title": "docs: replace unmeasured status wording (P1.4 part 3)",
+        "number": 759,
+        "title": "star, binary: remove j_rot bootstrap guards and the Wave-5 rotation stubs (#633 items 4a, 4b)",
         "draft": false
       }
     ],
@@ -2633,7 +2633,7 @@
         "title": "[Deferred bug] get_xa writes xa(0) when h2 is in the net and h1 is absent",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2657,7 +2657,7 @@
         "title": "[Deferred bug] Timestep-limit indices collide: Tlim_lg_XSi_cntr equals Tlim_lg_XNe_cntr and Tlim_XH_cntr equals Tlim_lg_XO_cntr",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2705,7 +2705,7 @@
         "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2713,7 +2713,7 @@
         "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -2721,7 +2721,7 @@
         "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -4598,6 +4598,19 @@
     {
       "date_utc": "2026-11-28",
       "commit": "af8e2a38",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "17464744",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

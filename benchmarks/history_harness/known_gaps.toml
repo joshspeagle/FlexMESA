@@ -558,3 +558,30 @@ role = "physics_gap"
 expect_fail_when_run = true
 reason = "With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530)."
 
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_hybrid_bridge.py"
+test_name = "test_interp2d_rust_strict_and_jax_consistency_and_autodiff"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured diffs are f rel=1.800e-8 (abs=5.557e-9), df_dx rel=5.789e-10 (abs=4.896e-10), df_dy rel=2.034e-8 (abs=3.031e-9) against rtol=1e-12."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_interp_2d.py"
+test_name = "test_interp2d_bicub_rust_strict_vs_jax_autodiff"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas jax.grad/jax.hessian differentiate the frozen pure-f64 JAX twin; measured diffs at (0.1, 0.2) are df_dx rel=2.112e-8 (abs=1.736e-8), df_dy rel=7.129e-9 (abs=4.157e-10), d2f_dx2 rel=3.211e-8 (abs=1.826e-8), d2f_dy2 rel=3.313e-8 (abs=4.680e-9), d2f_dxdy rel=1.844e-8 (abs=1.001e-8) against rtol=1e-13, atol=1e-14."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_bench.py"
+test_name = "test_wave1_interp_2d_stages_agree"
+issue = "#295"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured cross-stage max_rel_err is 2.980e-8 (N=4) and 2.980e-8 (N=8) against 1.0e-12."

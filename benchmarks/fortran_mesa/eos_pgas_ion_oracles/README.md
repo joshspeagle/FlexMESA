@@ -17,5 +17,7 @@ make -C benchmarks/fortran_mesa/eos_pgas_ion_oracles MESA_DIR=/path/to/mesa MESA
   - `ideal_solar_1e5_1em2`: 3-species mixture `h1`, `he4`, `c12` (`xa = [0.70, 0.28, 0.02]`) at `T = 1e5 K`, `Rho = 1e-2 g cm^-3` (`26 x 3` `val`, `d_dlnd`, `d_dlnT`).
 - `eos_helm_eval::get_helm_for_eosdt` / `helm::helmeos2` / `eos_lib::helmeos2_eval` (`crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs`):
   - `helm_test_components`, `helm_sample_eos_c12`, `helm_pure_he_2e8_100`, `helm_pure_h_2e8_100`: `16 x 5` converted EOS slots (`val`, `d_dlnd`, `d_dlnT`, `d_dabar`, `d_dzbar`) plus `93` raw `helmeos2` `helm_res` slots on `helm_pure_he_2e8_100`.
+- `eospc_eval::Get_PC_alfa` (`crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs`):
+  - `pc_alfa_gamma_c12_2p9_6p5`, `pc_alfa_gamma_c12_3p5_8p35`, `pc_alfa_tlim_c12_3p3_7p65`: `(alfa, d_alfa_dlogT, d_alfa_dlogRho)`.
 - `eosPT_eval::get_Pgas` (`crates/flexmesa-eos/tests/wave3b1_golden_tests.rs`):
   - `eospt_get_pgas_solar_15_7p2`: 7-species solar mixture (`X = 0.70`, `Z = 0.02`) at `logT = 7.2`, solving for `logPgas` matching `lnE` from `eosPT_get` at `(logPgas=15.0, logT=7.2)` starting from `logPgas_guess = 14.8` with `logPgas_tol = 1e-6`, `other_tol = ln10 * 1e-6`, `max_iter = 100`.

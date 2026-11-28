@@ -525,6 +525,12 @@ routines = [
   "eos/public/eos_lib.f90::eosDT_get",
 ]
 
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/eospc_eval.f90::Get_PC_alfa"]
+
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
 language = "rust"

@@ -18,6 +18,7 @@ program gen_eos_pgas_ion_oracles
    use eos_lib, only: eos_init, eos_shutdown, alloc_eos_handle, free_eos_handle, eos_ptr, eosPT_get, helmeos2_eval
    use eosPT_eval, only: get_Pgas
    use eos_helm_eval, only: Get_HELMEOS_Results
+   use eospc_eval, only: Get_PC_alfa
    use ideal, only: get_ideal_for_eosdt
    use ion_offset, only: compute_ion_offset
    implicit none
@@ -63,6 +64,7 @@ program gen_eos_pgas_ion_oracles
    call emit_get_pgas_case(u, rc)
    call emit_ideal_case(u, rc)
    call emit_helm_cases(u, rc)
+   call emit_pc_alfa_cases(u, rc)
    close(u)
    call eos_shutdown()
    call chem_shutdown()
@@ -371,5 +373,50 @@ contains
 
       call free_eos_handle(eh)
    end subroutine emit_helm_cases
+
+   subroutine emit_pc_alfa_one(unit_no, rc, rq, label, lr, lt, z_in, ab_in, zb_in)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      character(len=*), intent(in) :: label
+      real(dp), intent(in) :: lr, lt, z_in, ab_in, zb_in
+      real(dp) :: alfa, dt_a, dr_a
+      integer :: ierr_loc
+
+      call Get_PC_alfa(rq, lr, lt, z_in, ab_in, zb_in, alfa, dt_a, dr_a, ierr_loc)
+      if (ierr_loc /= 0) stop 'Get_PC_alfa failed'
+
+      call emit(unit_no, rc, trim(label), 'in', 'logRho', 'val', lr)
+      call emit(unit_no, rc, trim(label), 'in', 'logT', 'val', lt)
+      call emit(unit_no, rc, trim(label), 'in', 'abar', 'val', ab_in)
+      call emit(unit_no, rc, trim(label), 'in', 'zbar', 'val', zb_in)
+      call emit(unit_no, rc, trim(label), 'out', 'alfa', 'val', alfa)
+      call emit(unit_no, rc, trim(label), 'out', 'd_alfa_dlogT', 'val', dt_a)
+      call emit(unit_no, rc, trim(label), 'out', 'd_alfa_dlogRho', 'val', dr_a)
+   end subroutine emit_pc_alfa_one
+
+   subroutine emit_pc_alfa_cases(unit_no, rc)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      integer :: eh, ierr_loc
+
+      eh = alloc_eos_handle(ierr_loc)
+      if (ierr_loc /= 0) stop 'pc_alfa alloc_eos_handle failed'
+      call eos_ptr(eh, rq, ierr_loc)
+      if (ierr_loc /= 0) stop 'pc_alfa eos_ptr failed'
+
+      rq% PC_use_Gamma_limit_instead_of_T = .true.
+      call emit_pc_alfa_one(unit_no, rc, rq, 'pc_alfa_gamma_c12_2p9_6p5', &
+         2.9_dp, 6.5_dp, 1.0_dp, 12.0_dp, 6.0_dp)
+      call emit_pc_alfa_one(unit_no, rc, rq, 'pc_alfa_gamma_c12_3p5_8p35', &
+         3.5_dp, 8.35_dp, 1.0_dp, 12.0_dp, 6.0_dp)
+
+      rq% PC_use_Gamma_limit_instead_of_T = .false.
+      call emit_pc_alfa_one(unit_no, rc, rq, 'pc_alfa_tlim_c12_3p3_7p65', &
+         3.3_dp, 7.65_dp, 1.0_dp, 12.0_dp, 6.0_dp)
+
+      call free_eos_handle(eh)
+   end subroutine emit_pc_alfa_cases
 
 end program gen_eos_pgas_ion_oracles

@@ -5557,7 +5557,7 @@ notes = "seeded from coverage-map.md section 7: partial / uncompared"
 "Get_Kap_for_dXCO::Get_Kap_at_dXO" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxo"
 "Get_Kap_for_dXCO::Get_Kap_at_dXC" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxc"
 "Find_CO_Tables" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
-"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream indexes co_tables(i) out of bounds (#703)
+"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream has no range check (not shown reachable) (#703)
 "Find_CO_Tables::on_midline" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
 "Find_CO_Tables::on_diagonal" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
 "Get_CO_Kap_for_logRho_logT" = "crates/flexmesa-kap/src/co_find.rs::get_co_kap_for_log_rho_log_t"
@@ -5592,7 +5592,7 @@ flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
 routine_map_partial = ["locate_log", "locate_logT", "locate_logR"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
-"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: clamps the equally-spaced int() index to num_logs - 2 (upstream then reads logs(i+1) past the end), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error (#701)
+"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: adds an unreachable clamp of the equally-spaced index to num_logs - 2 (upstream's index is already in range), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error (#701)
 "locate_logT" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
 "locate_logR" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
 "do_kap_interpolations" = "crates/flexmesa-kap/src/spline.rs::do_kap_interpolations"

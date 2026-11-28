@@ -5620,7 +5620,23 @@ upstream_lines = 913
 upstream_sha256 = "8511974e1ba86bb40181d62c069119b0f3348f54b9dec800ca1a5e8cd9e8505e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["Setup_Kap_CO_Tables", "load_one_CO", "Prepare_Kap_CO_X_Table", "Prepare_Kap_CO_X_Table::Setup_Kap_CO_X_Table", "Prepare_Kap_CO_X_Table::Read_Kap_CO_X_Table", "Read_Kap_CO_Table", "Make_CO_Interpolation_Data", "Make_CO_Interpolation_Data::Check_Interpolation_Data", "Get_CO_Filenames", "Create_fname"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Setup_Kap_CO_Tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: builds all CO sets (gn93_co, gs98_co, a09_co) once into the FMKAP001 payload; Zfrac_* come from each file header; no load_on_demand
+"load_one_CO" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: parses one CO data file into the payload at build time; no Get_CO_Filenames, cache files, or not_loaded_yet flag
+"Prepare_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: omits the form and version checks and the |xin - X|, |zz - Z| > 1e-6 and num_tables <= 0 errors; no cache read or write
+"Prepare_Kap_CO_X_Table::Setup_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: omits the |xin - X|, |zz - Z| > 1e-6 and num_tables <= 0 errors; X and Z come from the caller
+"Prepare_Kap_CO_X_Table::Read_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: CO_table_numbers and next_dXC/dXO_table are built later in loader_parse.rs::parse_kap_tables; cache read path not ported
+"Prepare_Kap_CO_X_Table::find_next_dXC_table" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Prepare_Kap_CO_X_Table::find_next_dXO_table" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Read_Kap_CO_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: log kappa stored as round(1000 x value) in i16 and divided by 1000 at fit time; exact for 3-decimal table values
+"Make_CO_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per sub-table, and a non-finite value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting
+"Make_CO_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them
+"get_dX_lookup" = "crates/flexmesa-kap/src/loader.rs::get_dx_lookup"
+"find_in_dXs" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Get_CO_Filenames" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: file names built inline as <prefix>_z<Z>_x<X>.data; no cache or temp-cache file names
+"Create_fname" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: inlined with get_output_string
 
 [[files]]
 upstream_path = "kap/private/load_kap.f90"

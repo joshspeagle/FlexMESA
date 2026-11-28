@@ -185,3 +185,44 @@ Local Mixing Length Theory (`set_mlt`, Cox & Giuli 1968, Henyey 1965, Mihalas 19
 ::: flexmesa.turb.semiconvection
 
 ::: flexmesa.turb.thermohaline
+
+---
+
+## Compiled Rust Extension Bridge (`flexmesa._rust`)
+
+Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for constants, utilities, elementary math, automatic differentiation, splines, linear solvers, and convection (`_ArrF64` denotes a `float64` NumPy `ndarray`).
+
+### `tier_a_data` and `tier_a_parse`
+
+- **`const_probe_values`** (`() -> list[float]`): Returns the 23 CGS constants of `flexmesa-const` printed by upstream `const/test`, in order: `pi`, `ln10`, `boltz_sigma`, `boltz_sigma*4`, `boltz_sigma*4/clight`, `boltz_sigma/clight`, `crad`, `secyer`, `Msun`, `Rsun`, `Lsun`, `ly`, `m_earth`, `au`, `amu`, `mn`, `mp`, `me`, `planck_h`, `qe`, `avo`, `clight`, and `kerg`.
+- **`is_fortran_float_token`** (`(token: str) -> bool`): Returns `True` if `token` is a Fortran floating-point literal (standard IEEE literals, `D`/`d` exponents, or exponent-less `1.0-10` notation).
+- **`parse_fortran_float`** (`(token: str) -> float`): Parses a Fortran or IEEE-754 floating-point literal into `f64`, raising `ValueError` on invalid input.
+
+### `math_solvers`, `math_hex_probe`, and `math_vec_audit`
+
+- **`crmath_cos`** (`(x: float) -> float`): Evaluates $\cos(x)$ using `flexmesa_math::cos` (`crmath` in `strict` mode).
+- **`crmath_exp`** (`(x: float) -> float`): Evaluates $\exp(x)$ using `flexmesa_math::exp` (`crmath` in `strict` mode).
+- **`crmath_sin`** (`(x: float) -> float`): Evaluates $\sin(x)$ using `flexmesa_math::sin` (`crmath` in `strict` mode).
+- **`exp10_array`** (`(xs: _ArrF64) -> _ArrF64`): Evaluates `exp10` elementwise over a 1D C-contiguous `f64` array.
+- **`safe_log_array`** (`(xs: _ArrF64) -> _ArrF64`): Evaluates `safe_log` elementwise over a 1D C-contiguous `f64` array.
+- **`safe_log10_array`** (`(xs: _ArrF64) -> _ArrF64`): Evaluates `safe_log10` elementwise over a 1D C-contiguous `f64` array.
+- **`safe_sqrt_array`** (`(xs: _ArrF64) -> _ArrF64`): Evaluates `safe_sqrt` elementwise over a 1D C-contiguous `f64` array.
+- **`eval_autodiff_order2_zone`** (`(x: float, y: float) -> list[float]`): Evaluates `f(x, y) = exp(0.1*x*y) + x^1.5 / (y + 2)` in `AutoDiffReal2VarOrder2`, returning `[val, df_dx, df_dy, d2f_dx2, d2f_dxdy, d2f_dy2]`.
+- **`eval_autodiff_order2_batch`** (`(x: _ArrF64, y: _ArrF64, parallel: bool = False) -> _ArrF64`): Evaluates `eval_autodiff_order2_zone` across 1D arrays `x, y` of shape `(nz,)`, dispatching across the persistent 4-thread `rayon` pool when `parallel=True` and `nz >= 64`.
+- **`mtx_solve_dense`** (`(n: int, a_flat: _ArrF64, b: _ArrF64) -> _ArrF64`): Solves a dense $n \times n$ linear system $A x = b$ via pure Rust LU.
+- **`math_test_suite_eval`** (`(x: float) -> list[tuple[str, float]]`): Evaluates 33 `flexmesa_math` scalar and integer/real-power functions at `x`, returning `(name, value)` pairs.
+- **`auto_diff_test_suite_values`** (`() -> list[float]`): Computes the `auto_diff` 1-variable, 2-variable, and `AutoDiffRealStarOrder1` probe vector (`387` `f64` outputs).
+- **`strict_math_vectors_sha256`** (`(vec_path: str) -> tuple[int, str]`): Evaluates all inputs in `vec_path` under `NumericsMode::Strict` and returns `(vector_count, sha256_hex)` over canonicalized `(section, output_u64_be)` records (`#165`).
+- **`compare_fast_vs_strict_vectors`** (`(vec_path: str) -> list[tuple[str, int, int, int, int, float, float]]`): Evaluates all inputs in `vec_path` under `NumericsMode::Fast` against `NumericsMode::Strict` (`#165`), returning `(section, total, finite_pairs, nonfinite_mismatch_count, max_ulp, max_abs, max_rel)` in section order.
+- **`measure_dispatch_overhead_ns`** (`(n_iters: int) -> tuple[float, float, float, float]`): Measures `(strict_exp_ns, fast_exp_ns, strict_fma_ns, fast_fma_ns)` over `n_iters` black-boxed calls (`#165`).
+
+### `interp_2d`
+
+- **`interp_evbicub_batch`** (`(x_q: _ArrF64, y_q: _ArrF64, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64, parallel: bool = False) -> _ArrF64`): Evaluates a 2D bicubic spline over 1D query arrays `x_q, y_q` of shape `(nz,)`, returning a `(nz, 6)` array and dispatching across the persistent 4-thread `rayon` pool when `parallel=True` and `nz >= 64`.
+
+### `turb_py`
+
+- **`set_mlt_f64`** (`(option: str, mixing_length_alpha: float, henyey_y_param: float, henyey_nu_param: float, chi_t: float, chi_rho: float, cp: float, grav: float, lambda_mlt: float, rho: float, p: float, t: float, opacity: float, gradr: float, grada: float, gradl: float) -> tuple[list[float], int]`): Evaluates `set_mlt` in `f64` at a single zone across all 6 geometric MLT prescriptions (`"Cox"`, `"TDC"`, `"Henyey"`, `"ML1"`, `"ML2"`, `"Mihalas"`) with local CGS inputs, dimensionless $\alpha$, and Henyey $(y, \nu)$ parameters, returning `([gamma, grad_t, y_face, conv_vel, d], mixing_type_code)`.
+- **`set_mlt_batch`** (`(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64`): Evaluates Cox (1968) MLT with `DualOrder1<6>` sensitivities across `s_frac`, dispatching across the persistent 4-thread `rayon` worker pool when `parallel=True` and `nz >= 64`.
+- **`turb_set_tdc_f64`** (`(params: Sequence[float], include_mlt_corr_to_tdc: bool, use_tdc_enthalpy_flux_limiter: bool, inputs: Sequence[float]) -> tuple[float, float, float, float, float, int]`): Evaluates Time-Dependent Convection (`set_TDC` in `turb/public/turb.f90`) at one point with CGS `params` (`conv_vel_start`, `mixing_length_alpha`, `tdc_alpha_d`, `tdc_alpha_r`, `tdc_alpha_pt`, `tdc_alpha_c`, `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale`, `max_conv_vel`) and `inputs` (`chi_t`, `chi_rho`, `gradr`, `r`, `p`, `t`, `rho`, `dv`, `cp`, `opacity`, `scale_height`, `gradl`, `grada`, `eq_div_w`, `grav`, `energy`), returning `(gamma, grad_t, y_face, conv_vel, d, num_iters)`.
+- **`set_tdc_batch`** (`(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64`): Evaluates Kuhfuss (1986) TDC with `DualOrder1<6>` sensitivities across `s_frac`, dispatching across the persistent 4-thread `rayon` worker pool when `parallel=True` and `nz >= 32`.

@@ -5744,6 +5744,8 @@ upstream_sha256 = "c4271ed5c4fd16b01cf1570b190b54a1ad2ebad32c8d2dd0538b993b3b309
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_output_string" = "crates/flexmesa-kap/src/spline.rs::get_output_string"
 
 [[files]]
 upstream_path = "kap/public/kap_lib.f90"

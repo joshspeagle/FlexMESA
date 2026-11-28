@@ -6045,7 +6045,7 @@ upstream_lines = 3374
 upstream_sha256 = "e643adb6b5fd60887d797c96ff3d7d6b2b126ed20babccf18063be1a7f5016de"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
-routine_map_partial = ["approx21_weak_rates"]
+routine_map_partial = ["approx21_weak_rates", "approx21_special_reactions", "approx21_eps_info", "approx21_eps_info::set_eps_nuc", "approx21_dfdy", "set_approx21", "set_approx21_isos", "set_approx21_isos::do1", "set_approx21_reactions", "set_approx21_reactions::do1"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
 "approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
@@ -6053,6 +6053,27 @@ notes = "seeded from coverage-map.md section 7: partial / uncompared"
 "approx21_weak_rates" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the ni56/co56 rates go through eval_single_weak_blended (eval_weak_reaction_info) with abar = zbar = z2bar = 1; no ierr is returned
 "approx21_eval_PPII_fraction" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eval_ppii_fraction"
 "eval_fe56ec_fake_factor" = "crates/flexmesa-net/src/approx21_dydt.rs::eval_fe56ec_fake_factor"
+"approx21_special_reactions" = "crates/flexmesa-net/src/approx21_special.rs::approx21_special_reactions" # partial: no stop for ratdum(i) < 0 or for is_bad(dratdumdy1(iralf2)) and no ierr; the equilibrium-link arithmetic matches (#735)
+"approx21_dydt" = "crates/flexmesa-net/src/approx21_dydt.rs::approx21_dydt"
+"approx21_eps_info" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info" # partial: category and total sums match in order; the per-reaction raw_rate, screened_rate, eps_nuc_rate and eps_neu_rate arrays are not filled (#735)
+"approx21_eps_info::m2" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m3" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m4" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m5" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::set_eps_nuc" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info" # partial: only the category accumulation is kept; the per-reaction array updates are omitted (#735)
+"approx21_d_epsneu_dy" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_d_epsneu_dy"
+"approx21_dfdy" = "crates/flexmesa-net/src/approx21_dfdy.rs::approx21_dfdy" # partial: rows ineut and iprot (approx21_dfdy_heavy.rs) hoist y*y products and sub-sums, changing rounding order; the other entries are textually identical (#735)
+"approx21_dfdT_dfdRho" = "crates/flexmesa-net/src/approx21_eval.rs::approx21_dfdt_dfdrho"
+"mark_approx21" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_isos" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_isos::do1" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_reactions" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_reactions::do1" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"set_approx21" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: lazy index resolution; a missing name maps to index 0 instead of mesa_error and there is no irfe56_aux4 consistency check (#734)
+"set_approx21_isos" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: a missing isotope maps to index 0 instead of mesa_error; iso_cid is not kept (#734)
+"set_approx21_isos::do1" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: closure iso(); same missing-name behaviour (#734)
+"set_approx21_reactions" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: ifa uses g.num_reactions rather than num_mesa_reactions; no consistency check; rate_id not kept (#734)
+"set_approx21_reactions::do1" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: closure rxn(); a missing reaction maps to index 0 instead of mesa_error (#734)
 
 [[files]]
 upstream_path = "net/private/net_burn.f90"

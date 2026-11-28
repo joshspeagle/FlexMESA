@@ -9621,7 +9621,7 @@ upstream_lines = 981
 upstream_sha256 = "34d97fd656c01c95f0a5de29c9cd722670c65d5571b8758ae2abe0698031b4cd"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-mtx/src/bcyclic.rs"]
-routine_map_partial = ["bcyclic_factor", "bcyclic_solve", "cycle_onestep", "cycle_rhs", "dense_factor", "dense_solve", "dense_solve1"]
+routine_map_partial = ["bcyclic_factor", "bcyclic_solve", "cycle_onestep", "cycle_rhs", "cycle_solve", "dense_factor", "dense_solve", "dense_solve1"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
 "bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_factor+solve_block_tridiag_bcyclic" # partial: omits use_DGESVX_in_bcyclic
@@ -9629,7 +9629,7 @@ notes = "seeded from coverage-map.md (ported): quick"
 "clear_storage" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
 "cycle_onestep" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix+update_even_matrix+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic, bcyclic_odd_storage reuse, and factored(k) guard; zeroes u_j when !has_right
 "cycle_rhs" = "crates/flexmesa-mtx/src/bcyclic.rs::update_even_rhs+bcyclic_solve+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic
-"cycle_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::back_substitute_bcyclic"
+"cycle_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::back_substitute_bcyclic" # partial: back_substitute_bcyclic ports mtx/private/bcyclic.f90:541-582 (in-place lblk1/ublk1); star_bcyclic.f90:544-589 reads separate factored lblkF1/ublkF1 (lmat only for ns > 1)
 "dense_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrf directly; omits DGESVX and n4/n5 dispatch
 "dense_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrs_multi directly; omits DGESVX
 "dense_solve1" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_row+bcyclic_solve" # partial: calls dgetrs directly; omits DGESVX

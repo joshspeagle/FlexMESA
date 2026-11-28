@@ -1,0 +1,500 @@
+{
+  "provenance": {
+    "generator": "scripts/audit/gyre_adipls_measurement.py",
+    "mesa_release": "26.4.1",
+    "mesa_git_commit": "c8c202662922a22b3efefa824473ad615c623afd",
+    "mesasdk_version": "x86_64-linux-26.6.1",
+    "gyre_capture_bundle": "mesa-histories-v1",
+    "gyre_capture_bundle_date": "2026-11-16T07:17:13-05:00",
+    "gyre_capture_sha256": {
+      "runs/astero/fast_from_file/pulse_tap/modes.tsv": "eb3bfd27d41ffefe020fcc56ee05cb8cacd2e8ba081b233ff48ab8324a660732",
+      "runs/star/gyre_in_mesa_wd/pulse_tap/modes.tsv": "8220103a179d8f23efe874d7345e7526b2d4c703aed8b0e9cff4b4d527b3cc13"
+    },
+    "adipls_capture_bundle": "A0 glue-tap captures (adipls_oracles/run_mesa_captures.sh)",
+    "adipls_capture_sha256": {
+      "example_astero/a0tap/calls.tsv": "15169eecfec51352ac589b450504c79c7a53ca5a90792742789cbab8e57cec88",
+      "example_astero/a0tap/modes.tsv": "5247bbe845cc78f391c00d0f64f7f2c7d018f3f71a12c7e6066687ecd1691b95",
+      "fast_scan_grid/a0tap/calls.tsv": "0a07cdce353f542a93c3fc1053e895d17525a80a270f4e02501ddc8188e7961c",
+      "fast_scan_grid/a0tap/modes.tsv": "780366d6868bca0235b02579463e1fed1863d70f6e6a28ff64a020c4c597deaf",
+      "fast_simplex/a0tap/calls.tsv": "03d5fde8db165e29c1fdd9fbb7dbf79605a8d6b4064b9833a427de240fddf1c5",
+      "fast_simplex/a0tap/modes.tsv": "a146dd0059b6edcd3f4060d49cd84623dcb8e00e2986ab36d86b407a98374d19"
+    },
+    "flexmesa_commit": "12c7627124c0d730781975217fdacd10c4737ac9",
+    "flexmesa_crates_dirty": false,
+    "require_zero_skips": true
+  },
+  "cases": [
+    {
+      "case": "astero/fast_from_file",
+      "code": "GYRE",
+      "status": "measured",
+      "evals": 590,
+      "calls": 702,
+      "calls_identical": 702,
+      "calls_mode_count_mismatch": 0,
+      "calls_error": 0,
+      "modes_mesa": 5508,
+      "modes_flexmesa": 5508,
+      "first_differing_call": null,
+      "quantities": [
+        {
+          "name": "n_pg",
+          "integer": true,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "n_p",
+          "integer": true,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "n_g",
+          "integer": true,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "freq_uHz",
+          "integer": false,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "freq_Hz",
+          "integer": false,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "inertia",
+          "integer": false,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "growth_rate_rad_s",
+          "integer": false,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "growth_rate_Hz",
+          "integer": false,
+          "compared": 5508,
+          "zero_ulp": 5508,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        }
+      ]
+    },
+    {
+      "case": "star/gyre_in_mesa_wd",
+      "code": "GYRE",
+      "status": "measured",
+      "evals": 52,
+      "calls": 52,
+      "calls_identical": 52,
+      "calls_mode_count_mismatch": 0,
+      "calls_error": 0,
+      "modes_mesa": 413,
+      "modes_flexmesa": 413,
+      "first_differing_call": null,
+      "quantities": [
+        {
+          "name": "n_pg",
+          "integer": true,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "n_p",
+          "integer": true,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "n_g",
+          "integer": true,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "freq_uHz",
+          "integer": false,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "freq_Hz",
+          "integer": false,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "inertia",
+          "integer": false,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "growth_rate_rad_s",
+          "integer": false,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "growth_rate_Hz",
+          "integer": false,
+          "compared": 413,
+          "zero_ulp": 413,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        }
+      ]
+    },
+    {
+      "case": "astero/example_astero",
+      "code": "ADIPLS",
+      "status": "measured",
+      "calls": 65,
+      "calls_identical": 65,
+      "calls_mode_count_mismatch": 0,
+      "calls_error": 0,
+      "modes_mesa": 1079,
+      "modes_flexmesa": 1079,
+      "first_differing_call": null,
+      "quantities": [
+        {
+          "name": "degree",
+          "integer": true,
+          "compared": 1079,
+          "zero_ulp": 1079,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "order",
+          "integer": true,
+          "compared": 1079,
+          "zero_ulp": 1079,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "em",
+          "integer": true,
+          "compared": 1079,
+          "zero_ulp": 1079,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "cyclic_freq_uHz",
+          "integer": false,
+          "compared": 1079,
+          "zero_ulp": 1079,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "inertia",
+          "integer": false,
+          "compared": 1079,
+          "zero_ulp": 1079,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "obs_st(1:10)",
+          "integer": false,
+          "compared": 10790,
+          "zero_ulp": 10790,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(1:38)",
+          "integer": false,
+          "compared": 41002,
+          "zero_ulp": 41002,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(39:50)",
+          "integer": true,
+          "compared": 12948,
+          "zero_ulp": 12948,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        }
+      ]
+    },
+    {
+      "case": "astero/fast_scan_grid",
+      "code": "ADIPLS",
+      "status": "measured",
+      "calls": 1107,
+      "calls_identical": 1107,
+      "calls_mode_count_mismatch": 0,
+      "calls_error": 0,
+      "modes_mesa": 16301,
+      "modes_flexmesa": 16301,
+      "first_differing_call": null,
+      "quantities": [
+        {
+          "name": "degree",
+          "integer": true,
+          "compared": 16301,
+          "zero_ulp": 16301,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "order",
+          "integer": true,
+          "compared": 16301,
+          "zero_ulp": 16301,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "em",
+          "integer": true,
+          "compared": 16301,
+          "zero_ulp": 16301,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "cyclic_freq_uHz",
+          "integer": false,
+          "compared": 16301,
+          "zero_ulp": 16301,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "inertia",
+          "integer": false,
+          "compared": 16301,
+          "zero_ulp": 16301,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "obs_st(1:10)",
+          "integer": false,
+          "compared": 163010,
+          "zero_ulp": 163010,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(1:38)",
+          "integer": false,
+          "compared": 619438,
+          "zero_ulp": 619438,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(39:50)",
+          "integer": true,
+          "compared": 195612,
+          "zero_ulp": 195612,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        }
+      ]
+    },
+    {
+      "case": "astero/fast_simplex",
+      "code": "ADIPLS",
+      "status": "measured",
+      "calls": 979,
+      "calls_identical": 979,
+      "calls_mode_count_mismatch": 0,
+      "calls_error": 0,
+      "modes_mesa": 9779,
+      "modes_flexmesa": 9779,
+      "first_differing_call": null,
+      "quantities": [
+        {
+          "name": "degree",
+          "integer": true,
+          "compared": 9779,
+          "zero_ulp": 9779,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "order",
+          "integer": true,
+          "compared": 9779,
+          "zero_ulp": 9779,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "em",
+          "integer": true,
+          "compared": 9779,
+          "zero_ulp": 9779,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "cyclic_freq_uHz",
+          "integer": false,
+          "compared": 9779,
+          "zero_ulp": 9779,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "inertia",
+          "integer": false,
+          "compared": 9779,
+          "zero_ulp": 9779,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "obs_st(1:10)",
+          "integer": false,
+          "compared": 97790,
+          "zero_ulp": 97790,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(1:38)",
+          "integer": false,
+          "compared": 371602,
+          "zero_ulp": 371602,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        },
+        {
+          "name": "csummm(39:50)",
+          "integer": true,
+          "compared": 117348,
+          "zero_ulp": 117348,
+          "differ": 0,
+          "max_ulp": 0,
+          "median_ulp_of_differing": 0,
+          "first_difference": null
+        }
+      ]
+    }
+  ]
+}

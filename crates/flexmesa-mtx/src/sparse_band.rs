@@ -290,14 +290,16 @@ fn find_loc_in_column_0_based(
     }
     let start = colptr[col_idx];
     let end = colptr[col_idx + 1];
-    if end > nz {
-        return Err(MtxError::InvalidParameter("ia pointer out of bounds"));
-    }
     if let Some(h) = hint {
         if h > 0 {
-            if let Some(next_0) = h.checked_add(1) {
-                if next_0 >= start && next_0 < end && rowind[next_0] == row_idx
-                {
+            // `k = hint + 1`; `rowind(k)` is read only when
+            // `colptr(j) <= k < colptr(j+1)` (`mtx_formats.dek:263-266`).
+            let next_0 = h.saturating_add(1);
+            if next_0 >= start && next_0 < end {
+                if next_0 >= nz {
+                    return Err(rowind_oob_error());
+                }
+                if rowind[next_0] == row_idx {
                     return Ok(Some(next_0));
                 }
             }
@@ -312,31 +314,29 @@ fn find_loc_in_column_0_based(
              upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)",
         ));
     }
-    let lo = start - 1;
-    if lo > end {
-        // Upstream `do k = colptr(j) - 1, colptr(j + 1)`
-        // (`mtx_formats.dek:273`) executes zero iterations when
-        // `start - 1 > end`, returning `ierr = -1`.
-        return Ok(None);
-    }
-    for (offset, &val) in rowind[lo..end].iter().enumerate() {
-        if val == row_idx {
-            return Ok(Some(lo + offset));
+    // Upstream `do k = colptr(j) - 1, colptr(j + 1)` (`mtx_formats.dek:273`)
+    // executes zero iterations when `start - 1 > end`, returning `ierr = -1`.
+    // Each iteration reads `rowind(k)`, which is out of bounds for
+    // `k >= nz`; error exactly at that read, after earlier in-bounds
+    // iterations have had the chance to match.
+    for k in (start - 1)..=end {
+        if k >= nz {
+            return Err(rowind_oob_error());
+        }
+        if rowind[k] == row_idx {
+            return Ok(Some(k));
         }
     }
-    if end >= nz {
-        // Deferred upstream bug #674 (DECISIONS #43): reaching
-        // `k = colptr(j + 1) == nz` reads `rowind(nz)` outside
-        // `rowind(0:nz-1)` (`mtx_formats.dek:273`).
-        return Err(MtxError::InvalidParameter(
-            "find_loc_in_column_0_based reads rowind(nz) out of bounds \
-             upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)",
-        ));
-    }
-    if rowind[end] == row_idx {
-        return Ok(Some(end));
-    }
     Ok(None)
+}
+
+/// Error for the `rowind(k)` read with `k >= nz` in
+/// `find_loc_in_column_0_based` (`mtx_formats.dek:266,274`; deferred `#674`).
+fn rowind_oob_error() -> MtxError {
+    MtxError::InvalidParameter(
+        "find_loc_in_column_0_based reads rowind(k >= nz) out of bounds \
+         upstream (mtx/public/mtx_formats.dek:266,274; deferred bug #674)",
+    )
 }
 
 /// Finds the position of entry `(row_idx, col_idx)` in a sparse matrix (`ia`,

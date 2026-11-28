@@ -391,10 +391,38 @@ fn test_format_conversions_match_upstream_golden_output() {
             .unwrap(),
         None
     );
-    // `end > nz`: still rejected with `InvalidParameter`.
+    // `end > nz` (colptr(2) = 4 > nz = 3): upstream's
+    // `do k = colptr(j) - 1, colptr(j + 1)` (`mtx_formats.dek:273`) reads
+    // `rowind(k)` for k = 0, 1, 2, ... and matches `rowind(1) == 1` at k = 1
+    // before any out-of-bounds read, so the lookup succeeds (previously
+    // rejected up front with `InvalidParameter`, #674).
     let oob_end_ptr = [0_usize, 1, 4, 4];
+    assert_eq!(
+        find_loc_in_sparse(fmt_csc0, 3, 3, &oob_end_ptr, &diag_ind, 1, 1, None)
+            .unwrap(),
+        Some(1)
+    );
+    // A miss in the same column runs on to `k = 3 = nz`, which reads
+    // `rowind(nz)` out of bounds: explicit error (#674, DECISIONS #43).
     assert!(matches!(
-        find_loc_in_sparse(fmt_csc0, 3, 3, &oob_end_ptr, &diag_ind, 1, 1, None),
+        find_loc_in_sparse(fmt_csc0, 3, 3, &oob_end_ptr, &diag_ind, 5, 1, None),
+        Err(MtxError::InvalidParameter(_))
+    ));
+}
+
+/// Upstream `do_row_sparse_0_based_to_dense` (`mtx_support.f90:428-447`) is
+/// defined for `n = 0` (empty loop, `a = 0`, `ierr = 0`) and reads
+/// `rowptr(n + 1)` out of bounds for `n >= 1` (#674, `DECISIONS #43`).
+#[test]
+fn test_row_sparse_0_based_to_dense_n0_ok_and_n1_errors() {
+    let mut a: Vec<f64> = Vec::new();
+    row_sparse_0_based_to_dense(0, 0, &mut a, 0, &[0], &[], &[]).unwrap();
+    // `a(ndim, 0)` is empty even with ndim > 0.
+    row_sparse_0_based_to_dense(0, 3, &mut a, 0, &[0], &[], &[]).unwrap();
+    // n = 1: rowptr(1 + 1) is outside rowptr(0:1).
+    let mut a1 = vec![7.0];
+    assert!(matches!(
+        row_sparse_0_based_to_dense(1, 1, &mut a1, 1, &[0, 1], &[0], &[2.0]),
         Err(MtxError::InvalidParameter(_))
     ));
 }

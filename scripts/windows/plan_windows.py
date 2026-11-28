@@ -81,6 +81,96 @@ _EXTRA_INLIST_RE = re.compile(
 
 
 @dataclasses.dataclass(frozen=True)
+class NotBuiltWindow:
+    """A planned window whose snapshot fails a Rule 4.3 check.
+
+    Rule 4.3 leaves such a window unbuilt until claude-a rules on it; the
+    manifest records it as ``window not built (<reason>)``.
+    """
+
+    window_id: str
+    case: str
+    stage: int
+    start_model: int
+    snapshot_file: str
+    snapshot_sha256: str
+    reason: str
+
+
+@dataclasses.dataclass(frozen=True)
+class StageStepsOverride:
+    """Planner-local stage list that replaces a ``mesa_stage_steps.json`` row.
+
+    Attributes:
+        stage_steps: End model number of each stage, one per stage.
+        out_txt_sha256: SHA-256 of the stored ``out.txt`` that the row in
+            ``mesa_stage_steps.json`` was extracted from; the override applies
+            only while the row still records this hash.
+        source: Where the stage list comes from.
+        source_lines: Quoted ``out.txt`` lines that justify the override.
+    """
+
+    stage_steps: tuple[int, ...]
+    out_txt_sha256: str
+    source: str
+    source_lines: tuple[str, ...]
+
+
+# twin_studies evolves two stars in one binary run: stages 1 and 2 are the
+# two stars (80 steps each). mesa_stage_steps.json lists a third stage of 80
+# steps because the final aggregate runtime line also matches the stage rule;
+# that row is fixed in #693, so the planner overrides it here.
+STAGE_STEPS_OVERRIDES: dict[str, StageStepsOverride] = {
+    "twin_studies": StageStepsOverride(
+        stage_steps=(80, 80),
+        out_txt_sha256=(
+            "2685d48338f5f3e84997203f3e849cd8d48134323d37cbcf1dbbef05da9eebfc"
+        ),
+        source=(
+            "mesa-histories bundle runs/star/twin_studies/out.txt lines "
+            "170-177: two forced_stop terminations (one per star), each "
+            "followed by its runtime line, then a trailing aggregate runtime "
+            "line that is not a stage"
+        ),
+        source_lines=(
+            "terminated evolution: forced_stop",
+            "runtime (minutes), retries, steps        1.64         0        80",
+            "terminated evolution: forced_stop",
+            "runtime (minutes), retries, steps        1.64         0        80",
+            "runtime (minutes), retries, steps        1.64         0        80",
+        ),
+    ),
+}
+
+
+def case_stage_steps(case: str, row: dict[str, Any]) -> list[int]:
+    """Return the stage end models of one case, applying any override.
+
+    Args:
+        case: Test-suite case name without the ``star/`` prefix.
+        row: The case's row in ``mesa_stage_steps.json``.
+
+    Returns:
+        End model number of each stage; empty when MESA recorded no stages.
+
+    Raises:
+        SystemExit: An override exists but the row's ``out_txt_sha256`` no
+            longer matches the ``out.txt`` the override was written against.
+    """
+    override = STAGE_STEPS_OVERRIDES.get(case)
+    if override is None:
+        return [int(n) for n in row.get("stage_steps", ())]
+    row_sha = str(row.get("out_txt_sha256", ""))
+    if row_sha != override.out_txt_sha256:
+        raise SystemExit(
+            f"{case}: stage-step override was written for out.txt "
+            f"{override.out_txt_sha256}, but mesa_stage_steps.json records "
+            f"{row_sha!r}; review the override"
+        )
+    return list(override.stage_steps)
+
+
+@dataclasses.dataclass(frozen=True)
 class StagePlanInput:
     """Metadata describing one stage of a ``star/<case>``."""
 
@@ -767,7 +857,7 @@ def write_case_specs(
         case = ident.split("/", 1)[1]
         if target_set is not None and case not in target_set:
             continue
-        st_steps = [int(n) for n in row.get("stage_steps", ())]
+        st_steps = case_stage_steps(case, row)
         if not st_steps:
             planned[case] = []
             continue
@@ -799,12 +889,25 @@ def build_windows_from_clocks(
     clock_dir: pathlib.Path,
     snapshot_dir: pathlib.Path,
     cases: list[str] | None = None,
-) -> tuple[list[PlannedWindow], list[tuple[str, str]], dict[str, str]]:
-    """Build Pass-2 windows from overlay clock TSVs and ``.mod`` snapshots."""
+) -> tuple[
+    list[PlannedWindow],
+    list[tuple[str, str]],
+    dict[str, str],
+    list[NotBuiltWindow],
+]:
+    """Build Pass-2 windows from overlay clock TSVs and ``.mod`` snapshots.
+
+    Returns:
+        ``(windows, skipped, meta_hdr, not_built)``: the built windows,
+        ``(case, reason)`` for cases without MESA stage steps, MESA version
+        metadata from the clock headers, and the windows whose snapshot
+        fails a Rule 4.3 check.
+    """
     raw_json = json.loads(stage_steps_path.read_text(encoding="utf-8"))
     ref_cases = raw_json["cases"]
     windows: list[PlannedWindow] = []
     skipped: list[tuple[str, str]] = []
+    not_built: list[NotBuiltWindow] = []
     meta_hdr: dict[str, str] = {}
     target_set = set(cases) if cases is not None else None
 
@@ -814,7 +917,7 @@ def build_windows_from_clocks(
         case = ident.split("/", 1)[1]
         if target_set is not None and case not in target_set:
             continue
-        st_steps = [int(n) for n in row.get("stage_steps", ())]
+        st_steps = case_stage_steps(case, row)
         if not st_steps:
             skipped.append((case, EMPTY_STAGE_REASON))
             continue
@@ -882,12 +985,24 @@ def build_windows_from_clocks(
                         f"!= .mod file_type prev_model {hdr.prev_model}"
                     )
                 r43_ok, r43_issues = check_rule43(hdr, st)
-                if not r43_ok:
-                    raise SystemExit(
-                        f"{snap_name}: Rule 4.3 check failed: "
-                        + "; ".join(r43_issues)
-                    )
                 wid = f"{case}_s{st.stage}_m{cand.start_model}"
+                if not r43_ok:
+                    not_built.append(
+                        NotBuiltWindow(
+                            window_id=wid,
+                            case=case,
+                            stage=st.stage,
+                            start_model=cand.start_model,
+                            snapshot_file=snap_name,
+                            snapshot_sha256=hdr.sha256,
+                            reason=(
+                                "window not built (Rule 4.3: "
+                                + "; ".join(r43_issues)
+                                + ")"
+                            ),
+                        )
+                    )
+                    continue
                 windows.append(
                     PlannedWindow(
                         window_id=wid,
@@ -914,15 +1029,29 @@ def build_windows_from_clocks(
                         rule43_ok=r43_ok,
                     )
                 )
-    return windows, skipped, meta_hdr
+    return windows, skipped, meta_hdr, not_built
 
 
 def render_windows_toml(
     windows: list[PlannedWindow],
     skipped: list[tuple[str, str]],
     meta_hdr: dict[str, str],
+    overrides: dict[str, StageStepsOverride] | None = None,
+    not_built: list[NotBuiltWindow] | None = None,
 ) -> str:
-    """Render deterministic TOML for ``windows_e2e.toml``."""
+    """Render deterministic TOML for ``windows_e2e.toml``.
+
+    Args:
+        windows: Resolved windows, in emission order.
+        skipped: ``(case, reason)`` for each case without windows.
+        meta_hdr: MESA version metadata read from the clock headers.
+        overrides: Stage-step overrides applied while planning, keyed by
+            case; each is recorded with its source lines.
+        not_built: Windows left unbuilt by a failed Rule 4.3 check.
+
+    Returns:
+        The TOML text.
+    """
     lines = [
         "# FlexMESA MESA 26.4.1 windowed integration manifest (#684 W1)",
         f"# mesa_version: {meta_hdr.get('mesa_version', 'r26.4.1')}",
@@ -935,12 +1064,28 @@ def render_windows_toml(
         'schema = "windows_e2e_v1"',
         f"window_count = {len(windows)}",
         f"skipped_case_count = {len(skipped)}",
+        f"not_built_window_count = {len(not_built or [])}",
         f"short_stage_max_models = {SHORT_STAGE_MAX_MODELS}",
         f"target_wall_sec = {int(TARGET_WALL_SEC)}",
         f"min_w = {MIN_WINDOW_STEPS}",
         f"max_w = {MAX_WINDOW_STEPS}",
         "",
     ]
+    for case, ovr in sorted((overrides or {}).items()):
+        steps = ", ".join(str(n) for n in ovr.stage_steps)
+        quoted = ", ".join(json.dumps(ln) for ln in ovr.source_lines)
+        lines.extend(
+            [
+                "[[stage_steps_overrides]]",
+                'suite = "star"',
+                f'case = "{case}"',
+                f"stage_steps = [{steps}]",
+                f'out_txt_sha256 = "{ovr.out_txt_sha256}"',
+                f"source = {json.dumps(ovr.source)}",
+                f"source_lines = [{quoted}]",
+                "",
+            ]
+        )
     for case, reason in skipped:
         lines.extend(
             [
@@ -948,6 +1093,21 @@ def render_windows_toml(
                 'suite = "star"',
                 f'case = "{case}"',
                 f'reason = "{reason}"',
+                "",
+            ]
+        )
+    for nb in not_built or []:
+        lines.extend(
+            [
+                "[[windows_not_built]]",
+                f'id = "{nb.window_id}"',
+                'suite = "star"',
+                f'case = "{nb.case}"',
+                f"stage = {nb.stage}",
+                f"start_model = {nb.start_model}",
+                f'snapshot_file = "{nb.snapshot_file}"',
+                f'snapshot_sha256 = "{nb.snapshot_sha256}"',
+                f"reason = {json.dumps(nb.reason)}",
                 "",
             ]
         )
@@ -1008,6 +1168,15 @@ def check_committed_toml(toml_path: pathlib.Path) -> tuple[int, int]:
             raise SystemExit(f"{toml_path}: bad sha256 on {wid}")
         if not (MIN_WINDOW_STEPS <= int(w["window_w"]) <= MAX_WINDOW_STEPS):
             raise SystemExit(f"{toml_path}: window_w out of bounds on {wid}")
+    for nb in parsed.get("windows_not_built", []):
+        wid = str(nb.get("id", ""))
+        if not wid or wid in seen_ids:
+            raise SystemExit(f"{toml_path}: bad or duplicate window id {wid!r}")
+        seen_ids.add(wid)
+        if len(str(nb.get("snapshot_sha256", ""))) != 64:
+            raise SystemExit(f"{toml_path}: bad sha256 on {wid}")
+        if not str(nb.get("reason", "")).startswith("window not built ("):
+            raise SystemExit(f"{toml_path}: missing not-built reason on {wid}")
     skipped = parsed.get("cases_skipped", [])
     seen_skipped: set[str] = set()
     for entry in skipped:
@@ -1042,7 +1211,7 @@ def estimate_full_star_workload(
         if not ident.startswith("star/"):
             continue
         case = ident.split("/", 1)[1]
-        st_steps = [int(n) for n in row.get("stage_steps", ())]
+        st_steps = case_stage_steps(case, row)
         if not st_steps:
             continue
         n_active += 1
@@ -1118,14 +1287,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.clock_dir is not None and args.snapshot_dir is not None:
-        wins, skipped, hdr = build_windows_from_clocks(
+        wins, skipped, hdr, not_built = build_windows_from_clocks(
             args.stage_steps,
             args.mesa_dir,
             args.clock_dir,
             args.snapshot_dir,
             args.cases,
         )
-        rendered = render_windows_toml(wins, skipped, hdr)
+        used_cases = {w.case for w in wins}
+        applied = {
+            case: ovr
+            for case, ovr in STAGE_STEPS_OVERRIDES.items()
+            if case in used_cases
+        }
+        rendered = render_windows_toml(wins, skipped, hdr, applied, not_built)
         if args.check:
             existing = args.out.read_text(encoding="utf-8")
             if existing != rendered:
@@ -1139,7 +1314,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.write_toml:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(rendered, encoding="utf-8")
-            print(f"Wrote {len(wins)} windows to {args.out}")
+            print(
+                f"Wrote {len(wins)} windows ({len(not_built)} not built, "
+                f"{len(skipped)} cases skipped) to {args.out}"
+            )
         else:
             sys.stdout.write(rendered)
         return 0

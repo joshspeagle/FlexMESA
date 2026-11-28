@@ -10,6 +10,8 @@ import re
 import sys
 from types import ModuleType
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 STEPDUMPS = REPO / "benchmarks" / "fortran_mesa" / "stepdumps"
 PLANNER = REPO / "scripts" / "windows" / "plan_windows.py"
@@ -256,10 +258,11 @@ def test_empty_stage_steps_recorded_with_v9_reason(
         encoding="utf-8",
     )
 
-    wins, skipped, hdr = pw.build_windows_from_clocks(
+    wins, skipped, hdr, not_built = pw.build_windows_from_clocks(
         stage_steps_file, None, clock_dir, snap_dir
     )
     assert len(wins) == 1
+    assert not_built == []
     assert skipped == [
         ("1.4M_ms_op_mono", "window not built (no MESA stage steps)")
     ]
@@ -269,3 +272,95 @@ def test_empty_stage_steps_recorded_with_v9_reason(
     )
     n_wins, n_skip = pw.check_committed_toml(out_toml)
     assert (n_wins, n_skip) == (1, 1)
+
+
+def test_twin_studies_override_replaces_three_stage_row_with_two_stars() -> (
+    None
+):
+    ovr = pw.STAGE_STEPS_OVERRIDES["twin_studies"]
+    row = {
+        "stage_steps": [80, 80, 80],
+        "out_txt_sha256": ovr.out_txt_sha256,
+    }
+    assert pw.case_stage_steps("twin_studies", row) == [80, 80]
+    assert pw.case_stage_steps("other", {"stage_steps": [5, 9]}) == [5, 9]
+    stale = {"stage_steps": [80, 80, 80], "out_txt_sha256": "0" * 64}
+    try:
+        pw.case_stage_steps("twin_studies", stale)
+    except SystemExit as exc:
+        assert "review the override" in str(exc)
+    else:
+        raise AssertionError("expected SystemExit on a stale out.txt hash")
+    text = pw.render_windows_toml([], [], {}, {"twin_studies": ovr})
+    parsed = pw.tomllib.loads(text)
+    (entry,) = parsed["stage_steps_overrides"]
+    assert entry["stage_steps"] == [80, 80]
+    assert entry["source_lines"].count("terminated evolution: forced_stop") == 2
+
+
+def test_rule43_net_mismatch_records_window_not_built_instead_of_aborting(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stage_steps_file = tmp_path / "stage_steps.json"
+    stage_steps_file.write_text(
+        json.dumps({"cases": {"star/netcase": {"stage_steps": [30]}}}),
+        encoding="utf-8",
+    )
+    clock_dir = tmp_path / "clocks"
+    snap_dir = tmp_path / "snaps"
+    clock_dir.mkdir()
+    snap_dir.mkdir()
+    (clock_dir / "netcase.clock.tsv").write_text(
+        "\n".join(
+            ["# case: star/netcase"]
+            + [
+                f"STEP\t1\t1\t{m}\t1.000000000\t100\t100\t2\tT"
+                for m in range(1, 31)
+            ]
+            + ["STAGE_END\t1\t1\t30\tmax_model_number\tnormal"]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (snap_dir / "netcase_1_1.mod").write_text(
+        "\n".join(
+            [
+                "            4 -- model for mesa/star",
+                "",
+                "   version_number   'r26.4.1'",
+                "           M/Msun     1.0000000000000000D+00",
+                "     model_number                          1",
+                "         star_age     0.0000000000000000D+00",
+                "        initial_z     2.0000000000000000D-02",
+                "         n_shells                        100",
+                "         net_name   'approx21.net'",
+                "          species                         21",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    original = pw.plan_case_stages
+
+    def _expect_co_burn(
+        case: str, steps: list[int], mesa_dir: pathlib.Path | None
+    ) -> list[object]:
+        return [
+            pw.dataclasses.replace(st, expected_net_name="co_burn.net")
+            for st in original(case, steps, mesa_dir)
+        ]
+
+    monkeypatch.setattr(pw, "plan_case_stages", _expect_co_burn)
+    wins, skipped, hdr, not_built = pw.build_windows_from_clocks(
+        stage_steps_file, None, clock_dir, snap_dir
+    )
+    assert wins == [] and skipped == []
+    (nb,) = not_built
+    assert nb.window_id == "netcase_s1_m1"
+    assert nb.reason == (
+        "window not built (Rule 4.3: net_name 'approx21.net' != 'co_burn.net')"
+    )
+    text = pw.render_windows_toml(wins, skipped, hdr, None, not_built)
+    parsed = pw.tomllib.loads(text)
+    assert parsed["metadata"]["not_built_window_count"] == 1
+    assert parsed["windows_not_built"][0]["snapshot_file"] == "netcase_1_1.mod"

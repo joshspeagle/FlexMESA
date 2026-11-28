@@ -623,7 +623,6 @@ reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_i
 recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
 precision = "exact"
 routines = [
-  "eos/private/eosdt_eval.f90::get1_for_eosdt",
   "eos/private/eospt_eval.f90::get_Pgas",
 ]
 

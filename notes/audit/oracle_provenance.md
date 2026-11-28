@@ -6,11 +6,11 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 
 | Measure | Value |
 | :--- | ---: |
-| Claims (test, reference, routine) | 102 |
-| Claims verified | 88 |
+| Claims (test, reference, routine) | 101 |
+| Claims verified | 87 |
 | Routines claimed | 64 |
-| Routines verified exact (0 ULP) | 43 |
-| Routines verified at print precision only | 17 |
+| Routines verified exact (0 ULP) | 42 |
+| Routines verified at print precision only | 18 |
 | Routines not counted | 4 |
 | Not counted only because of `scope` or `precision` | 3 |
 
@@ -30,7 +30,6 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/private/eos_blend.f90::is_contained` | exact |
 | `eos/private/eos_blend.f90::min_distance_to_polygon` | exact |
 | `eos/private/eosdt_eval.f90::Get_eosDT_Results` | exact |
-| `eos/private/eosdt_eval.f90::get1_for_eosdt` | exact |
 | `eos/private/eosdt_eval.f90::get_Rho` | exact |
 | `eos/private/eosdt_eval.f90::get_T` | exact |
 | `eos/private/eospc_eval.f90::Get_PC_alfa` | exact |
@@ -75,6 +74,7 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/private/eos_helm_eval.f90::get_helm_for_eosdt` | print |
 | `eos/private/eoscms_eval.f90::get_CMS_for_eosdt` | print |
 | `eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results` | print |
+| `eos/private/eosdt_eval.f90::get1_for_eosdt` | print |
 | `eos/private/eospc_eval.f90::get_PC_for_eosdt` | print |
 | `eos/private/eospt_eval.f90::get_T` | print |
 | `eos/private/gauss_fermi.f90::dfermi` | print |

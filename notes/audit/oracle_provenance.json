@@ -1,6 +1,6 @@
 {
- "claims": 102,
- "claims_verified": 88,
+ "claims": 101,
+ "claims_verified": 87,
  "not_counted_only_on_scope_or_precision": [
   "neu/private/mod_neu.f90::ifermi12",
   "neu/private/mod_neu.f90::zfermim12",
@@ -11,7 +11,6 @@
   "eos/private/eos_blend.f90::is_contained",
   "eos/private/eos_blend.f90::min_distance_to_polygon",
   "eos/private/eosdt_eval.f90::Get_eosDT_Results",
-  "eos/private/eosdt_eval.f90::get1_for_eosdt",
   "eos/private/eosdt_eval.f90::get_Rho",
   "eos/private/eosdt_eval.f90::get_T",
   "eos/private/eospc_eval.f90::Get_PC_alfa",
@@ -112,6 +111,7 @@
   "eos/private/eos_helm_eval.f90::get_helm_for_eosdt",
   "eos/private/eoscms_eval.f90::get_CMS_for_eosdt",
   "eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results",
+  "eos/private/eosdt_eval.f90::get1_for_eosdt",
   "eos/private/eospc_eval.f90::get_PC_for_eosdt",
   "eos/private/eospt_eval.f90::get_T",
   "eos/private/gauss_fermi.f90::dfermi",

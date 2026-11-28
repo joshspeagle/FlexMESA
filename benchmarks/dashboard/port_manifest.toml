@@ -7728,10 +7728,14 @@ upstream_lines = 335
 upstream_sha256 = "95520f5f1b4a0d740f56a60a890e82fef0ed4efc1460605454fda9e46ba3d218"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/mixing_state.rs"]
+routine_map_partial = ["do_brunt_B_MHM_form", "get_brunt_B"]
 notes = "Ported under #155: verbatim do_brunt_B (Brassard/MHM, unsmoothed_brunt_B retention, weighted/threshold smoothing) and do_brunt_N2 with rotational f_T/f_P and brunt_N2_composition_term."
 [files.routine_map]
 "do_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b"
+"do_brunt_B::smooth_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b"
+"do_brunt_B_MHM_form" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b" # partial: inlined over 1..nz rather than nzlo..nzhi; adds non-upstream use_brunt_gradmux_form/species==0 branch and xa_00==xa_m1 short-circuit, zeroes brunt_n2_composition_term
 "do_brunt_N2" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_n2"
+"get_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b" # partial: inlined in do_brunt_b; adds use_brunt_gradmux_form, xa_00==xa_m1->0 short-circuit, and !(rho_f>0 && t_f>0) guard; calls eos_dt_get directly rather than eos_support::get_eos and omits report_ierr/stop_for_bad_nums prints
 
 [[files]]
 upstream_path = "star/private/conv_premix.f90"
@@ -8051,12 +8055,13 @@ upstream_lines = 783
 upstream_sha256 = "152bbcf21a18ced4e34e000ae76e19144e63bede8719dffc953538ddb8142515"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs"]
-routine_map_partial = ["add_history_columns", "do1", "do1_history_spec", "set_history_columns"]
+routine_map_partial = ["add_history_columns", "do1", "do1_history_spec", "do1_history_spec::do1_color", "set_history_columns"]
 notes = "updated for #163: recursive history_columns.list parser (partial; #161)"
 [files.routine_map]
 "add_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns+parse_history_columns_inner"
 "do1" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
 "do1_history_spec" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
+"do1_history_spec::do1_color" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner" # partial: rejects 2-token legacy color directives with InvalidInput (matching upstream get_bc_id_by_name == -1 error) without upstream token/name_token parser and stdout message
 "do1_nuclide" = "crates/flexmesa-star/src/mesa_history.rs::parse_iso_prefix_query+insert_nuclide_spec"
 "do1_rates_category" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
 "do_abundances" = "crates/flexmesa-star/src/mesa_history.rs::insert_all_active_abundances"
@@ -8308,15 +8313,18 @@ upstream_lines = 1163
 upstream_sha256 = "8ff7fb41bb28819f649e6842fb97d98678876de7298fa3a24cd57463f70b9bb9"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/struct_burn_mix.rs"]
-routine_map_partial = ["get_surf_PT", "set_Teff_info_for_eqns", "set_final_vars", "set_grads", "set_hydro_vars", "set_vars", "set_vars_if_needed", "unpack_xh", "update_vars"]
+routine_map_partial = ["get_surf_PT", "set_Teff", "set_Teff_info_for_eqns", "set_basic_vars", "set_final_vars", "set_grads", "set_hydro_vars", "set_some_vars", "set_vars", "set_vars_if_needed", "unpack_xh", "update_vars"]
 notes = "seeded from coverage-map.md (partial): deep. `set_hydro_vars` order of micro/MLT/brunt/surf present; `set_vars_if_needed`/`update_vars` skip logic, `set_Teff` variants, `set_cgrav`/`other_cgrav` flow simplified"
 [files.routine_map]
 "compute_smoothed_brunt_B" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
 "get_surf_PT" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_surf_pt"
+"set_basic_vars" = "crates/flexmesa-star/src/micro.rs::set_basic_vars" # partial: sets m/dm/grav, rho/T, xa clamp+renorm, and composition moments; omits L_phot, d_vc_dv, lazy *_start latching, set_rv_info, RSP_w, set_rmid, and adds non-finite primary-state check (#634, #631)
 "set_cgrav" = "crates/flexmesa-star/src/hydro_vars.rs::set_cgrav"
 "set_final_vars" = "crates/flexmesa-star/src/struct_burn_mix.rs::do_struct_burn_mix"
 "set_grads" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
 "set_hydro_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars+set_hydro_vars_with_skips"
+"set_some_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars_with_skips" # partial: coarse SetHydroVarsSkips + skip_net/skip_net_jacobian rather than upstream's 10 individual skip flags (#634)
+"set_Teff" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc" # partial: evaluates photosphere Teff, get_surf_pt with do_starspots tweak/restore, and diagnostic AD; omits use_other_surface_PT hook and second set_phot_info call (#634)
 "set_Teff_info_for_eqns" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc"
 "set_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_vars"
 "set_vars_if_needed" = "crates/flexmesa-star/src/evolve_support.rs::set_vars_for_new_step+set_vars_for_new_try"
@@ -8464,10 +8472,15 @@ upstream_lines = 327
 upstream_sha256 = "1706bf4c9f83697c27636e236de2b5d03467657c6dc2d6866617e9d3549e3256"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_functions.rs"]
+routine_map_partial = ["do_mass_function", "get_net_iso", "set_mesh_function_data::do1_xa_function", "set_mesh_function_data::do_conv_bdy"]
 notes = "updated for #153: all 21 MESA 26.4.1 mesh function families (default he4 weight 30, log_tau, log_kap, conv_bdy #241 loud guard)"
 [files.routine_map]
+"do_mass_function" = "crates/flexmesa-star/src/mesh_functions.rs::do_mass_function" # partial: omits unused intent(out) j parameter and delegates to get_net_iso_0based
+"get_net_iso" = "crates/flexmesa-star/src/mesh_functions.rs::get_net_iso_0based" # partial: returns 0-based Option<usize>, trims both leading and trailing whitespace, omits unknown-species stdout warning, and falls back to linear chem_id scan
 "num_mesh_functions" = "crates/flexmesa-star/src/mesh_functions.rs::num_mesh_functions"
 "set_mesh_function_data" = "crates/flexmesa-star/src/mesh_functions.rs::set_mesh_function_data"
+"set_mesh_function_data::do1_xa_function" = "crates/flexmesa-star/src/mesh_functions.rs::set_mesh_function_data_with_controls_and_xa" # partial: inlined in set_mesh_function_data_with_controls_and_xa; trims both ends of xa_function_species and delegates to get_net_iso_0based
+"set_mesh_function_data::do_conv_bdy" = "crates/flexmesa-star/src/mesh_functions.rs::eval_conv_bdy_column" # partial: recomputes boundaries via locate_fortran_conv_boundaries instead of reading s% conv_bdy_loc/top_conv_bdy, and errors on i > max(10, num_conv) for upstream #241 OOB read
 
 [[files]]
 upstream_path = "star/private/mesh_plan.f90"

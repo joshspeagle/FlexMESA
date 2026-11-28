@@ -7149,6 +7149,9 @@ upstream_sha256 = "87f978405f2bb8ae51acf6e85fc6febf14f9904af971be49f5f43a90a0d7c
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"screen5_init_AZ_info" = "crates/flexmesa-rates/src/screen.rs::screen_extended"
+"fxt_screen5" = "crates/flexmesa-rates/src/screen.rs::screen_extended"
 
 [[files]]
 upstream_path = "rates/private/screen_chugunov.f90"

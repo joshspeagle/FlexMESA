@@ -57,8 +57,8 @@ pub struct DgbsvxSolution {
 /// - [`MtxError::SingularMatrix`] when `DGBTRF` reports `INFO = j > 0`
 ///   (an exactly zero pivot). Upstream then returns `RCOND = 0` with `X`
 ///   never computed (`dgbsvx.f:546-567`), which the wrapper reads unset
-///   (`DGBSVX_wrapper.f90:223-231`); this explicit error stands in for that
-///   read.
+///   (`DGBSVX_wrapper.f90:287`); this explicit error stands in for that
+///   read (Deferred bug #752, DECISIONS #43).
 /// - [`MtxError::NonFiniteInput`] and the other errors of
 ///   [`dgbtrf`] / [`dgbtrs`] (their NaN/Inf and pivot checks are not
 ///   upstream's).

@@ -76,7 +76,7 @@ pub struct PreconditionedSolve {
     pub col_scale: Vec<f64>,
     /// `ierr` of `DGBSVX_tridiagonal_wrapper`: `0`, or `N + 1` when `DGBSVX`
     /// reports `INFO /= 0` or `rcond < 1d-10`
-    /// (`DGBSVX_wrapper.f90:229-243`). Always `0` for the other solvers.
+    /// (`DGBSVX_wrapper.f90:252-276`). Always `0` for the other solvers.
     pub ierr: usize,
 }
 
@@ -366,7 +366,7 @@ pub fn dgbsvx_banded_from_bands(
         // DGBSVX_wrapper.f90:84-89 reads pre_conditioner(i+j) out of bounds
         // (Deferred bug #695, DECISIONS #43).
         return Err(MtxError::InvalidParameter(
-            "dgbsvx_banded_from_bands: upstream DGBSVX_wrapper.f90:86 reads \
+            "dgbsvx_banded_from_bands: upstream DGBSVX_wrapper.f90:86-87 reads \
              past matrix_size for kl >= 2 (Deferred bug #695)",
         ));
     }
@@ -519,12 +519,12 @@ pub fn dgbsvx_banded(
 /// `mtx/private/DGBSVX_wrapper.f90:140-292` (`DGBSVX_tridiagonal_wrapper`).
 ///
 /// The banded matrix is built as `AB(LDAB,*)` with `LDAB = KL+KU+1`
-/// (`DGBSVX_wrapper.f90:211-239`) and solved by
+/// (`DGBSVX_wrapper.f90:181, 205-244`) and solved by
 /// [`crate::band_lapack::dgbsvx_fact_n`], which follows
 /// `SRC/dgbsvx.f` (`DGBTRF`, `DGBCON`, `DGBTRS`, `DGBRFS`).
 /// [`PreconditionedSolve::ierr`] is the wrapper's `ierr`: `N + 1` when
 /// `DGBSVX` returns `INFO /= 0` (its `INFO = N + 1` for `rcond < eps`) or when
-/// `rcond < 1d-10` (`DGBSVX_wrapper.f90:263`), else `0`; `x` is computed in
+/// `rcond < 1d-10` (`DGBSVX_wrapper.f90:252-276`), else `0`; `x` is computed in
 /// every such case, as upstream does. Upstream's side effects on that path
 /// (messages and the `lower.data`, `upper.data`, `diagonal.data` dumps,
 /// `:264-288`) are not reproduced.
@@ -541,7 +541,8 @@ pub fn dgbsvx_banded(
 /// Returns [`MtxError::DimensionMismatch`] on shape mismatches,
 /// [`MtxError::NonFiniteInput`] on non-finite entries reaching a checked
 /// routine, or [`MtxError::SingularMatrix`] when `DGBTRF` finds an exactly
-/// zero pivot (upstream then leaves `x_flat` unset, `DGBSVX_wrapper.f90:291`).
+/// zero pivot (upstream then reads `x_flat` unset, `DGBSVX_wrapper.f90:287`;
+/// Deferred bug #752, DECISIONS #43).
 pub fn dgbsvx_block_tridiagonal(
     nvar: usize,
     nz: usize,
@@ -558,7 +559,7 @@ pub fn dgbsvx_block_tridiagonal(
         ));
     }
 
-    // DGBSVX_wrapper.f90:195-196
+    // DGBSVX_wrapper.f90:184-187
     let mut row_pc = vec![0.0_f64; n];
     compute_block_preconditioner(nvar, nz, lblk, dblk, ublk, &mut row_pc)?;
     let mut col_pc = vec![0.0_f64; n];
@@ -572,13 +573,13 @@ pub fn dgbsvx_block_tridiagonal(
         &mut col_pc,
     )?;
 
-    // KL = KU = 2*nvar, LDAB = KL+KU+1 (DGBSVX_wrapper.f90:171-181).
+    // KL = KU = 2*nvar, LDAB = KL+KU+1 (DGBSVX_wrapper.f90:170-181).
     let kl = 2 * nvar;
     let ku = 2 * nvar;
     let ldab = kl + ku + 1;
     // 0-based (row, col) of AB(KU+1+d, col+1) is ku + d.
     let mut ab = vec![0.0_f64; ldab * n];
-    // DGBSVX_wrapper.f90:211-221 (dblk), :223-239 (lblk and ublk).
+    // DGBSVX_wrapper.f90:205-220 (dblk), :222-244 (lblk and ublk).
     for i in 0..nz {
         let blk_off = i * blk_sz;
         let eq_off = i * nvar;
@@ -610,22 +611,22 @@ pub fn dgbsvx_block_tridiagonal(
         }
     }
 
-    // DGBSVX_wrapper.f90:171-175: b_flat(i) = b(i) / pre_conditioner(i).
+    // DGBSVX_wrapper.f90:196-203: b_flat(i) = b(i) / pre_conditioner(i).
     let b_flat: Vec<f64> = b
         .iter()
         .zip(row_pc.iter())
         .map(|(&bi, &ri)| bi / ri)
         .collect();
 
-    // DGBSVX_wrapper.f90:241-243
+    // DGBSVX_wrapper.f90:246-249
     let sol = dgbsvx_fact_n(b'N', n, kl, ku, &ab, ldab, &b_flat)?;
-    // DGBSVX_wrapper.f90:263 and :287
+    // DGBSVX_wrapper.f90:252 and :276
     let ierr = if sol.info != 0 || sol.rcond < 1.0e-10 {
         n + 1
     } else {
         0
     };
-    // DGBSVX_wrapper.f90:290-296: x = x_flat / left_pre_conditioner.
+    // DGBSVX_wrapper.f90:283-290: x = x_flat / left_pre_conditioner.
     let x: Vec<f64> = sol
         .x
         .iter()

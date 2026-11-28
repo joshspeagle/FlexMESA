@@ -985,7 +985,7 @@ fn block_wrapper_returns_ierr_zero_and_the_solution_for_a_good_system() {
 #[test]
 fn block_wrapper_sets_ierr_n_plus_1_when_rcond_is_below_1e_minus_10() {
     // A = [[1,1],[1,1+1e-12]] (nvar = 1, nz = 2): nonsingular but
-    // rcond is about 1e-13 < 1d-10 (DGBSVX_wrapper.f90:263): ierr = N + 1 = 3
+    // rcond is about 1e-13 < 1d-10 (DGBSVX_wrapper.f90:252-276): ierr = N + 1 = 3
     // and x is still returned.
     let l = vec![0.0, 1.0];
     let d = vec![1.0, 1.0 + 1.0e-12];
@@ -1000,7 +1000,7 @@ fn block_wrapper_sets_ierr_n_plus_1_when_rcond_is_below_1e_minus_10() {
 #[test]
 fn block_wrapper_exactly_singular_system_is_an_error_not_an_unset_x() {
     // A = [[1,1],[1,1]]: DGBTRF finds a zero pivot; upstream leaves x_flat
-    // unset (DGBSVX_wrapper.f90:291), here an explicit error.
+    // unset (DGBSVX_wrapper.f90:287), here an explicit error.
     let l = vec![0.0, 1.0];
     let d = vec![1.0, 1.0];
     let u = vec![1.0, 0.0];

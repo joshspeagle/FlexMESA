@@ -308,7 +308,7 @@ fn rcond_banded_and_dense_hager_parity_and_validation() {
 fn preconditioners_and_dgbsvx_wrappers_match_upstream() {
     // 4x4 left-aligned banded system with kl = 2: the preconditioner is
     // computed, and dgbsvx_banded_from_bands returns the #695 error because
-    // upstream DGBSVX_wrapper.f90:86 reads out of bounds for kl >= 2.
+    // upstream DGBSVX_wrapper.f90:86-87 reads out of bounds for kl >= 2.
     const N: usize = 4;
     const KL: usize = 2;
     const KU: usize = 1;

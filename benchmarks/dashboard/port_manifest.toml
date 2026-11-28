@@ -8300,8 +8300,12 @@ upstream_lines = 468
 upstream_sha256 = "dfb40f3a8a1df21ce569215343c79e70bcb00438bd94736e26de7de8bd5bda65"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/zams.rs"]
+routine_map_partial = ["get1_mass", "get1_zams_model", "get1_zams_model::read_zams_header"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `get_zams_model` log-mass interpolation present; bypassed for many runs by C1-1"
 [files.routine_map]
+"get1_mass" = "crates/flexmesa-star/src/zams.rs::load_zams_model_from_catalog"
+"get1_zams_model" = "crates/flexmesa-star/src/zams.rs::ZamsCatalog::parse_ascii+load_zams_model_from_catalog"
+"get1_zams_model::read_zams_header" = "crates/flexmesa-star/src/zams.rs::ZamsCatalog::parse_ascii"
 "get_zams_model" = "crates/flexmesa-star/src/zams.rs::load_zams_model"
 
 [[files]]
@@ -8908,11 +8912,18 @@ upstream_lines = 400
 upstream_sha256 = "ff4bde78184c84ee56e995f93b90f1ce97b1576332a0a9175abbfbb384d295f1"
 status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/phase_separation.rs"]
+routine_map_partial = ["update_model_"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
 notes = "updated for #156: blouin_delta_xo/xne tested at rtol=1e-14 (atol=1e-16) on 5 X_in points; 8-zone WD do_phase_separation_step (blouin_co, blouin_one, blouin_co_brunt via set_mlt_vars_range) tested against MESA 26.4.1 hex oracles: crystal/mixing masses and lnd/lnPgas/X_* rtol=1e-12, eps_phase_sep rtol=1e-8, grada_face rtol=1e-7, phase_init rtol=1e-5, gradr rtol=1e-11 after factoring out hydro_vars::do1_mlt_2 Prad_face discrepancy (#291); #271 OOB guards (Medin-Cumming 3-component tables absent from 26.4.1)"
 [files.routine_map]
+"blouin_delta_xne" = "crates/flexmesa-star/src/phase_separation.rs::blouin_delta_xne"
+"blouin_delta_xo" = "crates/flexmesa-star/src/phase_separation.rs::blouin_delta_xo"
+"do_2component_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_2component_phase_separation"
 "do_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_phase_separation_step"
+"mix_outward" = "crates/flexmesa-star/src/phase_separation.rs::mix_outward"
+"move_one_zone" = "crates/flexmesa-star/src/phase_separation.rs::move_one_zone"
+"update_model_" = "crates/flexmesa-star/src/phase_separation.rs::update_model_range"
 
 [[files]]
 upstream_path = "star/private/photo_in.f90"
@@ -8945,9 +8956,14 @@ upstream_lines = 738
 upstream_sha256 = "3c307e67d7a63f86fb0b3011588f0136b82133f23363b3d09ab89bb511a9c930"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/pre_ms.rs"]
+routine_map_partial = ["pre_ms_f"]
 notes = "seeded from coverage-map.md (ported): deep-ish. Integration scheme and tolerances match; defaults and composition differ (C1-14, Matches)"
 [files.routine_map]
+"build1_pre_ms_model" = "crates/flexmesa-star/src/pre_ms.rs::build1_pre_ms_model"
+"build1_pre_ms_model::unpack_eos_results" = "crates/flexmesa-star/src/pre_ms.rs::EosUnpacked::from_eos"
 "build_pre_ms_model" = "crates/flexmesa-star/src/pre_ms.rs::build_pre_ms_model"
+"eval_gradT" = "crates/flexmesa-star/src/pre_ms.rs::eval_grad_t"
+"pre_ms_f" = "crates/flexmesa-star/src/pre_ms.rs::build_pre_ms_model_with_configs"
 
 [[files]]
 upstream_path = "star/private/predictive_mix.f90"
@@ -9404,12 +9420,18 @@ upstream_lines = 1547
 upstream_sha256 = "f0e4afc3f21cda8eef650aa9a33cf2c1e535bd8bf297929f3c486561f164ecc1"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs"]
+routine_map_partial = ["check1_chem", "set_vars_for_solver", "set_vars_for_solver::set1"]
 notes = "updated for #152: set_xscale_info, sizequ (#177), sizeB (#251), Bdomain, set_vars_for_solver (edit_lnR, min_xa_hard_limit, sum_xa_hard_limit, #252), and check_after_converge"
 [files.routine_map]
 "Bdomain" = "crates/flexmesa-star/src/solver_support.rs::apply_bdomain"
+"Bdomain::clip_so_non_negative" = "crates/flexmesa-star/src/solver_support.rs::clip_so_non_negative"
+"check1_chem" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"edit_lnR" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
 "eval_equations" = "crates/flexmesa-star/src/hydro_eqns.rs::eval_henyey_equations_into"
 "force_another_iteration" = "crates/flexmesa-star/src/solver_support.rs::force_another_iteration"
 "inspectB" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"set_vars_for_solver" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"set_vars_for_solver::set1" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
 "set_xscale_info" = "crates/flexmesa-star/src/hydro_eqns.rs::compute_x_scale_into"
 "sizeB" = "crates/flexmesa-star/src/solver_norms.rs::compute_model_correction_norms_in_solver"
 "sizequ" = "crates/flexmesa-star/src/solver_norms.rs::compute_residual_norms_with_argmax"

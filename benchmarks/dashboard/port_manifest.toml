@@ -8318,7 +8318,7 @@ notes = "seeded from coverage-map.md (partial): deep. `set_hydro_vars` order of 
 [files.routine_map]
 "compute_smoothed_brunt_B" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
 "get_surf_PT" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_surf_pt"
-"set_basic_vars" = "crates/flexmesa-star/src/micro.rs::set_basic_vars" # partial: sets m/dm/grav, rho/T, xa clamp+renorm, and composition moments; omits L_phot, d_vc_dv, lazy *_start latching, set_rv_info, RSP_w, set_rmid, and adds non-finite primary-state check (#634, #631)
+"set_basic_vars" = "crates/flexmesa-star/src/micro.rs::set_basic_vars" # partial: sets m/dm/grav, rho/T, xa clamp+renorm, and composition moments; omits L_phot, d_vc_dv, lazy *_start latching, set_rv_info, RSP_w, set_rmid, and adds non-finite primary-state check at micro.rs:709-716 that upstream lacks (#688)
 "set_cgrav" = "crates/flexmesa-star/src/hydro_vars.rs::set_cgrav"
 "set_final_vars" = "crates/flexmesa-star/src/struct_burn_mix.rs::do_struct_burn_mix"
 "set_grads" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"

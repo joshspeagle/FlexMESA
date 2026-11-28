@@ -296,7 +296,13 @@ pub fn set_t_for_new_energy(
 
 /// Solves Eddington grey $T(\tau)$ with iterated uniform opacity for surface
 /// $(T, P, \kappa, T_{\mathrm{eff}})$ (`get_surf_P_T_kap` in
-/// `rsp_eval_eos_and_kap.f90:801-828` and `atm_support.f90:1149-1220`).
+/// `rsp_eval_eos_and_kap.f90:801-828` and `atm_support.f90:111-147,1239-1287`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `use_other_kap` is set without an
+/// `other_kap` hook (`rsp_eval_eos_and_kap.f90:818`, `atm_support.f90:138,1263`,
+/// `kap_support.f90:481-487`), or [`StarError::MicrophysicsError`] if the
+/// boundary atmosphere solver fails.
 pub fn get_surf_p_t_kap(
     model: &StarModel,
     chem: &RspChemCache,
@@ -346,10 +352,23 @@ pub fn get_surf_p_t_kap(
                 dres_dln_t: inv.eos.d_dln_t,
             })
         };
+    let other_kap_rejected = std::cell::Cell::new(false);
     let kap_cb = |ln_rho: f64,
                   ln_t: f64,
                   eos_res: &AtmEosCallbackResult|
      -> Result<AtmKapCallbackResult, AtmError> {
+        if model.controls.use_other_kap {
+            other_kap_rejected.set(true);
+            return Err(AtmError::CallbackError {
+                context: "get_surf_p_t_kap::kap",
+                detail: String::from(concat!(
+                    "use_other_kap = .true. requires an other_kap hook ",
+                    "(star/private/rsp_eval_eos_and_kap.f90:818, ",
+                    "star/private/atm_support.f90:138,1263, ",
+                    "star/private/kap_support.f90:481-487)",
+                )),
+            });
+        }
         let log_rho = ln_rho / LN10;
         let log_t = ln_t / LN10;
         let ko = get_kap_results(
@@ -398,7 +417,16 @@ pub fn get_surf_p_t_kap(
         teff,
     )
     .map_err(|e| {
-        StarError::MicrophysicsError(format!("get_surf_p_t_kap: {e}"))
+        if other_kap_rejected.get() {
+            StarError::InvalidInput(String::from(concat!(
+                "use_other_kap = .true. requires an other_kap hook ",
+                "(star/private/rsp_eval_eos_and_kap.f90:818, ",
+                "star/private/atm_support.f90:138,1263, ",
+                "star/private/kap_support.f90:481-487)",
+            )))
+        } else {
+            StarError::MicrophysicsError(format!("get_surf_p_t_kap: {e}"))
+        }
     })?;
     Ok((
         flexmesa_math::exp(atm.ln_t),
@@ -406,4 +434,53 @@ pub fn get_surf_p_t_kap(
         atm.kap,
         teff,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_surf_p_t_kap;
+    use crate::controls::{StarControls, StarError, StarJobControls};
+    use crate::rsp_eos_kap::RspChemCache;
+    use crate::zams::load_zams_model;
+
+    #[test]
+    fn test_get_surf_p_t_kap_errors_loudly_on_use_other_kap() {
+        let mut model = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                initial_z: 0.02,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        let chem = RspChemCache::from_model_zone0(&model).expect("chem cache");
+        let r0 = flexmesa_math::exp(model.ln_r[0]);
+
+        let ok_res = get_surf_p_t_kap(
+            &model,
+            &chem,
+            model.mstar,
+            r0,
+            model.lum[0],
+            2.0 / 3.0,
+            1.0e-2,
+        );
+        assert!(ok_res.is_ok(), "baseline get_surf_p_t_kap: {ok_res:?}");
+
+        model.controls.use_other_kap = true;
+        let err = get_surf_p_t_kap(
+            &model,
+            &chem,
+            model.mstar,
+            r0,
+            model.lum[0],
+            2.0 / 3.0,
+            1.0e-2,
+        )
+        .expect_err("use_other_kap must fail loudly in get_surf_p_t_kap");
+        assert!(matches!(err, StarError::InvalidInput(_)), "got {err}");
+        assert!(err.to_string().contains("use_other_kap"), "{err}");
+    }
 }

@@ -176,3 +176,8 @@ Standalone Fortran 2008 reference generators compiled against upstream MESA
   `#526`): `eps_nuc` and its derivatives, every `dxdt` with its partials, and the
   full composition Jacobian (`823` rows;
   `make -C benchmarks/fortran_mesa/net_oracles_516 MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `newuoa/`: Powell's `NEWUOA` (`num/private/mod_newuoa.f`): full `CALFUN`
+  sequences and returned `X` of six runs through MESA's `libnum` (Chebyquad
+  from `num/test/src/test_newuoa.f90` and astero `fast_newuoa`-shaped
+  quadratics), direct-call `BIGDEN` cases, and per-run `gcov` counts
+  (`make -C benchmarks/fortran_mesa/newuoa MESA_DIR=/path/to/mesa BUILD=/scratch/dir runs coverage`).

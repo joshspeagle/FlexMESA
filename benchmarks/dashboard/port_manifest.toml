@@ -6217,8 +6217,15 @@ module = "num"
 upstream_lines = 1583
 upstream_sha256 = "a3058f944be98d7f4595b79f8b2b5ec9e008cc5b9271b615f364bebf655a0226"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/newuoa.rs"]
+notes = "line-by-line transcription (package G2); CALFUN sequences of six MESA runs and BIGDEN unit cases match bit for bit (crates/flexmesa-num/tests/newuoa_oracle_test.rs, benchmarks/fortran_mesa/newuoa/)"
+[files.routine_map]
+"BIGDEN" = "crates/flexmesa-num/src/newuoa.rs::bigden"
+"BIGLAG" = "crates/flexmesa-num/src/newuoa.rs::biglag"
+"NEWUOB" = "crates/flexmesa-num/src/newuoa.rs::newuob"
+"TRSAPP" = "crates/flexmesa-num/src/newuoa.rs::trsapp"
+"UPDATE" = "crates/flexmesa-num/src/newuoa.rs::update"
+"do_newuoa" = "crates/flexmesa-num/src/newuoa.rs::newuoa_with_workspace"
 
 [[files]]
 upstream_path = "num/private/mod_qsort.f90"
@@ -6512,8 +6519,10 @@ module = "num"
 upstream_lines = 64
 upstream_sha256 = "6a6eea132002e97549e672457f84f82b42b12efdec97b68a634fcc125d84e32d"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-num/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7: partial / uncompared"
+flexmesa_files = ["crates/flexmesa-num/src/newuoa.rs"]
+notes = "newuoa wrapper (package G2): newuoa allocates the documented W length, newuoa_with_workspace takes the caller's W"
+[files.routine_map]
+"newuoa" = "crates/flexmesa-num/src/newuoa.rs::newuoa+newuoa_with_workspace"
 
 [[files]]
 upstream_path = "num/public/num_newuoa_proc.dek"

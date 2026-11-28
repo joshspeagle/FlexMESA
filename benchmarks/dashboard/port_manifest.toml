@@ -5555,7 +5555,13 @@ upstream_lines = 311
 upstream_sha256 = "f0196024c55e5c86683c5f8e0226c74e8aefcf1c70e2d4720b8df98624fe05cc"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["locate_log", "locate_logT", "locate_logR"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: clamps the equally-spaced int() index to num_logs - 2 (upstream then reads logs(i+1) past the end), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error
+"locate_logT" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
+"locate_logR" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
+"do_kap_interpolations" = "crates/flexmesa-kap/src/spline.rs::do_kap_interpolations"
 
 [[files]]
 upstream_path = "kap/private/kapcn.f90"

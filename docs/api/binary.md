@@ -69,3 +69,35 @@ print(
 ## Differentiable $\dot{J}$ & Hut Tidal Kernels (`flexmesa.binary.jax_jdot_tides`)
 
 ::: flexmesa.binary.jax_jdot_tides
+
+---
+
+## Compiled Rust Extension Bridge (`flexmesa._rust`)
+
+Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for interacting binaries (`_ArrF64` denotes a `float64` NumPy `ndarray`).
+
+### `binary_py` and `extras_py`
+
+- **`RustBinarySystem`** (`class RustBinarySystem`; static constructors `new_point_mass`, `new_two_stars`, `from_photo_bytes`; methods `to_photo_bytes`, `step`): Python wrapper around `flexmesa_binary::BinarySystem` exposing donor/accretor states, orbital separation, period, eccentricity, $J_{\mathrm{orb}}$, Roche radii, relative gaps, $\dot{M}$, and $\dot{J}$.
+- **`binary_build_anomaly_grid`** (`(anomaly_steps: int, eccentricity: float) -> tuple[_ArrF64, _ArrF64]`): Builds the eccentric true-anomaly and normalized time grid `(theta_co, time_co)`.
+- **`binary_eval_accreted_material_j`** (`(m_donor: float, m_accretor: float, r_accretor: float, separation: float) -> tuple[float, int]`): Evaluates de Mink et al. (2013) accreted specific angular momentum `(j_acc, mode)`.
+- **`binary_eval_arras_mdot_thin`** (`(m_donor: float, m_accretor: float, separation: float, r_donor: float, rho_surf: float, t_surf: float, mu_surf: float) -> float`): Evaluates the Arras optically thin RLOF mass transfer rate ($\mathrm{g\,s^{-1}}$).
+- **`binary_eval_bh_spin_and_edd`** (`(m_bh_init: float, a_spin_init: float, m_bh_current: float, kappa_surf: float) -> tuple[float, float, float, float]`): Computes Kerr BH equivalent initial non-rotating mass, current spin, and Eddington accretion quantities from `(m_bh_init, a_spin_init, m_bh_current, kappa_surf)`.
+- **`binary_eval_j_orb`** (`(m1: float, m2: float, separation: float, eccentricity: float) -> float`): Computes orbital angular momentum $J_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-1}}$).
+- **`binary_eval_jdot_gr`** (`(m_donor: float, m_accretor: float, separation: float, j_orb: float) -> float`): Evaluates gravitational wave $\dot{J}_{\mathrm{gr}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
+- **`binary_eval_jdot_ls`** (`(s_donor_old: float, s_donor: float, s_accretor_old: float, s_accretor: float, dt: float) -> float`): Evaluates spin-orbit tidal torque $\dot{J}_{\mathrm{ls}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
+- **`binary_eval_jdot_mb`** (`(m_star: float, r_star: float, rl_star: float, period: float, gamma_mb: float, q_conv_env: float, scale_for_low_qconv_env: bool) -> float`): Evaluates Rappaport-Verbunt-Joss (1983) magnetic braking $\dot{J}_{\mathrm{mb}}$.
+- **`binary_eval_jdot_ml`** (`(m_donor: float, m_accretor: float, separation: float, period: float, eccentricity: float, mdot_sys_tr_donor: float, mdot_sys_wind_donor: float, mdot_sys_tr_accretor: float, mdot_sys_wind_accretor: float, mdot_sys_cct: float, gamma_mt: float) -> float`): Evaluates system mass-loss $\dot{J}_{\mathrm{ml}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
+- **`binary_eval_kolb_mdot_thick`** (`(m_donor: float, m_accretor: float, rl_donor: float, r_profile: _ArrF64, p_profile: _ArrF64, t_profile: _ArrF64, mu_profile: _ArrF64, gamma1_profile: _ArrF64) -> float`): Evaluates the Kolb & Ritter (1990) optically thick RLOF mass transfer rate ($\mathrm{g\,s^{-1}}$).
+- **`binary_eval_l2_mass_loss_fraction`** (`(donor_mass_msun: float, accretor_mass_msun: float, mass_transfer_rate_msun_yr: float, orbital_separation_rsun: float, disk_alpha: float, disk_mu: float) -> float`): Evaluates the Lu et al. (2023) thin-disk outer $L_2$ mass-loss fraction $f_{L2}$.
+- **`binary_eval_l2_overflow_limit`** (`(m1: float, m2: float) -> float`): Evaluates the Marchant et al. (2016) contact binary $L_2$ overflow limit.
+- **`binary_eval_ritter_mdot_thin`** (`(m_donor: float, m_accretor: float, r_donor: float, rl_donor: float, rho_surf: float, p_surf: float, t_surf: float, mu_surf: float, is_kolb_scheme: bool) -> float`): Evaluates the Ritter (1988) optically thin RLOF mass transfer rate ($\mathrm{g\,s^{-1}}$).
+- **`binary_eval_rl_relative_gap`** (`(r: float, rl: float, eccentricity: float) -> float`): Evaluates periastron relative Roche-lobe gap $(R - R_L(1-e)) / (R_L(1-e))$.
+- **`binary_eval_rlobe`** (`(m1: float, m2: float, a: float) -> float`): Evaluates Eggleton (1983) Roche-lobe radius $R_{L,1}(m_1, m_2, a)$ ($\mathrm{cm}$).
+- **`binary_eval_tides_hut`** (`(m_star: float, m_companion: float, r_phot: float, separation: float, eccentricity: float, period: float, omega_star: float, m_env_msun: float, r_env_rsun: float, l_phot_lsun: float, r_gyr_sq: float, f_tid: float, has_convective_envelope: bool) -> tuple[float, float, float, float, float, float, float]`): Evaluates Hut (1981) eccentricity polynomials and tidal rates.
+- **`binary_eval_wind_transfer`** (`(m_donor: float, m_accretor: float, r_donor: float, rl_donor: float, separation: float, eccentricity: float, b_wind: float, alpha_bh: float, beta_bh: float, max_frac: float) -> tuple[float, float]`): Evaluates Tout & Eggleton (1988) wind enhancement and Hurley et al. (2002) Bondi-Hoyle fraction.
+- **`binary_period_from_separation`** (`(m1: float, m2: float, separation: float) -> float`): Computes orbital period $P$ ($\mathrm{s}$) from separation $a$ ($\mathrm{cm}$) and masses $m_1, m_2$ ($\mathrm{g}$).
+- **`binary_pick_next_timestep_rl`** (`(donor_time_step_yr: float, max_timestep_sec: float, rl_gap_old_donor: float, rl_gap_donor: float, fr: float = 0.01, fr_limit: float = 0.01, fr_dt_limit: float = 0.0, dt_softening_factor: float = 0.0, time_delta_coeff: float = 1.0) -> tuple[float, int]`): Evaluates `binary_pick_next_timestep` matching upstream `binary/test/src/test_binary.f90`.
+- **`binary_separation_from_j_orb`** (`(m1: float, m2: float, j_orb: float, eccentricity: float) -> float`): Computes orbital separation $a$ ($\mathrm{cm}$) from $J_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-1}}$).
+- **`binary_separation_from_period`** (`(m1: float, m2: float, period: float) -> float`): Computes orbital separation $a$ ($\mathrm{cm}$) from period $P$ ($\mathrm{s}$) and masses $m_1, m_2$ ($\mathrm{g}$).
+- **`binary_extras_snapshot`** (`(bin: RustBinarySystem, case_dir: str = "") -> dict[str, Any]`): Builds the MESA `binary_info` extras snapshot dictionary for a `RustBinarySystem` without running a full trace (`#148`, `#231`).

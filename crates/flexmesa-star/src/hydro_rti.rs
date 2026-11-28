@@ -14,6 +14,9 @@
 use flexmesa_const::{FOUR_PI, M_SUN};
 
 use crate::hydro_eqns::HenyeySystem;
+use flexmesa_utils::is_bad;
+
+use crate::job_controls::StarError;
 use crate::model::StarModel;
 use crate::report_utils::{
     csound_face_at, eval_shock_info, surface_avg_x_by_name,
@@ -60,16 +63,13 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         } else {
             0.0
         };
-        let cs_k = model.csound[k];
-        // Guard `cs_k <= 0.0` before computing Mach ratio (`mix_info.f90:2166-2168`).
-        if a_start == 0.0 && (cs_k <= 0.0 || vel_k / cs_k < min_mach) {
+        // `alpha_RTI_start(k) == 0 .and. v/csound(k) < min` (`mix_info.f90:2166-2168`).
+        if a_start == 0.0 && vel_k / model.csound[k] < min_mach {
             continue;
         }
         let r_in = model.r[k + 1];
         let rmid = 0.5 * (model.r[k] + r_in);
-        let dr_k = (model.dm[k]
-            / (FOUR_PI * rmid * rmid * model.rho[k].max(1.0e-30)))
-        .max(1.0e-30);
+        let dr_k = model.dm[k] / (FOUR_PI * rmid * rmid * model.rho[k]);
         dpdr[k] = (p_face[k] - p_face[k + 1]) / dr_k;
         drhodr[k] = (rho_face[k] - rho_face[k + 1]) / dr_k;
     }
@@ -217,7 +217,7 @@ fn get_rti_sigmas(
         }
     }
 
-    if max_sig < 1.0 || dt <= 0.0 {
+    if max_sig < 1.0 {
         return;
     }
     for k in 0..nz {
@@ -237,10 +237,10 @@ fn get_rti_sigmas(
 /// mutating convective `d_mix` or `sig` (`set_RTI_mixing_info` in
 /// `star/private/mix_info.f90:1960-2076`, `star/private/micro.f90:96-100`,
 /// `star/private/star_utils.f90:1328-1403`).
-pub fn set_rti_mixing_info(model: &mut StarModel) {
+pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     if nz == 0 {
-        return;
+        return Ok(());
     }
     for v in [
         &mut model.aux.eta_rti,
@@ -254,7 +254,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
         v.fill(0.0);
     }
     if !model.controls.rti_flag || model.controls.rti_c <= 0.0 {
-        return;
+        return Ok(());
     }
 
     let c_base = model.controls.rti_c;
@@ -289,8 +289,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
     // Outside-in pass sets `eta_rti` and `etamid_rti` using current `alpha_rti`
     // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`).
     for k in 0..nz {
-        let f = (model.xh_mass[k]
-            - model.controls.rti_c_x0_frac * surface_h1)
+        let f = (model.xh_mass[k] - model.controls.rti_c_x0_frac * surface_h1)
             .max(0.0);
         let mut c = c_base * (1.0 + f * f * model.controls.rti_c_x_factor);
         let m_k = model.m[k];
@@ -308,11 +307,18 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
 
         let a_k = model.aux.alpha_rti.get(k).copied().unwrap_or(0.0);
         if k > 0 {
-            let (alfa, beta) = model.get_face_weights(k);
             let a_m1 = model.aux.alpha_rti.get(k - 1).copied().unwrap_or(0.0);
-            let alpha_face = alfa * a_k + beta * a_m1;
+            let alpha_face = (model.dq[k - 1] * a_k + model.dq[k] * a_m1)
+                / (model.dq[k - 1] + model.dq[k]);
             let cs = csound_face_at(model, k);
             let mut eta_k = c * alpha_face * cs * model.r[k];
+            // `mix_info.f90:2030-2041`.
+            if is_bad(eta_k) && model.q[k] <= model.controls.alpha_rti_src_max_q
+            {
+                return Err(StarError::MicrophysicsError(format!(
+                    "set_rti_mixing_info: non-finite eta_RTI at face {k}: {eta_k}"
+                )));
+            }
             if m_k - model.m_center <= dm_for_center_eta_nondecreasing {
                 if min_eta < 0.0 {
                     min_eta = eta_k;
@@ -325,6 +331,13 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
 
         model.aux.etamid_rti[k] =
             min_eta.max(c * a_k * model.csound[k] * model.rmid[k]);
+        // `mix_info.f90:2062-2065`.
+        if is_bad(model.aux.etamid_rti[k]) {
+            return Err(StarError::MicrophysicsError(format!(
+                "set_rti_mixing_info: non-finite etamid_RTI at cell {k}: {}",
+                model.aux.etamid_rti[k]
+            )));
+        }
     }
 
     let shock_q = eval_shock_info(model).q;
@@ -361,6 +374,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
     }
 
     refresh_alpha_rti_diagnostic_sources(model);
+    Ok(())
 }
 
 /// Augments `d_mix` and `sig` with `composition_rti_diffusion_factor * (eta_rti, sig_rti)`

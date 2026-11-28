@@ -105,7 +105,7 @@ pub fn set_mixing_info_with_skip(
     }
 
     if model.controls.rti_flag {
-        crate::hydro_rti::set_rti_mixing_info(model);
+        crate::hydro_rti::set_rti_mixing_info(model)?;
         crate::hydro_rti::set_dpdr_drhodr_info(model);
     }
 

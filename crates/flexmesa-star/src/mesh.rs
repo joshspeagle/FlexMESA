@@ -531,7 +531,7 @@ impl StarModel {
             crate::hydro_vars::update_sig_from_d_mix(self)?;
         }
         if self.controls.rti_flag {
-            crate::hydro_rti::set_rti_mixing_info(self);
+            crate::hydro_rti::set_rti_mixing_info(self)?;
         }
         if self.controls.u_flag {
             self.aux.p_face_start.resize(self.nz, -1.0);

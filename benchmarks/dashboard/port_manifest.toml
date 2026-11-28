@@ -6084,7 +6084,13 @@ upstream_lines = 583
 upstream_sha256 = "b2077aac6c81a6dfc6755dd97b5c560f69f2f2fc9c6e4305262ab19c49794253"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_1_zone_const_P", "burn_1_zone_const_P::do_isolve", "burn_1_zone_const_P::burn_derivs", "burn_1_zone_const_P::burn_jacob"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_1_zone_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: inlines a Rosenbrock integrator (tableau from burn_stepper.rs) instead of calling isolve with the lapack decsol; no time_net/time_eos timing counters; no solout
+"burn_1_zone_const_P::do_isolve" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: inlined Rosenbrock integrator rather than a call to isolve
+"burn_1_zone_const_P::burn_derivs" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: evaluated through the burn_jacob closure with no Jacobian requested
+"burn_1_zone_const_P::burn_jacob" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: Pgas <= 0 and Cp <= 0 are errors with messages; Radiation_Pressure is evaluated inline as CRAD*T^4/3; no timing counters
 
 [[files]]
 upstream_path = "net/private/net_burn_support.f90"

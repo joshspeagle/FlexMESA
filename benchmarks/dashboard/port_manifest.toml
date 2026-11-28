@@ -7018,7 +7018,12 @@ upstream_lines = 353
 upstream_sha256 = "bede1c81f568336ffa31b3690412a37c15e63d309911d2b71d1a4ccec7360579"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["load_ecapture_data", "load_ecapture_states_list", "load_ecapture_transitions_list"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"load_ecapture_data" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: no do_ecapture gate; tables come from the embedded aic files or from_files
+"load_ecapture_states_list" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: token-stream parse; comment rule and error handling differ (#738)
+"load_ecapture_transitions_list" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: token-stream parse; comment rule, size limits and unknown-nuclide timing differ (#738)
 
 [[files]]
 upstream_path = "rates/private/load_weak.f90"

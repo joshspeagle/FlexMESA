@@ -461,8 +461,7 @@ pub use rn_parser::{parse_rn_stages, RnStage};
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    sync_post_henyey_rotation, update_rotation_distortion_factors,
-    RotationalMixZone, RI_CRIT_DSI,
+    sync_post_henyey_rotation, RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rotation_mix::update_rotation_mixing_info;
 pub use rotation_mix_info::set_rotation_mixing_info;

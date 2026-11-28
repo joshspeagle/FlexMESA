@@ -413,7 +413,8 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
     rot_acc.controls.mix_wind.use_accreted_material_j = false;
     let omega_surf_old = 1.2e-5;
     rot_acc.omega.fill(omega_surf_old);
-    flexmesa_star::update_rotation_distortion_factors(&mut rot_acc);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut rot_acc);
+    flexmesa_star::set_rotation_info(&mut rot_acc, false);
     let r0_before = flexmesa_math::exp(rot_acc.ln_r[0]);
     let m0_after = rot_acc.mstar + 5.0e-4 * M_SUN * 0.5;
     // Deliberately make `j_rot[0]` carry a stale/huge value while keeping
@@ -462,7 +463,8 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
         m_jloss.omega[k] =
             1.0e-5 * (1.0 + 0.5 * (k as f64 / m_jloss.nz as f64));
     }
-    flexmesa_star::update_rotation_distortion_factors(&mut m_jloss);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut m_jloss);
+    flexmesa_star::set_rotation_info(&mut m_jloss, false);
     m_jloss.aux.j_rot_old.fill(0.0);
     let starting_j_surf = m_jloss.j_rot[0];
     let dmbar_before = |m: &StarModel| -> f64 {
@@ -1922,7 +1924,8 @@ fn test_mass_stopping_limits_check_termination_outcomes_and_set1_irot() {
     m_rot.controls.rotation_flag = true;
     m_rot.controls.mix_wind.use_accreted_material_j = false;
     m_rot.omega.fill(2.0e-4);
-    flexmesa_star::update_rotation_distortion_factors(&mut m_rot);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut m_rot);
+    flexmesa_star::set_rotation_info(&mut m_rot, false);
     m_rot.save_old_values();
     m_rot.mstar_dot = 5.0e-4 * M_SUN / SECYER;
     do_adjust_mass_step(&mut m_rot, 0.5 * SECYER)

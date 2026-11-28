@@ -1159,7 +1159,13 @@ pub(crate) fn remesh_split_merge_with(
         && model.j_rot.iter().all(|&j| j == 0.0)
         && model.omega.iter().any(|&w| w != 0.0)
     {
-        crate::rotation::update_rotation_distortion_factors(model);
+        // Bootstrap `i_rot` and `j_rot` from `(ln_r, omega)` before
+        // `total_angular_momentum` (`star/private/adjust_mesh_split_merge.f90:54`,
+        // `star/private/hydro_rotation.f90:382-397`).
+        if model.j_rot.len() != model.nz {
+            model.j_rot.resize(model.nz, 0.0);
+        }
+        crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
     }
     let old_j = total_angular_momentum(model);
     let (age_old, dt_old, mstar_old) =

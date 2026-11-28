@@ -342,79 +342,22 @@ pub fn eval_rotational_mixing_zone(
     }
 }
 
-/// Updates shellular distortion (`fp_rot`, `ft_rot`, `i_rot`) and `j_rot`
-/// across faces from `omega` (`use_xh_to_update_i_rot_and_j_rot` + `eval_fp_ft`
-/// in `star/private/hydro_rotation.f90:382-397, 537-586`).
-pub fn update_rotation_distortion_factors(model: &mut StarModel) {
+/// Bootstraps `j_rot` from `(ln_r, omega)` if `j_rot == 0 && omega != 0`
+/// (`use_xh_to_update_i_rot_and_j_rot`) and recomputes
+/// `(w_div_wc, i_rot, omega, fp_rot, ft_rot)` preserving shell `j_rot`
+/// (`set_rotation_info` in `star/private/hydro_rotation.f90:382-397, 537-586`).
+pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
     let nz = model.nz;
-    if nz == 0 {
-        return;
-    }
-    if model.aux.w_div_wc.len() != nz
-        || model.aux.i_rot.len() != nz
-        || model.aux.d_i_rot_dlnr.len() != nz
-        || model.aux.fp_rot.len() != nz
-        || model.aux.d_fp_rot_dlnr.len() != nz
-        || model.aux.ft_rot.len() != nz
-        || model.aux.d_ft_rot_dlnr.len() != nz
-    {
-        model.aux.resize(nz, model.species);
-    }
-    if !model.controls.rotation_flag {
-        model.aux.fp_rot.fill(1.0);
-        model.aux.ft_rot.fill(1.0);
-        model.aux.d_fp_rot_dlnr.fill(0.0);
-        model.aux.d_ft_rot_dlnr.fill(0.0);
-        for k in 0..nz {
-            let ir = (2.0 / 3.0) * flexmesa_math::pow2(model.r[k].max(1.0));
-            model.aux.i_rot[k] = ir;
-            model.aux.d_i_rot_dlnr[k] = 2.0 * ir;
-        }
+    if !model.controls.rotation_flag || nz == 0 {
         return;
     }
     if model.j_rot.len() != nz {
         model.j_rot.resize(nz, 0.0);
     }
-    let max_w = model.controls.mix_wind.w_div_wcrit_max;
-    let max_w2 = model.controls.mix_wind.w_div_wcrit_max2;
-    let tidal = model.aux.tidal_deformation.clone();
-    for k in 0..nz {
-        let r_k = model.r[k];
-        let om_k = model.omega[k];
-        model.aux.w_div_wc[k] = crate::hydro_rotation::w_div_w_roche_omega(
-            r_k,
-            model.m[k],
-            om_k,
-            model.cgrav[k],
-            max_w,
-            max_w2,
-            false,
-        );
-        crate::hydro_rotation::set1_i_rot(model, k, r_k);
-        crate::hydro_rotation::apply_face_fp_ft(
-            model,
-            k,
-            r_k,
-            om_k,
-            tidal.as_ref(),
-        );
-        model.j_rot[k] = model.aux.i_rot[k] * om_k;
-    }
-}
-
-/// Recomputes $(w/w_{\mathrm{crit}}, i_{\mathrm{rot}}, \Omega, f_P, f_T)$
-/// preserving shell `j_rot` (`set_rotation_info` in
-/// `star/private/hydro_rotation.f90:537-586`).
-pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
-    let nz = model.nz;
-    if !model.controls.rotation_flag
-        || nz == 0
-        || model.j_rot.len() != nz
-        || (model.j_rot.iter().all(|&j| j == 0.0)
-            && model.omega.iter().any(|&w| w != 0.0))
+    if model.j_rot.iter().all(|&j| j == 0.0)
+        && model.omega.iter().any(|&w| w != 0.0)
     {
-        update_rotation_distortion_factors(model);
-        return;
+        crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(model);
     }
     crate::hydro_rotation::set_rotation_info(model, false);
 }
@@ -439,4 +382,69 @@ pub fn sync_post_henyey_rotation(
     dt: f64,
 ) -> Result<(), StarError> {
     crate::rotation_mix::sync_post_henyey_rotation(model, dt)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::conserve_shell_j_rot_and_distortion;
+    use crate::controls::{StarControls, StarJobControls};
+    use crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot;
+    use crate::zams::load_zams_model;
+
+    #[test]
+    fn test_conserve_shell_j_rot_bootstraps_from_exp_ln_r_not_r() {
+        let ctrl = StarControls {
+            initial_mass: 1.0,
+            rotation_flag: true,
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("1 Msun ZAMS");
+        model.omega.fill(2.0e-4);
+        model.j_rot.fill(0.0);
+        for k in 0..model.nz {
+            model.r[k] = 1.05 * flexmesa_math::exp(model.ln_r[k]);
+        }
+        let mut expected = model.clone();
+        use_xh_to_update_i_rot_and_j_rot(&mut expected);
+
+        conserve_shell_j_rot_and_distortion(&mut model);
+        assert!(model.nz > 0);
+        for k in 0..model.nz {
+            assert_eq!(
+                model.j_rot[k].to_bits(),
+                expected.j_rot[k].to_bits(),
+                "j_rot[{k}] must bootstrap from exp(ln_r), not model.r"
+            );
+        }
+        assert!(model.aux.fp_rot[0] < 1.0 && model.aux.ft_rot[0] < 1.0);
+    }
+
+    #[test]
+    fn test_conserve_shell_j_rot_is_noop_when_rotation_flag_false() {
+        let ctrl = StarControls {
+            initial_mass: 1.0,
+            rotation_flag: false,
+            zbase: 0.02,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(ctrl, StarJobControls::default())
+            .expect("1 Msun ZAMS");
+        model.omega.fill(5.0e-5);
+        model.j_rot.fill(0.0);
+        model.aux.fp_rot.fill(1.0);
+        model.aux.ft_rot.fill(1.0);
+        model.aux.i_rot.fill(0.0);
+        let fp_before = model.aux.fp_rot.clone();
+        let ft_before = model.aux.ft_rot.clone();
+        let i_before = model.aux.i_rot.clone();
+        let j_before = model.j_rot.clone();
+
+        conserve_shell_j_rot_and_distortion(&mut model);
+        assert_eq!(model.aux.fp_rot, fp_before);
+        assert_eq!(model.aux.ft_rot, ft_before);
+        assert_eq!(model.aux.i_rot, i_before);
+        assert_eq!(model.j_rot, j_before);
+    }
 }

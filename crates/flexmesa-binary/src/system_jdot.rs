@@ -14,8 +14,8 @@ use flexmesa_const::{MixingType, MSUN, PI, RSUN};
 use flexmesa_math::{exp, pow, pow2};
 use flexmesa_star::{
     apply_uniform_rotation, eval_photosphere_info, eval_surf_avg_rotation_info,
-    update_rotation_distortion_factors, BinaryOtherTorqueHook, StarError,
-    StarModel,
+    set_rotation_info, use_xh_to_update_i_rot_and_j_rot, BinaryOtherTorqueHook,
+    StarError, StarModel,
 };
 
 use crate::inlist::BinaryInlistControls;
@@ -172,8 +172,13 @@ pub fn apply_initial_orbit_sync(
         flexmesa_star::relax_uniform_omega(star, target_omega, 100, 1.0e9)?;
     } else {
         star.controls.rotation_flag = true;
+        // Upstream `star_set_uniform_omega` -> `set_uniform_omega`
+        // (`binary/private/run_binary_support.f90:319-339`,
+        // `star/public/star_lib.f90:1664-1670`,
+        // `star/private/hydro_rotation.f90:492-535`);
+        // `apply_uniform_rotation` already calls
+        // `use_xh_to_update_i_rot_and_j_rot` and `set_rotation_info(star, false)`.
         apply_uniform_rotation(star, target_omega);
-        update_rotation_distortion_factors(star);
     }
     Ok(())
 }
@@ -222,7 +227,14 @@ pub fn conserve_spin_after_henyey(
     if !star.controls.rotation_flag || star.nz == 0 {
         return;
     }
-    update_rotation_distortion_factors(star);
+    // Upstream `binary/` has no `conserve_spin_after_henyey` helper (stars
+    // conserve shell `j_rot` and recompute `omega` via `set_rotation_info`);
+    // `star/private/hydro_rotation.f90:382-397, 537-586`.
+    if star.j_rot.len() != star.nz {
+        star.j_rot.resize(star.nz, 0.0);
+    }
+    use_xh_to_update_i_rot_and_j_rot(star);
+    set_rotation_info(star, false);
     let s_target = (s_pre + delta_s_mdot).max(0.0);
     let mut s_cur = 0.0_f64;
     for k in 0..star.nz {
@@ -501,7 +513,19 @@ pub(crate) fn apply_tidal_spin_sync_step(
     {
         return Ok(0.0);
     }
-    update_rotation_distortion_factors(star);
+    // `binary/private/binary_tides.f90:35-271` reads `s% i_rot(k)% val`,
+    // `s% j_rot(k)`, and `s% omega_avg_surf` updated by
+    // `star/private/hydro_rotation.f90:382-397, 537-586` (via
+    // `star/private/solve_omega_mix.f90:90-97` / `evolve.f90`).
+    if star.j_rot.len() != star.nz {
+        star.j_rot.resize(star.nz, 0.0);
+    }
+    if star.j_rot.iter().all(|&j| j == 0.0)
+        && star.omega.iter().any(|&w| w != 0.0)
+    {
+        use_xh_to_update_i_rot_and_j_rot(star);
+    }
+    set_rotation_info(star, false);
     let phot = eval_photosphere_info(star);
     let r_phot_cm = RSUN * phot.r_rsun;
     let omega_avg_surf = eval_surf_avg_rotation_info(star).omega;
@@ -1219,7 +1243,6 @@ mod tests {
         .expect("ZAMS model");
         star.controls.rotation_flag = true;
         apply_uniform_rotation(&mut star, omega);
-        update_rotation_distortion_factors(&mut star);
         star.dt = 10.0 * SECDAY;
         star.aux.extra_jdot = vec![0.0; star.nz];
         star

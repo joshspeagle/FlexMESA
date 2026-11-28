@@ -9,7 +9,7 @@
 3. **Python / PyO3 (`flexmesa._rust`)**: Zero-copy C-contiguous `numpy.float64` bindings releasing the Python GIL.
 4. **Python / JAX (`@jax.jit` & `jax.vmap` in `float64`)**: Derived XLA GPU kernels validated against Safe Rust `strict` mode (`#166`, `DECISIONS #17`, `#23`).
 
-End-to-end evolutionary parity against MESA `26.4.1` currently stands at **63 / 106 passing cases** (`40` declared gaps, `3` awaiting reference runs; see [Declared Known Gaps](known-gaps.md) and [Port Coverage Map](coverage-map.md)).
+The acceptance pass rate against MESA `26.4.1` references currently stands at **63 / 106 passing cases** (`40` declared gaps, `3` awaiting reference runs; see [Declared Known Gaps](known-gaps.md) and [Port Coverage Map](coverage-map.md)).
 
 ---
 
@@ -96,4 +96,4 @@ for rec in records[:3]:
     )
 ```
 
-For complete 28-workload tables, see **[Kernel Performance Scorecards](kernel-scorecards.md)**. For tolerance rules and documented discrepancies, see **[Tolerance & Discrepancy Ledger](tolerance-and-discrepancy-ledger.md)**.
+For all 28 benchmark workload tables, see **[Kernel Performance Scorecards](kernel-scorecards.md)**. For tolerance rules and documented discrepancies, see **[Tolerance & Discrepancy Ledger](tolerance-and-discrepancy-ledger.md)**.

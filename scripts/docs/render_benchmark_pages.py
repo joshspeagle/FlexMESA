@@ -439,8 +439,8 @@ def _render_kernel_scorecards(
             "Full tables and `star/test` comparisons live in the "
             "[Wave 4 Benchmark Report](../design/wave-4-benchmark-report.md). "
             "All five Wave 4 workloads run post-`51e1adc` (`need_to_setvars = "
-            ".true.`), but **do not yet achieve numerical parity or equal "
-            "work scope**:"
+            ".true.`), but **do not yet match MESA `26.4.1` numerically or "
+            "execute equal work scope**:"
         ),
         "",
         (
@@ -710,8 +710,8 @@ def _render_overview(
         ),
         "",
         (
-            f"End-to-end evolutionary parity against MESA `26.4.1` currently "
-            f"stands at **{passing} / {total_cases} passing cases** "
+            f"The acceptance pass rate against MESA `26.4.1` references "
+            f"currently stands at **{passing} / {total_cases} passing cases** "
             f"(`{declared_gaps}` declared gaps, `{awaiting}` awaiting "
             "reference runs; see [Declared Known Gaps](known-gaps.md) and "
             "[Port Coverage Map](coverage-map.md))."
@@ -857,7 +857,7 @@ def _render_overview(
         "```",
         "",
         (
-            "For complete 28-workload tables, see "
+            "For all 28 benchmark workload tables, see "
             "**[Kernel Performance Scorecards](kernel-scorecards.md)**. For "
             "tolerance rules and documented discrepancies, see "
             "**[Tolerance & Discrepancy Ledger]"

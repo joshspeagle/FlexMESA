@@ -51,7 +51,7 @@ jobs:
             : > changed.txt
           fi
           cat changed.txt
-          python3 scripts/ci/select_jobs.py --event "${{ github.event_name }}" --paths-file changed.txt | tee -a "$GITHUB_OUTPUT"
+          python3 scripts/ci/select_jobs.py --event "${{ github.event_name }}" --head-ref "${{ github.head_ref }}" --paths-file changed.txt | tee -a "$GITHUB_OUTPUT"
 
   rust-lint:
     name: Rust Clippy & rustdoc

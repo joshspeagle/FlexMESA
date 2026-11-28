@@ -63,7 +63,7 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         } else {
             0.0
         };
-        // `alpha_RTI_start(k) == 0 .and. v/csound(k) < min` (`mix_info.f90:2166-2168`).
+        // `alpha_RTI_start(k) == 0 .and. v/csound(k) < min` (`mix_info.f90:2167-2170`).
         if a_start == 0.0 && vel_k / model.csound[k] < min_mach {
             continue;
         }
@@ -117,7 +117,7 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
 
 /// Mass-window smoothing of `val` over `smooth_mass` solar masses, repeated
 /// `number_iterations` times (`do_smoothing_by_mass` in
-/// `star/private/mix_info.f90:2243-2299`).
+/// `star/private/mix_info.f90:2245-2305`).
 ///
 /// Upstream's inner-edge search `do k=k_center, nz, -1` runs zero times
 /// because `k_center < nz`, so `k_inner = k_center` and the window's inner
@@ -260,7 +260,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     let c_base = model.controls.rti_c;
 
     // Mass of the first cell moving faster than sound, unless it is the
-    // surface cell (`mix_info.f90:1991-2002`).
+    // surface cell (`mix_info.f90:1986-1997`).
     let mut shock_mass_start = 1.0e99_f64;
     for k in 0..nz {
         let v = if model.controls.u_flag {
@@ -276,6 +276,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
         }
     }
 
+    // Boost and window parameters (`mix_info.f90:1999-2006`).
     let min_dm = model.controls.rti_min_dm_behind_shock_for_full_on * M_SUN;
     let log_max_boost = model.controls.rti_log_max_boost;
     let max_boost = flexmesa_math::exp10(log_max_boost);
@@ -289,10 +290,12 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
     // Outside-in pass sets `eta_rti` and `etamid_rti` using current `alpha_rti`
     // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`).
     for k in 0..nz {
+        // `f` and `C` (`mix_info.f90:2010-2011`).
         let f = (model.xh_mass[k] - model.controls.rti_c_x0_frac * surface_h1)
             .max(0.0);
         let mut c = c_base * (1.0 + f * f * model.controls.rti_c_x_factor);
         let m_k = model.m[k];
+        // Mass boost (`mix_info.f90:2013-2020`).
         if m_k < m_no_boost {
             if m_k <= m_full_boost {
                 c *= max_boost;
@@ -301,6 +304,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
                 c *= flexmesa_math::exp10(alfa * log_max_boost);
             }
         }
+        // Taper behind the shock (`mix_info.f90:2022-2023`).
         if shock_mass_start - m_k < min_dm {
             c = c * (shock_mass_start - m_k) / min_dm;
         }
@@ -308,11 +312,12 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
         let a_k = model.aux.alpha_rti.get(k).copied().unwrap_or(0.0);
         if k > 0 {
             let a_m1 = model.aux.alpha_rti.get(k - 1).copied().unwrap_or(0.0);
+            // `mix_info.f90:2026-2028`.
             let alpha_face = (model.dq[k - 1] * a_k + model.dq[k] * a_m1)
                 / (model.dq[k - 1] + model.dq[k]);
             let cs = csound_face_at(model, k);
             let mut eta_k = c * alpha_face * cs * model.r[k];
-            // `mix_info.f90:2030-2041`.
+            // `mix_info.f90:2033-2040`.
             if is_bad(eta_k) && model.q[k] <= model.controls.alpha_rti_src_max_q
             {
                 return Err(StarError::MicrophysicsError(format!(
@@ -331,7 +336,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
 
         model.aux.etamid_rti[k] =
             min_eta.max(c * a_k * model.csound[k] * model.rmid[k]);
-        // `mix_info.f90:2062-2065`.
+        // `mix_info.f90:2055-2058`.
         if is_bad(model.aux.etamid_rti[k]) {
             return Err(StarError::MicrophysicsError(format!(
                 "set_rti_mixing_info: non-finite etamid_RTI at cell {k}: {}",

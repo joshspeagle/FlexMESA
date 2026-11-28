@@ -68,7 +68,9 @@ def _write_synthetic_repo(root: pathlib.Path, *, documented: bool) -> None:
     api_md.parent.mkdir(parents=True, exist_ok=True)
     if documented:
         api_md.write_text(
-            "::: flexmesa.eos.core\n\nextra_py_sym\n\neos_rust_fn\n",
+            "::: flexmesa.eos.core\n\n"
+            "- **`extra_py_sym`**: Extra Python symbol.\n"
+            "- **`eos_rust_fn`**: Rust bridge function.\n",
             encoding="utf-8",
         )
     else:
@@ -139,3 +141,27 @@ def test_docs_api_coverage_catches_missing_and_stale_entries(
     # Re-writing the allowlist shrinks it to 0 and restores exit 0.
     assert mod.main(["--repo-root", str(tmp_path), "--write-allowlist"]) == 0
     assert mod.main(["--repo-root", str(tmp_path), "--check"]) == 0
+
+
+def test_docs_api_coverage_ignores_prose_mentions(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A whole-word mention in prose or a snippet does not document a symbol."""
+    mod = _load_checker()
+    _write_synthetic_repo(tmp_path, documented=False)
+    api_md = tmp_path / "docs" / "api" / "eos.md"
+    api_md.write_text(
+        "::: flexmesa.eos.core\n\n"
+        "Prose names extra_py_sym and eos_rust_fn but has no bullet.\n\n"
+        "```python\nextra_py_sym()\neos_rust_fn(1.0)\n```\n",
+        encoding="utf-8",
+    )
+    allow_path = tmp_path / "docs" / "api_coverage_allowlist.toml"
+    allow_path.write_text(
+        "[counts]\npython = 0\nrust_pyi = 0\ntotal = 0\n", encoding="utf-8"
+    )
+    assert mod.main(["--repo-root", str(tmp_path), "--check"]) == 1
+    err_out = capsys.readouterr().err
+    assert "UNDOCUMENTED" in err_out
+    assert "extra_py_sym" in err_out
+    assert "eos_rust_fn" in err_out

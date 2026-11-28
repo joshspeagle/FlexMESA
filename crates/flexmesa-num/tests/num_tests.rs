@@ -371,11 +371,11 @@ fn test_safe_root_dual_matches_implicit_function_theorem_derivatives() {
 #[test]
 fn test_nm_simplex_and_park_miller_prng_match_upstream_oracles() {
     let mut seed = 12_345_i32;
-    let u = r8_uniform_01(&mut seed);
+    let u = r8_uniform_01(&mut seed).expect("nonzero seed");
     assert!((0.0..1.0).contains(&u));
-    let k = i4_uniform(1, 10, &mut seed);
+    let k = i4_uniform(1, 10, &mut seed).expect("nonzero seed");
     assert!((1..=10).contains(&k));
-    let mut p = perm_uniform(6, &mut seed);
+    let mut p = perm_uniform(6, &mut seed).expect("nonzero seed");
     p.sort_unstable();
     assert_eq!(p, vec![1, 2, 3, 4, 5, 6]);
 

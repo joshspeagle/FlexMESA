@@ -9,17 +9,17 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 | Denominator Scope | Upstream Lines | Ported (Unverified) | Verified Against MESA `26.4.1` | Notes |
 | :--- | ---: | ---: | ---: | :--- |
-| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 40,208 (27.7%) | 4,919 (3.4%) | Excludes stub (`6,378`) and partial (`71,242`) lines |
-| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 43,768 (8.8%) | 4,919 (1.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
+| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 39,487 (27.2%) | 5,640 (3.9%) | Excludes stub (`6,378`) and partial (`71,242`) lines |
+| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 43,047 (8.6%) | 5,640 (1.1%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
 | `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 305,966/305,967 probed module hex 0 ULP (12 complete, 16 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 16 / 23 remaining module suites marked verified in manifest |
-| End-to-end `test_suite` cases | 106 cases | 106 in manifest | **63 / 106** passing | 36 declared gaps, 3 `no_reference_yet` |
+| End-to-end `test_suite` cases | 106 cases | 106 in manifest | **63 / 106** passing | 34 declared gaps, 3 `no_reference_yet` |
 
 ## Per-Module Port Status (`26` MESA `26.4.1` Modules)
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (Unverified) | Verified LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 17,101 | 6,378 | 54,084 | 38,027 | 4,919 | 35.6% | 4.1% |
+| `star` | 120,509 | 17,101 | 6,378 | 54,084 | 37,306 | 5,640 | 35.6% | 4.7% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0.0% | 0.0% |
 | `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0.0% | 0.0% |
@@ -45,8 +45,8 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | `adipls` | 30,923 | 20,829 | 0 | 10,094 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
-| **Core Engine Subtotal** | **144,952** | **22,205** | **6,378** | **71,242** | **40,208** | **4,919** | **31.1%** | **3.4%** |
-| **All 26 Modules Total** | **497,703** | **210,855** | **6,378** | **231,783** | **43,768** | **4,919** | **9.8%** | **1.0%** |
+| **Core Engine Subtotal** | **144,952** | **22,205** | **6,378** | **71,242** | **39,487** | **5,640** | **31.1%** | **3.9%** |
+| **All 26 Modules Total** | **497,703** | **210,855** | **6,378** | **231,783** | **43,047** | **5,640** | **9.8%** | **1.1%** |
 
 ## Namelist Controls & Defaults Alignment
 

@@ -1,6 +1,6 @@
 {
- "claims": 94,
- "claims_verified": 80,
+ "claims": 95,
+ "claims_verified": 81,
  "not_counted_only_on_scope_or_precision": [
   "neu/private/mod_neu.f90::ifermi12",
   "neu/private/mod_neu.f90::zfermim12",
@@ -22,6 +22,7 @@
   "eos/public/eos_lib.f90::eosPT_get",
   "interp_2d/private/bipm_db.f90::do_evbipm_db",
   "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+  "neu/private/mod_neu.f90::neutrinos",
   "neu/public/neu_lib.f90::neu_get",
   "star/private/diffusion_support.f90::get_matrix_coeffs",
   "star/private/eps_mdot.f90::calculate_eps_mdot",
@@ -119,7 +120,6 @@
   "eos/public/eos_lib.f90::eos_fermi_dirac_integral",
   "eos/public/eos_lib.f90::eos_gamma_DE_get",
   "eos/public/eos_lib.f90::helmeos2_eval",
-  "neu/private/mod_neu.f90::neutrinos",
   "star/private/diffusion.f90::do_solve_diffusion",
   "star/private/phase_separation.f90::do_phase_separation",
   "star/private/rsp.f90::build_rsp_model",

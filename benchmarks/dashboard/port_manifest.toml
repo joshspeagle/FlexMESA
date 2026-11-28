@@ -7200,7 +7200,13 @@ upstream_lines = 706
 upstream_sha256 = "95f988449a1af9be3e3cc3c18cb08b29cdd5f518a611d4bbf4b7b6b6031f3a96"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_get_raw_rates", "do_make_rate_tables", "get_net_rates_for_tables"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_get_raw_rates" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: table lookup, dtab/ddtab and the dT/dRho formulas match; no max_safe_rate_for_any_temp stop and no nrattab == 1 branch (#744)
+"do_get_raw_rates::get_rates_from_table" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables"
+"do_make_rate_tables" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: no disk cache (process-wide Arc cache keyed by reaction name), per-reaction splines built in parallel, weak-only sentinel mapped to exp(-99) at spline time, no nrattab == 1 branch
+"get_net_rates_for_tables" = "crates/flexmesa-net/src/initialize.rs::spline_reaction_rate_table" # partial: tfactors plus raw-rate evaluation per grid point; no is_bad check before the spline (#744)
 
 [[files]]
 upstream_path = "rates/private/raw_rates.f90"

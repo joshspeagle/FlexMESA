@@ -1154,6 +1154,22 @@ pub struct StarJobControls {
     /// `star/defaults/star_job.defaults:2173`).
     #[serde(default = "default_true")]
     pub remove_center_adjust_l_center: bool,
+    /// If true, remove the inner fallback region before every step
+    /// (`remove_fallback_at_each_step`; `star/defaults/star_job.defaults:2163`,
+    /// read at `star/job/run_star_support.f90:596-599`).
+    #[serde(default)]
+    pub remove_fallback_at_each_step: bool,
+    /// If true, `do_remove_fallback` locates a bound inner region by
+    /// integrating total energy outward instead of using the infall-speed
+    /// criterion (`fallback_check_total_energy`;
+    /// `star/defaults/star_job.defaults:2164`).
+    #[serde(default)]
+    pub fallback_check_total_energy: bool,
+    /// Infall-speed threshold for the fallback region in units of the local
+    /// sound speed (dimensionless; `remove_fallback_speed_limit`;
+    /// `star/defaults/star_job.defaults:2165`).
+    #[serde(default = "default_remove_fallback_speed_limit")]
+    pub remove_fallback_speed_limit: f64,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
     /// MESA installation directory (`mesa_dir`, `star/defaults/star_job.defaults:10-18`).
@@ -1421,6 +1437,9 @@ impl Default for StarJobControls {
             remove_center_by_entropy: 0.0,
             remove_center_set_zero_v_center: false,
             remove_center_adjust_l_center: true,
+            remove_fallback_at_each_step: false,
+            fallback_check_total_energy: false,
+            remove_fallback_speed_limit: 0.1,
             pgstar_flag: false,
             mesa_dir: String::new(),
             history_columns_file: String::new(),
@@ -1446,6 +1465,11 @@ const fn default_max_for_add() -> f64 {
 
 const fn default_true() -> bool {
     true
+}
+
+/// `remove_fallback_speed_limit = 0.1d0` (`star/defaults/star_job.defaults:2165`).
+const fn default_remove_fallback_speed_limit() -> f64 {
+    0.1
 }
 
 const fn default_neg_one_i64() -> i64 {

@@ -940,6 +940,12 @@ fn run_inlist_stage_with_logs_inner(
             if model.job.auto_extend_net {
                 crate::extend_net::extend_net(model, &bundle.case_dir)?;
             }
+            // `before_step_loop` (`star/job/run_star_support.f90:596-599`),
+            // Upstream runs it after `do_remove_surface` (`:585-594`), whose
+            // `remove_surface_*` selectors are not read here.
+            if model.job.remove_fallback_at_each_step {
+                crate::remove_center::do_remove_fallback(model, extras)?;
+            }
             // `before_step_loop` (`star/job/run_star_support.f90:636-640`):
             // reset cumulative energy error before each step while `star_age`
             // is below `set_cumulative_energy_error_each_step_if_age_less_than`.

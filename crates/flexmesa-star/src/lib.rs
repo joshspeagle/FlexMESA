@@ -452,7 +452,8 @@ pub use riemann::{
     eval_riemann_profile, HllcFaceState,
 };
 pub use remove_center::{
-    do_remove_center, do_remove_center_by_entropy, do_remove_inner_fraction_q,
+    do_remove_center, do_remove_center_by_entropy, do_remove_fallback,
+    do_remove_inner_fraction_q,
 };
 pub use riemann_ad::{
     calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,

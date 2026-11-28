@@ -291,8 +291,9 @@ pub fn run_binary_test_suite_case_with_options(
 /// Returns whether any star changed net.
 ///
 /// # Errors
-/// Returns [`StarError::InvalidInput`] for `enable_adaptive_network`, whose
-/// binary wiring is not ported, and propagates `extend_net` errors.
+/// Returns [`StarError::InvalidInput`] for `enable_adaptive_network` and
+/// `remove_fallback_at_each_step`, whose binary wiring is not ported, and
+/// propagates `extend_net` errors.
 fn before_step_loop_for_stars(
     bin: &mut BinarySystem,
     case_dir: &Path,
@@ -310,6 +311,11 @@ fn before_step_loop_for_stars(
         }
         if s.job.auto_extend_net {
             changed |= flexmesa_star::extend_net::extend_net(s, case_dir)?;
+        }
+        if s.job.remove_fallback_at_each_step {
+            return Err(StarError::InvalidInput(String::from(
+                "remove_fallback_at_each_step in a binary run: star_remove_fallback (star/job/run_star_support.f90:596-599) is not wired into the binary step loop",
+            )));
         }
         if s.star_age
             < s.job.set_cumulative_energy_error_each_step_if_age_less_than
@@ -596,5 +602,26 @@ mod tests {
         after_step_loop_for_stars(&mut bin);
         assert_eq!(bin.donor.aux.cumulative_energy_error, -4.5e31);
         assert_eq!(bin.donor.aux.step_hist.cumulative_energy_error_old, 2.0e30);
+    }
+
+    #[test]
+    fn test_remove_fallback_at_each_step_in_binary_fails_loudly() {
+        let s1 = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls {
+                remove_fallback_at_each_step: true,
+                ..StarJobControls::default()
+            },
+        )
+        .expect("1 Msun ZAMS");
+        let mut bin =
+            BinarySystem::new_point_mass(s1, 1.4, 2.0, 0.0, false, 0.0);
+        let err = before_step_loop_for_stars(&mut bin, Path::new("."))
+            .expect_err("binary remove_fallback must fail loudly");
+        assert!(err.to_string().contains("remove_fallback_at_each_step"));
     }
 }

@@ -305,10 +305,11 @@ impl InlistBundle {
             relax_omega_max_yrs_dt, base_for_adjust_tau_factor_to_surf_density,
             remove_initial_center_by_temperature,
             remove_initial_center_by_entropy, remove_center_by_entropy,
-            new_v_center, set_to_this_irrad_flux,
+            new_v_center, set_to_this_irrad_flux, remove_fallback_speed_limit,
         ]);
         map_bools!("star_job", sj, j, [
             remove_center_set_zero_v_center, remove_center_adjust_l_center,
+            remove_fallback_at_each_step, fallback_check_total_energy,
         ]);
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,

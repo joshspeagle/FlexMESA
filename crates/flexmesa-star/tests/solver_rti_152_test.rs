@@ -450,7 +450,7 @@ fn test_rti_dpdr_drhodr_defaults_to_unsmoothed_and_zero_cs_is_not_skipped() {
     model.lnd_start.clone_from(&model.lnd);
 
     // Zone 1: `v / csound = +inf` is not below the minimum Mach number, so
-    // the cell is evaluated (`mix_info.f90:2166-2168`); the indicator is then
+    // the cell is evaluated (`mix_info.f90:2167-2170`); the indicator is then
     // clamped by `min(0, dPdr * drhodr)` and is 0 for this profile.
     model.csound[1] = 0.0;
     model.u[1] = 1.0e5;
@@ -551,7 +551,7 @@ fn test_rti_mixing_info_mass_boost_center_floor_shock_and_v_flag() {
     // `RTI_min_dm_behind_shock_for_full_on = 0` (the default) makes the taper
     // `C * (shock_mass_start - m) / 0` ahead of the shock, which upstream
     // reports as a bad `eta_RTI`; a positive window keeps it finite
-    // (`mix_info.f90:2006-2007`). The shock cell itself has factor 0.
+    // (`mix_info.f90:2022-2023`). The shock cell itself has factor 0.
     shock_m.controls.rti_min_dm_behind_shock_for_full_on = 1.0e-3;
     let s_info = eval_shock_info(&shock_m);
     assert!(s_info.q > shock_m.q[2] && shock_m.q[1] > s_info.q);

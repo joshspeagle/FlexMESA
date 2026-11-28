@@ -83,20 +83,49 @@ enum NetToken {
 /// (`net/private/net_initialize.f90:276`).
 const NET_TOKEN_LEN: usize = 256;
 
+/// Formatted records of a `.net` file as `read(iounit,fmt='(a)')` returns
+/// them under the MESA SDK's gfortran 15.2.0 runtime: a record ends at `\n`,
+/// at `\r\n` or at a lone `\r`, and the terminator is not part of the record
+/// (compiler runtime behaviour, not MESA source). A terminator at the very
+/// end does not start an empty record.
+fn gfortran_records(src: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = src;
+    while !rest.is_empty() {
+        let bytes = rest.as_bytes();
+        let Some(end) = bytes.iter().position(|&c| c == b'\n' || c == b'\r')
+        else {
+            out.push(rest);
+            break;
+        };
+        out.push(&rest[..end]);
+        let skip = if bytes[end] == b'\r' && bytes.get(end + 1) == Some(&b'\n')
+        {
+            2
+        } else {
+            1
+        };
+        rest = &rest[end + skip..];
+    }
+    out
+}
+
 /// The `.net` token stream as upstream `token` produces it
 /// (`utils/public/utils_lib.f90:567-667`), transcribed on bytes (#666).
 ///
-/// Each line is read into a 256-byte buffer (a longer line is cut) and
-/// `n = len_trim(buffer)` drops trailing blanks only. At a token start,
+/// Each record is read into a 256-byte buffer (a longer record is cut) and
+/// `n = len_trim(buffer)` drops trailing blanks only. Records end where the
+/// gfortran runtime ends a formatted record ([`gfortran_records`]). At a
+/// token start,
 /// tabs, blanks and `&` are skipped and `!` ends the line; `(`, `)` and `,`
 /// are single tokens; a quote starts a string that runs to the matching
 /// quote or the end of the line; anything else starts a name that ends only
-/// before a blank, `(`, `)` or `,`, so a tab, `!`, `&`, quote or CR after
+/// before a blank, `(`, `)` or `,`, so a tab, `!`, `&` or quote after
 /// its first byte stays in it. Names and strings are cut to 256 bytes and
 /// returned without the Fortran blank padding.
 fn tokenize_net(src: &str) -> Vec<NetToken> {
     let mut tokens = Vec::new();
-    for raw_line in src.split_terminator('\n') {
+    for raw_line in gfortran_records(src) {
         let bytes = raw_line.as_bytes();
         let buffer = &bytes[..bytes.len().min(NET_TOKEN_LEN)];
         let n = buffer.iter().rposition(|&c| c != b' ').map_or(0, |p| p + 1);
@@ -1093,7 +1122,7 @@ mod tokenizer_666_tests {
     #[test]
     fn net_tokens_follow_upstream_token() {
         assert_eq!(
-            tokenize_net("add_isos(h1!x, &c12, he4'q 'a!b' ) o16\r ! end\n"),
+            tokenize_net("add_isos(h1!x, &c12, he4'q 'a!b' ) o16\r! end\n"),
             vec![
                 NetToken::Name(String::from("add_isos")),
                 NetToken::LParen,
@@ -1104,8 +1133,15 @@ mod tokenizer_666_tests {
                 NetToken::Name(String::from("he4'q")),
                 NetToken::Quoted(String::from("a!b")),
                 NetToken::RParen,
-                NetToken::Name(String::from("o16\r")),
+                // A lone CR ends the record, so `! end` starts a new one.
+                NetToken::Name(String::from("o16")),
             ]
+        );
+        // MESA SDK gfortran 15.2.0 reads `ab\r\n`, `cd \r\n`, `xy\rzz\n` as
+        // the records `ab`, `cd`, `xy`, `zz`.
+        assert_eq!(
+            gfortran_records("ab\r\ncd \r\nxy\rzz\n"),
+            vec!["ab", "cd ", "xy", "zz"]
         );
         let long = "x".repeat(300);
         assert_eq!(

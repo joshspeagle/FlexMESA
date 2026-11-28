@@ -49,19 +49,19 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% | 0.0% |
 | `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 30 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 6.1% | 0.0% |
-| `kap` | 38 | 311 | 12 | 7 | 0 | 292 | 6 | 22,430 | 606 | 702 | 0 | 18,677 | 2,445 | 2.7% | 3.1% | 2.7% | 1.4% | 0.0% |
+| `kap` | 38 | 311 | 12 | 7 | 0 | 292 | 0 | 22,430 | 606 | 702 | 0 | 18,677 | 2,445 | 2.7% | 3.1% | 2.7% | 0.0% | 0.0% |
 | `net` | 16 | 195 | 14 | 27 | 0 | 154 | 0 | 13,452 | 1,943 | 3,756 | 0 | 6,520 | 1,233 | 14.4% | 27.9% | 14.4% | 0.0% | 0.0% |
-| `rates` | 26 | 477 | 35 | 3 | 0 | 439 | 6 | 17,217 | 1,151 | 768 | 0 | 12,357 | 2,941 | 6.7% | 4.5% | 6.7% | 2.6% | 0.0% |
+| `rates` | 26 | 477 | 35 | 3 | 0 | 439 | 4 | 17,217 | 1,151 | 768 | 0 | 12,357 | 2,941 | 6.7% | 4.5% | 6.7% | 2.1% | 0.0% |
 | `neu` | 4 | 15 | 12 | 0 | 0 | 3 | 4 | 2,184 | 1,653 | 0 | 0 | 361 | 170 | 75.7% | 0.0% | 75.7% | 18.5% | 83.9% |
-| `atm` | 19 | 93 | 18 | 0 | 0 | 75 | 16 | 6,853 | 1,626 | 0 | 0 | 3,724 | 1,503 | 23.7% | 0.0% | 23.7% | 23.4% | 0.0% |
+| `atm` | 19 | 93 | 18 | 0 | 0 | 75 | 9 | 6,853 | 1,626 | 0 | 0 | 3,724 | 1,503 | 23.7% | 0.0% | 23.7% | 10.9% | 0.0% |
 | `turb` | 6 | 25 | 23 | 2 | 0 | 0 | 6 | 2,033 | 1,191 | 236 | 0 | 0 | 606 | 58.6% | 11.6% | 58.6% | 17.5% | 66.5% |
-| `chem` | 7 | 67 | 19 | 1 | 0 | 47 | 19 | 4,195 | 480 | 34 | 0 | 2,816 | 865 | 11.4% | 0.8% | 11.4% | 11.4% | 0.0% |
-| `ionization` | 22 | 67 | 4 | 0 | 0 | 63 | 1 | 3,859 | 37 | 0 | 0 | 3,018 | 804 | 1.0% | 0.0% | 1.0% | 0.2% | 0.0% |
-| `colors` | 10 | 89 | 12 | 1 | 0 | 76 | 4 | 3,823 | 314 | 88 | 0 | 2,753 | 668 | 8.2% | 2.3% | 8.2% | 2.7% | 0.0% |
-| `num` | 66 | 273 | 10 | 31 | 0 | 232 | 5 | 20,045 | 413 | 2,217 | 0 | 14,818 | 2,597 | 2.1% | 11.1% | 2.1% | 1.3% | 0.0% |
-| `mtx` | 23 | 163 | 28 | 9 | 0 | 126 | 24 | 5,802 | 624 | 269 | 0 | 4,254 | 655 | 10.8% | 4.6% | 10.8% | 9.8% | 0.0% |
-| `interp_1d` | 11 | 111 | 26 | 0 | 0 | 85 | 17 | 4,969 | 693 | 0 | 0 | 3,658 | 618 | 13.9% | 0.0% | 13.9% | 9.2% | 0.0% |
-| `interp_2d` | 10 | 82 | 11 | 7 | 0 | 64 | 8 | 13,565 | 958 | 471 | 0 | 11,626 | 510 | 7.1% | 3.5% | 7.1% | 2.2% | 0.9% |
+| `chem` | 7 | 67 | 19 | 1 | 0 | 47 | 4 | 4,195 | 480 | 34 | 0 | 2,816 | 865 | 11.4% | 0.8% | 11.4% | 3.3% | 0.0% |
+| `ionization` | 22 | 67 | 4 | 0 | 0 | 63 | 0 | 3,859 | 37 | 0 | 0 | 3,018 | 804 | 1.0% | 0.0% | 1.0% | 0.0% | 0.0% |
+| `colors` | 10 | 89 | 12 | 1 | 0 | 76 | 0 | 3,823 | 314 | 88 | 0 | 2,753 | 668 | 8.2% | 2.3% | 8.2% | 0.0% | 0.0% |
+| `num` | 66 | 273 | 10 | 31 | 0 | 232 | 3 | 20,045 | 413 | 2,217 | 0 | 14,818 | 2,597 | 2.1% | 11.1% | 2.1% | 0.3% | 0.0% |
+| `mtx` | 23 | 163 | 28 | 9 | 0 | 126 | 1 | 5,802 | 624 | 269 | 0 | 4,254 | 655 | 10.8% | 4.6% | 10.8% | 0.2% | 0.0% |
+| `interp_1d` | 11 | 111 | 26 | 0 | 0 | 85 | 8 | 4,969 | 693 | 0 | 0 | 3,658 | 618 | 13.9% | 0.0% | 13.9% | 4.7% | 0.0% |
+| `interp_2d` | 10 | 82 | 11 | 7 | 0 | 64 | 4 | 13,565 | 958 | 471 | 0 | 11,626 | 510 | 7.1% | 3.5% | 7.1% | 0.8% | 0.9% |
 | `auto_diff` | 10 | 927 | 0 | 0 | 0 | 927 | 0 | 14,353 | 0 | 0 | 0 | 10,306 | 4,047 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `math` | 6 | 35 | 0 | 0 | 0 | 35 | 0 | 936 | 0 | 0 | 0 | 485 | 451 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | `const` | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 256 | 0 | 0 | 0 | 48 | 208 | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
@@ -167,14 +167,14 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `astero/public/astero_lib.f90` | `astero` | partial | partial | 146 | 6 | 1 | 5 | 0 | 0 | 5 | 83 | 0 | 0 | 58 |
 | `atm/private/atm_irradiated.f90` | `atm` | partial | partial | 334 | 2 | 1 | 0 | 0 | 1 | 155 | 0 | 0 | 139 | 40 |
 | `atm/private/atm_t_tau_relations.f90` | `atm` | partial | partial | 367 | 11 | 3 | 0 | 0 | 3 | 106 | 0 | 0 | 205 | 56 |
-| `atm/private/atm_t_tau_uniform.f90` | `atm` | partial | partial | 702 | 6 | 2 | 0 | 0 | 2 | 345 | 0 | 0 | 310 | 47 |
-| `atm/private/atm_t_tau_varying.f90` | `atm` | partial | partial | 824 | 9 | 2 | 0 | 0 | 2 | 305 | 0 | 0 | 471 | 48 |
+| `atm/private/atm_t_tau_uniform.f90` | `atm` | partial | partial | 702 | 6 | 2 | 0 | 0 | 0 | 345 | 0 | 0 | 310 | 47 |
+| `atm/private/atm_t_tau_varying.f90` | `atm` | partial | partial | 824 | 9 | 2 | 0 | 0 | 0 | 305 | 0 | 0 | 471 | 48 |
 | `atm/private/atm_table.f90` | `atm` | partial | kernel_reference_vectors | 447 | 3 | 3 | 0 | 0 | 3 | 407 | 0 | 0 | 0 | 40 |
 | `atm/private/atm_utils.f90` | `atm` | partial | partial | 207 | 6 | 3 | 0 | 0 | 2 | 96 | 0 | 0 | 58 | 53 |
 | `atm/private/e2_pairs.dek` | `atm` | partial | - | 581 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 581 |
-| `atm/private/table_atm.f90` | `atm` | partial | partial | 684 | 8 | 1 | 0 | 0 | 1 | 196 | 0 | 0 | 448 | 40 |
+| `atm/private/table_atm.f90` | `atm` | partial | partial | 684 | 8 | 1 | 0 | 0 | 0 | 196 | 0 | 0 | 448 | 40 |
 | `atm/public/atm_def.f90` | `atm` | partial | - | 146 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 146 |
-| `atm/public/atm_lib.f90` | `atm` | partial | ported_unverified | 93 | 3 | 3 | 0 | 0 | 2 | 16 | 0 | 0 | 0 | 77 |
+| `atm/public/atm_lib.f90` | `atm` | partial | ported_unverified | 93 | 3 | 3 | 0 | 0 | 0 | 16 | 0 | 0 | 0 | 77 |
 | `auto_diff/private/auto_diff_real_15var_order1_module.f90` | `auto_diff` | partial | - | 1,132 | 101 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 714 | 418 |
 | `auto_diff/private/auto_diff_real_1var_order1_module.f90` | `auto_diff` | partial | - | 1,319 | 116 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 820 | 499 |
 | `auto_diff/private/auto_diff_real_2var_order1_module.f90` | `auto_diff` | partial | - | 1,545 | 117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,039 | 506 |
@@ -209,14 +209,14 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `chem/private/chem_isos_io.f90` | `chem` | partial | - | 233 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 200 | 33 |
 | `chem/private/lodders_mod.f90` | `chem` | partial | - | 106 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 76 | 30 |
 | `chem/private/nuclide_set_mod.f90` | `chem` | partial | - | 112 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 80 | 32 |
-| `chem/public/chem_def.f90` | `chem` | partial | partial | 2,654 | 22 | 2 | 0 | 0 | 2 | 35 | 0 | 0 | 2,052 | 567 |
-| `chem/public/chem_lib.f90` | `chem` | partial | partial | 717 | 24 | 17 | 1 | 0 | 17 | 445 | 34 | 0 | 90 | 148 |
-| `colors/private/bolometric.f90` | `colors` | partial | partial | 191 | 4 | 1 | 0 | 0 | 1 | 24 | 0 | 0 | 125 | 42 |
+| `chem/public/chem_def.f90` | `chem` | partial | partial | 2,654 | 22 | 2 | 0 | 0 | 0 | 35 | 0 | 0 | 2,052 | 567 |
+| `chem/public/chem_lib.f90` | `chem` | partial | partial | 717 | 24 | 17 | 1 | 0 | 4 | 445 | 34 | 0 | 90 | 148 |
+| `colors/private/bolometric.f90` | `colors` | partial | partial | 191 | 4 | 1 | 0 | 0 | 0 | 24 | 0 | 0 | 125 | 42 |
 | `colors/private/colors_utils.f90` | `colors` | partial | partial | 1,111 | 25 | 7 | 0 | 0 | 0 | 188 | 0 | 0 | 831 | 92 |
 | `colors/private/hermite_interp.f90` | `colors` | partial | - | 443 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 384 | 59 |
 | `colors/private/knn_interp.f90` | `colors` | partial | partial | 438 | 7 | 1 | 0 | 0 | 0 | 24 | 0 | 0 | 361 | 53 |
 | `colors/private/linear_interp.f90` | `colors` | partial | - | 342 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 290 | 52 |
-| `colors/private/synthetic.f90` | `colors` | partial | partial | 230 | 5 | 3 | 1 | 0 | 3 | 78 | 88 | 0 | 17 | 47 |
+| `colors/private/synthetic.f90` | `colors` | partial | partial | 230 | 5 | 3 | 1 | 0 | 0 | 78 | 88 | 0 | 17 | 47 |
 | `colors/public/colors_def.f90` | `colors` | partial | - | 319 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 176 | 143 |
 | `colors/public/colors_lib.f90` | `colors` | partial | - | 321 | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 246 | 75 |
 | `const/public/const_def.f90` | `const` | ported_unverified | - | 218 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 176 |
@@ -322,42 +322,42 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `gyre/gyre/src/search/discrim_m.fypp` | `gyre` | partial | ported_unverified | 77 | 1 | 1 | 0 | 0 | 0 | 18 | 0 | 0 | 0 | 59 |
 | `gyre/gyre/src/search/prox_search_m.fypp` | `gyre` | partial | partial | 352 | 4 | 2 | 1 | 0 | 0 | 87 | 168 | 0 | 31 | 66 |
 | `gyre/gyre/src/search/scan_m.fypp` | `gyre` | partial | partial | 336 | 4 | 2 | 1 | 0 | 0 | 160 | 52 | 0 | 62 | 62 |
-| `interp_1d/private/interp_1d_misc.f90` | `interp_1d` | partial | partial | 712 | 18 | 6 | 0 | 0 | 3 | 220 | 0 | 0 | 433 | 59 |
+| `interp_1d/private/interp_1d_misc.f90` | `interp_1d` | partial | partial | 712 | 18 | 6 | 0 | 0 | 2 | 220 | 0 | 0 | 433 | 59 |
 | `interp_1d/private/interp_1d_mp.f90` | `interp_1d` | partial | - | 388 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 353 | 35 |
 | `interp_1d/private/interp_1d_mp_autodiff.f90` | `interp_1d` | partial | - | 391 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 355 | 36 |
 | `interp_1d/private/interp_1d_pm.f90` | `interp_1d` | partial | partial | 458 | 5 | 1 | 0 | 0 | 0 | 111 | 0 | 0 | 299 | 48 |
 | `interp_1d/private/interp_1d_pm_autodiff.f90` | `interp_1d` | partial | - | 468 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 419 | 49 |
 | `interp_1d/public/interp_1d_def.f90` | `interp_1d` | partial | - | 34 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 34 |
-| `interp_1d/public/interp_1d_lib.f90` | `interp_1d` | partial | partial | 894 | 41 | 19 | 0 | 0 | 14 | 362 | 0 | 0 | 395 | 137 |
+| `interp_1d/public/interp_1d_lib.f90` | `interp_1d` | partial | partial | 894 | 41 | 19 | 0 | 0 | 6 | 362 | 0 | 0 | 395 | 137 |
 | `interp_2d/private/akima760_db.f` | `interp_2d` | partial | partial | 1,217 | 5 | 1 | 0 | 0 | 0 | 483 | 0 | 0 | 726 | 8 |
-| `interp_2d/private/bicub_db.f` | `interp_2d` | partial | partial | 3,487 | 17 | 3 | 2 | 0 | 1 | 319 | 421 | 0 | 2,623 | 124 |
+| `interp_2d/private/bicub_db.f` | `interp_2d` | partial | partial | 3,487 | 17 | 3 | 2 | 0 | 0 | 319 | 421 | 0 | 2,623 | 124 |
 | `interp_2d/private/bipm_db.f90` | `interp_2d` | ported_unverified | kernel_reference_vectors | 120 | 2 | 2 | 0 | 0 | 2 | 90 | 0 | 0 | 0 | 30 |
 | `interp_2d/private/renka790_db.f` | `interp_2d` | partial | - | 1,854 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,852 | 2 |
-| `interp_2d/public/interp_2d_lib_db.f90` | `interp_2d` | partial | partial | 226 | 10 | 5 | 5 | 0 | 5 | 66 | 50 | 0 | 0 | 110 |
+| `interp_2d/public/interp_2d_lib_db.f90` | `interp_2d` | partial | partial | 226 | 10 | 5 | 5 | 0 | 2 | 66 | 50 | 0 | 0 | 110 |
 | `ionization/private/ion_tables_eval.f90` | `ionization` | partial | - | 576 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 530 | 46 |
 | `ionization/private/ion_tables_load.f90` | `ionization` | partial | - | 556 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 510 | 46 |
 | `ionization/private/mod_ionization.f90` | `ionization` | partial | partial | 237 | 8 | 2 | 0 | 0 | 0 | 15 | 0 | 0 | 176 | 46 |
 | `ionization/public/ionization_def.f90` | `ionization` | partial | - | 172 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 51 | 121 |
-| `ionization/public/ionization_lib.f90` | `ionization` | partial | partial | 92 | 5 | 2 | 0 | 0 | 1 | 22 | 0 | 0 | 28 | 42 |
-| `kap/private/condint.f90` | `kap` | partial | partial | 449 | 5 | 2 | 0 | 0 | 1 | 121 | 0 | 0 | 279 | 49 |
+| `ionization/public/ionization_lib.f90` | `ionization` | partial | partial | 92 | 5 | 2 | 0 | 0 | 0 | 22 | 0 | 0 | 28 | 42 |
+| `kap/private/condint.f90` | `kap` | partial | partial | 449 | 5 | 2 | 0 | 0 | 0 | 121 | 0 | 0 | 279 | 49 |
 | `kap/private/cubic_interpolator.f90` | `kap` | partial | - | 185 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 130 | 55 |
 | `kap/private/kap_aesopus.f90` | `kap` | partial | partial | 608 | 9 | 0 | 1 | 0 | 0 | 0 | 24 | 0 | 528 | 56 |
 | `kap/private/kap_ctrls_io.f90` | `kap` | partial | - | 527 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 374 | 153 |
-| `kap/private/kap_eval.f90` | `kap` | partial | partial | 874 | 6 | 1 | 3 | 0 | 1 | 80 | 433 | 0 | 313 | 48 |
-| `kap/private/kap_eval_co.f90` | `kap` | partial | partial | 1,241 | 17 | 1 | 0 | 0 | 1 | 126 | 0 | 0 | 1,063 | 52 |
+| `kap/private/kap_eval.f90` | `kap` | partial | partial | 874 | 6 | 1 | 3 | 0 | 0 | 80 | 433 | 0 | 313 | 48 |
+| `kap/private/kap_eval_co.f90` | `kap` | partial | partial | 1,241 | 17 | 1 | 0 | 0 | 0 | 126 | 0 | 0 | 1,063 | 52 |
 | `kap/private/kap_eval_fixed.f90` | `kap` | partial | partial | 762 | 9 | 0 | 1 | 0 | 0 | 0 | 133 | 0 | 579 | 50 |
 | `kap/private/kap_eval_support.f90` | `kap` | partial | partial | 311 | 4 | 3 | 0 | 0 | 0 | 166 | 0 | 0 | 104 | 41 |
-| `kap/private/kapcn.f90` | `kap` | partial | partial | 441 | 10 | 1 | 0 | 0 | 1 | 23 | 0 | 0 | 347 | 71 |
+| `kap/private/kapcn.f90` | `kap` | partial | partial | 441 | 10 | 1 | 0 | 0 | 0 | 23 | 0 | 0 | 347 | 71 |
 | `kap/private/load_co_kap.f90` | `kap` | partial | partial | 913 | 15 | 1 | 0 | 0 | 0 | 4 | 0 | 0 | 850 | 59 |
 | `kap/private/load_kap.f90` | `kap` | partial | - | 765 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 710 | 55 |
 | `kap/public/kap_def.f90` | `kap` | partial | partial | 834 | 11 | 1 | 0 | 0 | 0 | 22 | 0 | 0 | 298 | 514 |
-| `kap/public/kap_lib.f90` | `kap` | partial | partial | 868 | 26 | 2 | 2 | 0 | 2 | 64 | 112 | 0 | 521 | 171 |
+| `kap/public/kap_lib.f90` | `kap` | partial | partial | 868 | 26 | 2 | 2 | 0 | 0 | 64 | 112 | 0 | 521 | 171 |
 | `math/private/math_pown.f90` | `math` | partial | - | 143 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 64 | 79 |
 | `math/public/math_def.f90` | `math` | partial | - | 49 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 49 |
 | `math/public/math_lib_intrinsic.f90` | `math` | partial | - | 324 | 16 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 164 | 160 |
 | `math/public/precompute_zs.inc` | `math` | partial | - | 52 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 52 | 0 |
-| `mtx/private/bcyclic.f90` | `mtx` | partial | partial | 603 | 9 | 2 | 0 | 0 | 2 | 219 | 0 | 0 | 320 | 64 |
-| `mtx/private/mtx_support.f90` | `mtx` | partial | partial | 1,099 | 32 | 4 | 3 | 0 | 4 | 85 | 180 | 0 | 733 | 101 |
+| `mtx/private/bcyclic.f90` | `mtx` | partial | partial | 603 | 9 | 2 | 0 | 0 | 0 | 219 | 0 | 0 | 320 | 64 |
+| `mtx/private/mtx_support.f90` | `mtx` | partial | partial | 1,099 | 32 | 4 | 3 | 0 | 0 | 85 | 180 | 0 | 733 | 101 |
 | `mtx/private/my_lapack95.f90` | `mtx` | partial | - | 1,414 | 24 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,338 | 76 |
 | `mtx/public/mtx_bcyclic_dble_decsol.dek` | `mtx` | partial | - | 45 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 41 | 4 |
 | `mtx/public/mtx_dble_decsol.dek` | `mtx` | partial | - | 264 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 244 | 20 |
@@ -369,10 +369,10 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `mtx/public/mtx_decsolcs.dek` | `mtx` | partial | - | 13 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 1 |
 | `mtx/public/mtx_decsols.dek` | `mtx` | partial | - | 14 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 |
 | `mtx/public/mtx_def.f90` | `mtx` | partial | - | 39 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 39 |
-| `mtx/public/mtx_formats.dek` | `mtx` | partial | partial | 429 | 24 | 18 | 1 | 0 | 14 | 270 | 10 | 0 | 98 | 51 |
+| `mtx/public/mtx_formats.dek` | `mtx` | partial | partial | 429 | 24 | 18 | 1 | 0 | 0 | 270 | 10 | 0 | 98 | 51 |
 | `mtx/public/mtx_jac.dek` | `mtx` | partial | - | 137 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 133 | 4 |
 | `mtx/public/mtx_lapack95.dek` | `mtx` | partial | - | 16 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 15 | 1 |
-| `mtx/public/mtx_lib.f90` | `mtx` | partial | partial | 340 | 15 | 4 | 5 | 0 | 4 | 50 | 79 | 0 | 78 | 133 |
+| `mtx/public/mtx_lib.f90` | `mtx` | partial | partial | 340 | 15 | 4 | 5 | 0 | 1 | 50 | 79 | 0 | 78 | 133 |
 | `mtx/public/mtx_null_decsol.dek` | `mtx` | partial | - | 63 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 53 | 10 |
 | `mtx/public/mtx_rcond.dek` | `mtx` | partial | - | 62 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 57 | 5 |
 | `mtx/public/mtx_solve_routines.inc` | `mtx` | partial | - | 694 | 21 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 650 | 44 |
@@ -400,7 +400,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `num/private/decomr.dek` | `num` | partial | - | 349 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 349 | 0 |
 | `num/private/decsol_done.dek` | `num` | partial | - | 138 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 138 | 0 |
 | `num/private/mod_bobyqa.f` | `num` | partial | partial | 2,243 | 7 | 0 | 1 | 0 | 0 | 0 | 132 | 0 | 2,092 | 19 |
-| `num/private/mod_brent.f90` | `num` | partial | partial | 707 | 3 | 1 | 1 | 0 | 1 | 193 | 248 | 0 | 247 | 19 |
+| `num/private/mod_brent.f90` | `num` | partial | partial | 707 | 3 | 1 | 1 | 0 | 0 | 193 | 248 | 0 | 247 | 19 |
 | `num/private/mod_dc_decsol.f` | `num` | partial | - | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 |
 | `num/private/mod_dop853.f` | `num` | partial | partial | 836 | 4 | 0 | 1 | 0 | 0 | 0 | 180 | 0 | 622 | 34 |
 | `num/private/mod_dopri5.f` | `num` | partial | partial | 645 | 5 | 0 | 1 | 0 | 0 | 0 | 170 | 0 | 436 | 39 |
@@ -422,7 +422,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `num/public/num_binary_search.dek` | `num` | partial | partial | 259 | 3 | 0 | 1 | 0 | 0 | 0 | 78 | 0 | 156 | 25 |
 | `num/public/num_bobyqa.dek` | `num` | partial | partial | 106 | 1 | 0 | 1 | 0 | 0 | 0 | 13 | 0 | 0 | 93 |
 | `num/public/num_bobyqa_proc.dek` | `num` | partial | - | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 |
-| `num/public/num_brent.dek` | `num` | partial | partial | 225 | 3 | 1 | 2 | 0 | 1 | 13 | 30 | 0 | 0 | 182 |
+| `num/public/num_brent.dek` | `num` | partial | partial | 225 | 3 | 1 | 2 | 0 | 0 | 13 | 30 | 0 | 0 | 182 |
 | `num/public/num_def.f90` | `num` | partial | - | 220 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 220 |
 | `num/public/num_dfridr.dek` | `num` | partial | partial | 55 | 1 | 0 | 1 | 0 | 0 | 0 | 55 | 0 | 0 | 0 |
 | `num/public/num_dfx.dek` | `num` | partial | - | 10 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
@@ -466,7 +466,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `rates/private/load_ecapture.f90` | `rates` | partial | - | 353 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 315 | 38 |
 | `rates/private/load_weak.f90` | `rates` | partial | - | 710 | 16 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 668 | 42 |
 | `rates/private/pycno.f90` | `rates` | partial | kernel_reference_vectors | 308 | 1 | 1 | 0 | 0 | 1 | 276 | 0 | 0 | 0 | 32 |
-| `rates/private/ratelib.f90` | `rates` | partial | partial | 4,619 | 220 | 29 | 0 | 0 | 1 | 761 | 0 | 0 | 3,014 | 844 |
+| `rates/private/ratelib.f90` | `rates` | partial | partial | 4,619 | 220 | 29 | 0 | 0 | 0 | 761 | 0 | 0 | 3,014 | 844 |
 | `rates/private/rates_initialize.f90` | `rates` | partial | - | 1,422 | 44 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1,354 | 68 |
 | `rates/private/rates_names.f90` | `rates` | partial | - | 368 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 335 | 33 |
 | `rates/private/rates_reverses.f90` | `rates` | partial | - | 173 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 142 | 31 |
@@ -482,7 +482,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `rates/private/weak_support.f90` | `rates` | partial | - | 85 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 57 | 28 |
 | `rates/private/weaklib_tables.f90` | `rates` | partial | - | 514 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 456 | 58 |
 | `rates/public/rates_def.f90` | `rates` | partial | - | 1,295 | 24 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 377 | 918 |
-| `rates/public/rates_lib.f90` | `rates` | partial | partial | 974 | 55 | 3 | 1 | 0 | 2 | 64 | 44 | 0 | 720 | 146 |
+| `rates/public/rates_lib.f90` | `rates` | partial | partial | 974 | 55 | 3 | 1 | 0 | 1 | 64 | 44 | 0 | 720 | 146 |
 | `star/job/other_extras.f90` | `star` | partial | partial | 207 | 10 | 5 | 4 | 1 | 0 | 64 | 56 | 24 | 0 | 63 |
 | `star/job/run_star.f90` | `star` | ported_unverified | ported_unverified | 48 | 1 | 1 | 0 | 0 | 0 | 22 | 0 | 0 | 0 | 26 |
 | `star/job/run_star_support.f90` | `star` | partial | partial | 3,705 | 49 | 6 | 13 | 14 | 0 | 220 | 1,823 | 299 | 1,218 | 145 |

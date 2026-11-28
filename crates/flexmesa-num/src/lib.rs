@@ -74,7 +74,9 @@ pub use newton::{
     newton_solve_banded, newton_solve_block_tridiagonal, newton_solve_dense,
     NewtonConfig, NewtonResult,
 };
-pub use newuoa::{newuoa, NewuoaResult};
+pub use newuoa::{
+    newuoa, newuoa_with_workspace, newuoa_workspace_len, NewuoaResult,
+};
 pub use quadrature::{dfridr, integrate};
 pub use rk::{dop853, dopri5, rk2, rk4, DopriResult};
 pub use root::{

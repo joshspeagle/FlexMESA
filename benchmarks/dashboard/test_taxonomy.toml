@@ -1115,10 +1115,17 @@ tolerance = "1e-10"
 routines = [
   "star/private/diffusion.f90::do_solve_diffusion",
   "star/private/diffusion_support.f90::get_matrix_coeffs",
+  "star/private/phase_separation.f90::do_phase_separation",
+]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/diffusion_oracles/gen_diffusion_oracles.f90"
+precision = "exact"
+routines = [
   "star/private/paquette_coeffs.f90::free_collision_integrals",
   "star/private/paquette_coeffs.f90::initialise_collision_integrals",
   "star/private/paquette_coeffs.f90::paquette_coefficients",
-  "star/private/phase_separation.f90::do_phase_separation",
 ]
 
 [[tests]]

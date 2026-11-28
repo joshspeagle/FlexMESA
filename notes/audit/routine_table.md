@@ -27,17 +27,17 @@ Every routine is at one level. Lines are credited to a routine for its own lines
 | Lines in not-applicable routines | 2,550 |
 | Lines in unmapped routines | 44,648 |
 | Lines outside routines | 21,618 |
-| Lines in routines with exact oracle evidence | 1,377 |
-| Lines in routines with print-precision oracle evidence only | 1,636 |
+| Lines in routines with exact oracle evidence | 2,033 |
+| Lines in routines with print-precision oracle evidence only | 980 |
 | Line-weighted full-mapping fraction (all lines) | 21.9% |
 | Line-weighted partial-mapping fraction (all lines) | 30.6% |
 | Full-mapping fraction excluding not-applicable lines | 22.3% |
 | Partial-mapping fraction excluding not-applicable lines | 31.1% |
 | Not-applicable fraction of all lines | 1.8% |
-| Line-weighted oracle fraction (exact / print) | 0.9% / 1.1% |
+| Line-weighted oracle fraction (exact / print) | 1.4% / 0.7% |
 | Whole-file ported fraction (existing headline) | 31.1% |
 | Routines (full / partial / N/A / unmapped / total) | 635 / 494 / 107 / 1,352 / 2,588 |
-| Routines with oracle evidence (exact / print) | 10 / 8 |
+| Routines with oracle evidence (exact / print) | 13 / 5 |
 
 The fractions answer different questions. The whole-file figure counts every line of a file whose hand-set status is ported; the line-weighted figures count only the own lines of routines that carry the named evidence. Neither is a statement about agreement with MESA.
 
@@ -45,7 +45,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 
 | Module | Files | Routines | Full | Partial | N/A | Unmapped | Oracle (exact / print) | Upstream lines | Lines full | Lines partial | Lines N/A | Lines unmapped | Outside routines | Full | Partial | Full excl. N/A | Oracle (exact / print) | Whole-file ported |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 10 / 8 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 1.1% / 1.4% | 35.6% |
+| `star` | 173 | 2,176 | 556 | 364 | 73 | 1,183 | 13 / 5 | 120,509 | 29,403 | 36,813 | 1,858 | 39,777 | 12,658 | 24.4% | 30.5% | 24.8% | 1.7% / 0.8% | 35.6% |
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 / 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 / 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% / 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 / 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% / 0.0% | 0.0% |
@@ -538,7 +538,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `star/private/overshoot_exp.f90` | `star` | ported_unverified | ported_unverified | 176 | 1 | 1 | 0 | 0 | 0 / 0 | 143 | 0 | 0 | 0 | 33 |
 | `star/private/overshoot_step.f90` | `star` | ported_unverified | ported_unverified | 162 | 1 | 1 | 0 | 0 | 0 / 0 | 129 | 0 | 0 | 0 | 33 |
 | `star/private/overshoot_utils.f90` | `star` | ported_unverified | ported_unverified | 376 | 4 | 4 | 0 | 0 | 2 / 0 | 334 | 0 | 0 | 0 | 42 |
-| `star/private/paquette_coeffs.f90` | `star` | ported_unverified | ported_unverified | 721 | 3 | 3 | 0 | 0 | 0 / 3 | 656 | 0 | 0 | 0 | 65 |
+| `star/private/paquette_coeffs.f90` | `star` | ported_unverified | kernel_reference_vectors | 721 | 3 | 3 | 0 | 0 | 3 / 0 | 656 | 0 | 0 | 0 | 65 |
 | `star/private/phase_separation.f90` | `star` | kernel_reference_vectors | partial | 400 | 7 | 1 | 0 | 0 | 0 / 1 | 14 | 0 | 0 | 340 | 46 |
 | `star/private/photo_in.f90` | `star` | partial | partial | 320 | 3 | 0 | 1 | 2 | 0 / 0 | 0 | 269 | 19 | 0 | 32 |
 | `star/private/photo_out.f90` | `star` | partial | partial | 179 | 2 | 0 | 1 | 1 | 0 / 0 | 0 | 142 | 5 | 0 | 32 |

@@ -18,6 +18,7 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{MixingType, AMU, L_SUN, ME, M_SUN, PI4, STANDARD_CGRAV};
 use flexmesa_eos::{SkyeSolidMixingRule, I_PHASE};
 use flexmesa_kap::KapConfig;
+use flexmesa_math::{with_numerics_mode, NumericsMode};
 use flexmesa_star::diffusion::{
     do_solve_diffusion, eval_caplan_ocp_dstar, SolveDiffusionInput,
     SolveDiffusionOutput,
@@ -134,6 +135,18 @@ fn assert_close(label: &str, got: f64, want: f64, rtol: f64, atol: f64) {
     );
 }
 
+fn assert_bits_eq(label: &str, got: f64, want: f64) {
+    let got_bits = got.to_bits();
+    let want_bits = want.to_bits();
+    assert_eq!(
+        got_bits,
+        want_bits,
+        "{label}: got={got:.17e} (0x{got_bits:016X}), \
+         want={want:.17e} (0x{want_bits:016X}), ulp_diff={}",
+        got_bits.abs_diff(want_bits),
+    );
+}
+
 #[test]
 fn test_paquette_coefficients_match_mesa_26_4_1_oracles() {
     let oracles = load_oracles();
@@ -148,67 +161,71 @@ fn test_paquette_coefficients_match_mesa_26_4_1_oracles() {
         ("co_wd_high_psi", 2.0e5, 1.5e7, [1.0e-4, 0.0999, 0.45, 0.45]),
     ];
 
-    for (cid, rho, temp, xs) in cases {
-        let mut na1 = [0.0_f64; 5];
-        let mut ne_sum = 0.0_f64;
-        for i in 0..4 {
-            na1[i] = rho * xs[i] / (can1[i] * AMU);
-            ne_sum += kzn1[i] * na1[i];
-        }
-        na1[4] = ne_sum;
+    with_numerics_mode(NumericsMode::Strict, || {
+        for (cid, rho, temp, xs) in cases {
+            let mut na1 = [0.0_f64; 5];
+            let mut ne_sum = 0.0_f64;
+            for i in 0..4 {
+                na1[i] = rho * xs[i] / (can1[i] * AMU);
+                ne_sum += kzn1[i] * na1[i];
+            }
+            na1[4] = ne_sum;
 
-        let mut ddiff = vec![0.0_f64; nn * nn];
-        let mut kdiff = vec![0.0_f64; nn * nn];
-        let mut zdiff = vec![0.0_f64; nn * nn];
-        let mut zdiff1 = vec![0.0_f64; nn * nn];
-        let mut zdiff2 = vec![0.0_f64; nn * nn];
-        let mut ath = vec![0.0_f64; nn * nn];
+            let mut ddiff = vec![0.0_f64; nn * nn];
+            let mut kdiff = vec![0.0_f64; nn * nn];
+            let mut zdiff = vec![0.0_f64; nn * nn];
+            let mut zdiff1 = vec![0.0_f64; nn * nn];
+            let mut zdiff2 = vec![0.0_f64; nn * nn];
+            let mut ath = vec![0.0_f64; nn * nn];
 
-        paquette_coefficients(
-            rho,
-            temp,
-            nn,
-            &can1,
-            &kzn1,
-            &na1,
-            &mut ddiff,
-            &mut kdiff,
-            &mut zdiff,
-            &mut zdiff1,
-            &mut zdiff2,
-            &mut ath,
-        );
+            paquette_coefficients(
+                rho,
+                temp,
+                nn,
+                &can1,
+                &kzn1,
+                &na1,
+                &mut ddiff,
+                &mut kdiff,
+                &mut zdiff,
+                &mut zdiff1,
+                &mut zdiff2,
+                &mut ath,
+            );
 
-        for i in 0..nn {
-            for j in 0..nn {
-                let idx = i * nn + j;
-                for (fld, arr) in [
-                    ("Ddiff", &ddiff),
-                    ("Kdiff", &kdiff),
-                    ("Zdiff", &zdiff),
-                    ("Zdiff1", &zdiff1),
-                    ("Zdiff2", &zdiff2),
-                    ("Ath", &ath),
-                ] {
-                    let want = oracle_val(
-                        &oracles,
-                        "paquette",
-                        cid,
-                        fld,
-                        i + 1,
-                        j + 1,
-                    );
-                    assert_close(
-                        &format!("paquette/{cid}/{fld}[{},{}]", i + 1, j + 1),
-                        arr[idx],
-                        want,
-                        1.0e-13,
-                        1.0e-30,
-                    );
+            for i in 0..nn {
+                for j in 0..nn {
+                    let idx = i * nn + j;
+                    for (fld, arr) in [
+                        ("Ddiff", &ddiff),
+                        ("Kdiff", &kdiff),
+                        ("Zdiff", &zdiff),
+                        ("Zdiff1", &zdiff1),
+                        ("Zdiff2", &zdiff2),
+                        ("Ath", &ath),
+                    ] {
+                        let want = oracle_val(
+                            &oracles,
+                            "paquette",
+                            cid,
+                            fld,
+                            i + 1,
+                            j + 1,
+                        );
+                        assert_bits_eq(
+                            &format!(
+                                "paquette/{cid}/{fld}[{},{}]",
+                                i + 1,
+                                j + 1
+                            ),
+                            arr[idx],
+                            want,
+                        );
+                    }
                 }
             }
         }
-    }
+    });
 }
 
 #[test]

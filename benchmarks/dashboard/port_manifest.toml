@@ -7160,7 +7160,10 @@ upstream_lines = 309
 upstream_sha256 = "0ae97adff443cc034f38e410ddd6efc6f487a4e85cca8f17cb9af3c28fa8614d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["eval_screen_chugunov"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_screen_chugunov" = "crates/flexmesa-rates/src/screen_chugunov.rs::screen_chugunov" # partial: arithmetic matches; also returns unscreened for temp <= 0 or den <= 0 (#739)
 
 [[files]]
 upstream_path = "rates/private/suzuki_tables.f90"

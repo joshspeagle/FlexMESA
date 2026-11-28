@@ -465,7 +465,11 @@ routines = [
 reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
 recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
 precision = "exact"
-routines = ["eos/private/ion_offset.f90::compute_ion_offset"]
+routines = [
+  "eos/private/ideal.f90::get_ideal_eos_results",
+  "eos/private/ideal.f90::get_ideal_for_eosdt",
+  "eos/private/ion_offset.f90::compute_ion_offset",
+]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs"

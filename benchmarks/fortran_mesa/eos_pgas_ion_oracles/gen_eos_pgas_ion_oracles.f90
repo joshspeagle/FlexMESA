@@ -17,6 +17,7 @@ program gen_eos_pgas_ion_oracles
    use eos_def, only: num_eos_basic_results, num_eos_d_dxa_results, i_lnPgas, i_lnE
    use eos_lib, only: eos_init, eos_shutdown, alloc_eos_handle, free_eos_handle, eosPT_get
    use eosPT_eval, only: get_Pgas
+   use ideal, only: get_ideal_for_eosdt
    use ion_offset, only: compute_ion_offset
    implicit none
 
@@ -46,7 +47,7 @@ program gen_eos_pgas_ion_oracles
 
    open(newunit=u, file=trim(out_path), status='replace', action='write', iostat=ierr)
    if (ierr /= 0) stop 'failed to open output TSV'
-   write(u, '(A)') '# FlexMESA MESA 26.4.1 eosPT_eval::get_Pgas / ion_offset::compute_ion_offset oracle vectors (#161, DECISIONS #80)'
+   write(u, '(A)') '# FlexMESA MESA 26.4.1 eos exact oracle vectors (#161, DECISIONS #80)'
    write(u, '(A)') '# mesa_version: ' // trim(adjustl(mesa_ver))
    write(u, '(A)') '# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd'
    write(u, '(A)') '# mesasdk_version: ' // trim(adjustl(sdk_ver))
@@ -59,10 +60,11 @@ program gen_eos_pgas_ion_oracles
    rc = 0
    call emit_ion_offset_cases(u, rc)
    call emit_get_pgas_case(u, rc)
+   call emit_ideal_case(u, rc)
    close(u)
    call eos_shutdown()
    call chem_shutdown()
-   write(*, '(A,I0,A)') 'Wrote ', rc, ' eos get_Pgas / compute_ion_offset oracle rows.'
+   write(*, '(A,I0,A)') 'Wrote ', rc, ' eos_pgas_ion_oracles rows.'
 
 contains
 
@@ -215,5 +217,60 @@ contains
       call free_eos_handle(eh)
       deallocate(cid7, niso7)
    end subroutine emit_get_pgas_case
+
+   subroutine emit_ideal_case(unit_no, rc)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      character(len=8), parameter :: names(3) = ['h1      ', 'he4     ', 'c12     ']
+      integer, pointer :: cid3(:), niso3(:)
+      real(dp) :: xa3(3), x_c, y_c, z_c, abar_c, zbar_c, z2bar_c, z53bar_c, ye_c, mc_c, sx_c
+      real(dp) :: res(num_eos_basic_results), dlnd(num_eos_basic_results), dlnt(num_eos_basic_results)
+      real(dp) :: ddxa_eos(num_eos_basic_results, 3)
+      real(dp) :: temp_in, rho_in
+      integer :: eh, k, ierr_loc
+      logical :: skip
+      character(len=8) :: fld
+
+      allocate(cid3(3), niso3(num_chem_isos))
+      niso3 = 0
+      do k = 1, 3
+         cid3(k) = chem_get_iso_id(names(k))
+         if (cid3(k) <= 0) stop 'ideal 3sp isotope not found'
+         niso3(cid3(k)) = k
+      end do
+      xa3 = [0.70_dp, 0.28_dp, 0.02_dp]
+      call basic_composition_info(3, cid3, xa3, x_c, y_c, z_c, &
+         abar_c, zbar_c, z2bar_c, z53bar_c, ye_c, mc_c, sx_c)
+
+      temp_in = 1.0e5_dp
+      rho_in = 1.0e-2_dp
+      eh = alloc_eos_handle(ierr_loc)
+      if (ierr_loc /= 0) stop 'ideal alloc_eos_handle failed'
+
+      res = 0.0_dp; dlnd = 0.0_dp; dlnt = 0.0_dp; ddxa_eos = 0.0_dp
+      call get_ideal_for_eosdt(eh, .false., z_c, x_c, abar_c, zbar_c, &
+         3, cid3, niso3, xa3, rho_in, log10(rho_in), temp_in, log10(temp_in), 1.0_dp, &
+         res, dlnd, dlnt, ddxa_eos, skip, ierr_loc)
+      if (ierr_loc /= 0 .or. skip) stop 'get_ideal_for_eosdt failed'
+
+      call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'in', 'T', 'val', temp_in)
+      call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'in', 'Rho', 'val', rho_in)
+      call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'in', 'abar', 'val', abar_c)
+      call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'in', 'zbar', 'val', zbar_c)
+      do k = 1, 3
+         write(fld, '(A,I0)') 'xa_', k - 1
+         call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'in', trim(fld), 'val', xa3(k))
+      end do
+
+      do k = 1, num_eos_basic_results
+         write(fld, '(A,I0)') 'res_', k - 1
+         call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'out', trim(fld), 'val', res(k))
+         call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'out', trim(fld), 'd_dlnd', dlnd(k))
+         call emit(unit_no, rc, 'ideal_solar_1e5_1em2', 'out', trim(fld), 'd_dlnT', dlnt(k))
+      end do
+
+      call free_eos_handle(eh)
+      deallocate(cid3, niso3)
+   end subroutine emit_ideal_case
 
 end program gen_eos_pgas_ion_oracles

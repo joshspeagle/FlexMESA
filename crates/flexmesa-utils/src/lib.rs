@@ -288,7 +288,7 @@ pub fn remove_underbars(s: &str) -> String {
 ///
 /// Upstream reads `line(k:k)` with `k > len(line)` when `line` holds fewer
 /// than `num` tokens (or is empty), outside the string, which has no defined
-/// value (DECISIONS #43, #665). That returns an error.
+/// value (DECISIONS #43, deferred #681). That returns an error.
 pub fn split_line(line: &str, num: usize) -> Result<Vec<String>, String> {
     let bytes = line.as_bytes();
     let len = bytes.len();
@@ -296,7 +296,7 @@ pub fn split_line(line: &str, num: usize) -> Result<Vec<String>, String> {
         bytes.get(k - 1).copied().ok_or_else(|| {
             format!(
                 "split_line reads line({k}:{k}) past len(line) = {len} \
-                 (utils/public/utils_lib.f90:1120-1128, #665)"
+                 (utils/public/utils_lib.f90:1120-1128, #681)"
             )
         })
     };
@@ -334,6 +334,9 @@ pub const MAXLEN_KEY_STRING: usize = 50;
 /// its first 50 bytes without trailing blanks, a lookup key matches when it
 /// equals that after removing trailing blanks (tabs are significant), and a
 /// lookup key longer than 50 bytes after that never matches (#665).
+/// Upstream's comment `error if len_trim(key) > maxlen_key_string`
+/// (`utils/public/utils_lib.f90:677, 687`) is not implemented upstream;
+/// the truncation is reproduced (deferred #677).
 ///
 /// # Examples
 /// ```
@@ -501,6 +504,49 @@ pub enum Token {
     Eof,
 }
 
+/// Formatted records of a text file as the gfortran runtime reads them:
+/// a record ends at `\n`, at `\r\n` or at a lone `\r`, and the terminator
+/// is not part of the record. A final record without a terminator is still a
+/// record; a terminator at the very end does not start an empty one.
+#[derive(Debug, Clone)]
+pub struct Records<'a> {
+    rest: &'a str,
+}
+
+impl<'a> Records<'a> {
+    /// Records of `input`.
+    #[must_use]
+    pub const fn new(input: &'a str) -> Self {
+        Self { rest: input }
+    }
+}
+
+impl<'a> Iterator for Records<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        if self.rest.is_empty() {
+            return None;
+        }
+        let bytes = self.rest.as_bytes();
+        let Some(end) = bytes.iter().position(|&c| c == b'\n' || c == b'\r')
+        else {
+            let record = self.rest;
+            self.rest = "";
+            return Some(record);
+        };
+        let record = &self.rest[..end];
+        let skip = if bytes[end] == b'\r' && bytes.get(end + 1) == Some(&b'\n')
+        {
+            2
+        } else {
+            1
+        };
+        self.rest = &self.rest[end + skip..];
+        Some(record)
+    }
+}
+
 /// Line buffer and string length the `.net` reader passes to `token`
 /// (`character (len=256)`, `net/private/net_initialize.f90:276`).
 pub const TOKEN_BUFFER_LEN: usize = 256;
@@ -508,8 +554,11 @@ pub const TOKEN_BUFFER_LEN: usize = 256;
 /// Stateful stream tokenizer, `token` (`utils/public/utils_lib.f90:567-667`)
 /// transcribed on bytes (#665).
 ///
-/// Each line is read into a buffer of `buffer_len` bytes (a longer line is
-/// cut), and `n = len_trim(buffer)` drops trailing blanks only. At the start
+/// Each record is read into a buffer of `buffer_len` bytes (a longer record
+/// is cut), and `n = len_trim(buffer)` drops trailing blanks only. Records
+/// end where the gfortran runtime ends a formatted record: at `\n`, at
+/// `\r\n` and at a lone `\r` (compiler runtime behaviour of the MESA SDK's
+/// gfortran 15.2.0, not MESA source), so a CR is never in the buffer. At the start
 /// of a token, tabs, blanks and `&` are skipped and `!` ends the line;
 /// `(`, `)` and `,` are single tokens; a quote starts a string that runs to
 /// the matching quote or the end of the line, cut to `string_len`; anything
@@ -518,7 +567,7 @@ pub const TOKEN_BUFFER_LEN: usize = 256;
 /// Returned names and strings omit the Fortran blank padding.
 #[derive(Debug, Clone)]
 pub struct Tokenizer<'a> {
-    lines: std::str::SplitTerminator<'a, char>,
+    lines: Records<'a>,
     buffer: &'a [u8],
     n: usize,
     i: usize,
@@ -543,7 +592,7 @@ impl<'a> Tokenizer<'a> {
         string_len: usize,
     ) -> Self {
         Self {
-            lines: input.split_terminator('\n'),
+            lines: Records::new(input),
             buffer: &[],
             n: 0,
             i: 0,

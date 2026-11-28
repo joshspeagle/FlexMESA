@@ -251,6 +251,26 @@ fn tokenizer_follows_upstream_token() {
     assert_eq!(short.next_token(), Token::Eof);
 }
 
+/// Records end at `\n`, `\r\n` and a lone `\r`, as gfortran's formatted
+/// read does (MESA SDK gfortran 15.2.0: `ab\r\n`, `cd \r\n`, `xy\rzz\n`
+/// read as `ab`, `cd`, `xy`, `zz`), so a CR is never part of a name.
+#[test]
+fn tokenizer_records_end_at_lf_crlf_and_lone_cr() {
+    assert_eq!(
+        tokenize("ab\r\ncd \r\nxy\rzz\n"),
+        vec![
+            Token::Name("ab".to_owned()),
+            Token::Name("cd".to_owned()),
+            Token::Name("xy".to_owned()),
+            Token::Name("zz".to_owned()),
+            Token::Eof,
+        ]
+    );
+    let records: Vec<&str> =
+        flexmesa_utils::Records::new("a\r\n\rb\nc").collect();
+    assert_eq!(records, vec!["a", "", "b", "c"]);
+}
+
 /// `integer_dict` stores `character(len=50)` keys and compares with blank
 /// padding (`utils/private/utils_dict.f90:101-141, 273-310`, #665).
 #[test]

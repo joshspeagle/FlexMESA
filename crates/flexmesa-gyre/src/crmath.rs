@@ -34,7 +34,7 @@ pub fn hypot(x: f64, y: f64) -> f64 {
 ///
 /// [`GyreNumError::Atan2Undefined`] when `x = y = 0` (or either is NaN):
 /// upstream falls through every branch and returns an unset result
-/// (`DECISIONS #43`).
+/// (`DECISIONS #43`, deferred `#196`).
 #[allow(clippy::float_cmp)]
 pub fn atan2(y: f64, x: f64) -> Result<f64, GyreNumError> {
     if x > 0.0 {

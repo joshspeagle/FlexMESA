@@ -325,7 +325,7 @@ pub fn find_max_quadratic(
 ///
 /// Returns [`NumError::InvalidParameter`] if `(x0, x1, x2)` is not strictly
 /// monotonic (upstream `ierr = -1`), or if `x` is NaN, where upstream falls
-/// through every branch and leaves the coefficients unset (`DECISIONS #43`).
+/// through every branch and leaves the coefficients unset (`DECISIONS #43`, deferred `#696`).
 pub fn two_piece_linear_coeffs(
     x: f64,
     x0: f64,

@@ -126,7 +126,7 @@ pub struct FrequencyRatiosR010 {
 /// Returns `StarError::InvalidInput` when `trim_for_obs` is `true`, `l1` is
 /// non-empty, and `get_max_sequence` returns an empty sequence (`count == 0`)
 /// where upstream computes out-of-bounds `last = first - 1`
-/// (`astero/private/astero_support.f90:341-350`; `DECISIONS #43`, `#169` / `#644`).
+/// (`astero/private/astero_support.f90:341-350`; `DECISIONS #43`, deferred `#694`).
 #[allow(clippy::too_many_arguments)]
 pub fn eval_frequency_ratios_with_trimming(
     l0_freqs: &[f64],

@@ -103,13 +103,14 @@ where
 }
 
 /// Finds a root $x \in [\min(x_1, x_3), \max(x_1, x_3)]$ of $f(x) = 0$ by
-/// delegating to [`brent_safe_zero`] with relative tolerance `1e-14`, matching
-/// `do_safe_root_with_brackets` in `num/private/mod_root.f90:27-45`.
+/// delegating to [`eval_brent_safe_zero`] with relative tolerance `1e-14`,
+/// matching `do_safe_root_with_brackets` in `num/private/mod_root.f90:27-45`.
+/// Like upstream, it does no sign check of its own, and `imax` is unused.
 ///
 /// # Errors
 ///
-/// Returns [`NumError::BracketingFailed`] if `y1_in` and `y3_in` have the same
-/// strict sign, or [`NumError::ConvergenceFailed`] if iteration fails.
+/// Returns whatever [`eval_brent_safe_zero`] returns, and any error from
+/// `func`.
 pub fn safe_root_with_brackets<F>(
     mut func: F,
     x1_in: f64,

@@ -294,7 +294,7 @@ fn eval_cell_xy(model: &StarModel) -> Result<(Vec<f64>, Vec<f64>), StarError> {
 ///
 /// In MESA `26.4.1`, `store_saio_data_env` (`pulse_saio.f90:246, 275-284`)
 /// divides by `kap` (`point_data(8, j)`) without initializing it first,
-/// so executing any envelope row reads undefined memory (`DECISIONS #43`, `#169`).
+/// so executing any envelope row reads undefined memory (`DECISIONS #43`, deferred `#524`).
 ///
 /// # Errors
 /// Returns [`PulseWriteError::Upstream`] whenever `store_saio_data_env` would
@@ -362,7 +362,7 @@ pub fn write_saio_data(
 /// `write_saio_data`, `star/private/pulse_saio.f90`).
 ///
 /// # Errors
-/// Propagates [`get_saio_data_strict`] errors (`DECISIONS #43`, `#169`).
+/// Propagates [`get_saio_data_strict`] errors (`DECISIONS #43`, deferred `#524`).
 pub fn export_saio_strict(
     model: &StarModel,
     keep_surface_point: bool,
@@ -974,7 +974,7 @@ pub fn export_cafein(
 ///
 /// In MESA `26.4.1`, `get_gr1d_data` omits `j = j + 1` inside `env_loop`,
 /// leaving `point_data(:, 2:nn)` uninitialized whenever `nz > 1`
-/// (`DECISIONS #43`, `#169`).
+/// (`DECISIONS #43`, deferred `#525`).
 ///
 /// # Errors
 /// Returns [`PulseWriteError::Upstream`] whenever `nz > 1`.
@@ -1013,7 +1013,7 @@ pub fn get_gr1d_data_strict(
 
 /// Upstream `export_pulse_data` (`star/private/pulse.f90:43-183`) for `GR1D`,
 /// where `write_pulse_data` dispatches `'gr1d'` to `write_saio_data`
-/// (`pulse.f90:174-175`), reading out-of-bounds `point_data(8:20, :)` (`DECISIONS #43`, `#169`).
+/// (`pulse.f90:174-175`), reading out-of-bounds `point_data(8:20, :)` (`DECISIONS #43`, deferred `#723`).
 ///
 /// # Errors
 /// Always returns [`PulseWriteError::Upstream`] matching `DECISIONS #43`.

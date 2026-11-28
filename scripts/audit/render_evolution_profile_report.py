@@ -153,7 +153,7 @@ def _build_shared_sections(
         f"passing under `#143`. Although {step_matched_txt} match MESA's step "
         f"counts identically at `{main_short}`, track differences in Section 1 "
         f"remain non-zero; these timings profile FlexMESA at `{main_short}` "
-        f"rather than a verified `#143` parity run."
+        f"rather than a passing `#143` acceptance run."
     )
     lines.append("")
 
@@ -887,7 +887,7 @@ def _build_shared_sections(
         "the upstream-history harness. Every FlexMESA run here is a diagnostic "
         "run (`allow_unsupported_controls = true`, exact counts in Section 1), "
         "and track differences remain non-zero even on the step-matched cases. "
-        "No timing in this report represents a verified `#143` parity run."
+        "No timing in this report represents a passing `#143` acceptance run."
     )
     lines.append(
         "- **Remaining I/O, timer, and build-flag differences**: Both engines "

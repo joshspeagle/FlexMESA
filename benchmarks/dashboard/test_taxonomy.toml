@@ -818,6 +818,12 @@ module = "math"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-mtx/tests/band_lapack_tests.rs"
+language = "rust"
+module = "mtx"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-mtx/tests/block_tests.rs"
 language = "rust"
 module = "mtx"
@@ -843,12 +849,6 @@ language = "rust"
 module = "mtx"
 kind = "oracle"
 provenance = "mesa-module-hex-v1.tar.zst bundle (MESA 26.4.1 mtx IEEE-754 hex outputs)"
-
-[[tests]]
-path = "crates/flexmesa-mtx/tests/band_lapack_tests.rs"
-language = "rust"
-module = "mtx"
-kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-mtx/tests/mtx_tests.rs"

@@ -6114,7 +6114,18 @@ upstream_lines = 1833
 upstream_sha256 = "7e9066f4a6619405c9ec959c2db283c8022f9425fdb361ce4db57ec20938496f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["get_derivs", "get_derivs::get_general_1_to_1_derivs", "get_derivs::get_general_2_to_1_derivs", "get_derivs::get_general_2_to_2_derivs", "get_derivs::get_basic_2_to_2_derivs", "get_derivs::get_basic_2_to_1_derivs", "get1_derivs", "update_special_rates", "update_special_rates::do_FL_3alf"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_derivs" = "crates/flexmesa-net/src/derivs.rs::get_derivs" # partial: the net_other_net_derivs hook is not called; the eps_nuc_cancel_factor path (always 1 upstream) is dropped
+"get_derivs::get_general_1_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_1_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored
+"get_derivs::get_general_2_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_2_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored
+"get_derivs::get_general_2_to_2_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_2_to_2_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored
+"get_derivs::get_basic_2_to_2_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_basic_2_to_2_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored
+"get_derivs::get_basic_2_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_basic_2_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored
+"get1_derivs" = "crates/flexmesa-net/src/derivs.rs::get1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored; upstream reads n% y(0) when itab(in1) or itab(in2) is 0 for a 2- or 3-input reaction, and the Rust path errors there (#675)
+"update_special_rates" = "crates/flexmesa-net/src/derivs_support.rs::update_special_rates" # partial: handles the triple-alpha Fushiki-Lamb and rn14ag_lite cases; conv = QCONV * std_q instead of n% reaction_Qs(ir)
+"update_special_rates::do_FL_3alf" = "crates/flexmesa-net/src/derivs_support.rs::update_special_rates" # partial: conv = QCONV * std_q instead of QCONV * n% reaction_Qs(ir)
 
 [[files]]
 upstream_path = "net/private/net_derivs_support.f90"

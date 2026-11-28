@@ -84,11 +84,6 @@ issue = "#157"
 reason = "Strict run ends on the 3000 s campaign budget after 13 history rows (0 retries; runner dependent); MESA takes [179, 539, 828, 2607, 2998] steps; final values out of tolerance: rel_star_age, log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: log_L, log_Teff, log_R, log_center_T, log_center_Rho, rel_num_zones (Train 15 campaign; #157)."
 [[gaps]]
 suite = "star"
-case = "make_planets"
-issue = "#587"
-reason = "Strict run reaches max_age in [76, 22, 113] steps (MESA [76, 22, 112]); every compared column is within tolerance (Train 14 campaign; #587)."
-[[gaps]]
-suite = "star"
 case = "ns_c"
 issue = "#157"
 reason = "Strict run reaches power_nuc_burn_upper_limit in [262] steps (MESA [261]); final values out of tolerance: log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_center_T, log_center_Rho (first at step 81) (Train 14 campaign; #157)."

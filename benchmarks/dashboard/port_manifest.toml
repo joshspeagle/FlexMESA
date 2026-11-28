@@ -6069,7 +6069,13 @@ upstream_lines = 502
 upstream_sha256 = "3d6adaef0d79f66ec9e0730a8a5cce9fa496dc015754851b6d0691f523736b2b"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_const_density_1_zone", "burn_const_density_1_zone::jakob_or_derivs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_const_density_1_zone" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: honours a positive stptry_in where upstream overwrites it with max(start*1d-10, 1d-16) at net_burn_const_density.f90:257-258
+"burn_const_density_1_zone::burner_derivs" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density"
+"burn_const_density_1_zone::burner_jakob" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density"
+"burn_const_density_1_zone::jakob_or_derivs" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: evaluates the EOS with eos_dt_get instead of get_eos_info_for_burn_at_const_density and errors when Cv <= 0 or not finite, which upstream does not check
 
 [[files]]
 upstream_path = "net/private/net_burn_const_p.f90"

@@ -4586,6 +4586,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "770c14b7",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "103"
     }
   ]
 }

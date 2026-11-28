@@ -191,7 +191,7 @@ reason = "Strict run reaches astero_use_first_values_samples=1_best_chi2=2.80048
 suite = "astero"
 case = "fast_from_file"
 issue = "#162"
-reason = "Strict run reaches astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big in [446] steps (MESA [508, 508]); every compared column is within tolerance; its l = 0..3 modes all come from the GYRE port (oscillation_code = 'gyre'; DegreeScanner::scan_degree calls AsteroGyre::get_modes at crates/flexmesa-astero/src/sample_eval.rs:1028, reached for l = 1..3 from sample_eval.rs:368, over crates/flexmesa-gyre/src/mesa.rs:126 with the 'JCD' variables set of crates/flexmesa-gyre/src/ad.rs:55), not an in-house solver; search-stage step accounting differs (#162) (Train 14 campaign; #162)."
+reason = "Strict run reaches astero_from_file_samples=2_best_chi2=7.403041e-1_term=limit_num_chi2_too_big in [446] steps (MESA [508, 508]); every compared column is within tolerance; its l = 1, 2 modes come from the in-house solver because the nonradial JCD transform is not ported in the GYRE crate (#612); search-stage step accounting differs (#162) (Train 14 campaign; #162)."
 [[gaps]]
 suite = "astero"
 case = "fast_newuoa"

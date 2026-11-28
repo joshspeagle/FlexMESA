@@ -6,7 +6,6 @@ use crate::eval::interp_values;
 use crate::pm::{interp_pm, interp_pm_autodiff};
 use crate::{CubicCoeffs, Interp1dError};
 use flexmesa_autodiff::DualOrder1;
-use flexmesa_utils::is_bad;
 
 /// Interpolates `v_old` from `x_old` onto `x_new` using a caller-supplied
 /// spline builder `builder`.
@@ -112,11 +111,19 @@ pub fn interp_4_to_1(
 }
 
 /// Evaluates a 1D cubic spline over first-order forward-mode dual numbers
-/// [`DualOrder1<N>`].
+/// [`DualOrder1<N>`] (`do_interp_values_autodiff` in
+/// `interp_1d/private/interp_1d_misc.f90:179-246`).
+///
+/// Matches upstream's ascending-endpoint check and forward-only `k_old`
+/// interval pointer (`init_x` clipped to `[init_x[0], init_x[nx - 1]]`,
+/// omitting interior-monotonicity and finiteness validation).
 ///
 /// # Errors
 ///
-/// Returns [`Interp1dError`] if `init_x`, `coeffs`, or `x` are invalid.
+/// Returns [`Interp1dError`] if `init_x` and `coeffs` lengths mismatch,
+/// `init_x` is empty, or `!(init_x[0].val < init_x[nx - 1].val)` (upstream
+/// leaves `increasing` uninitialized on non-ascending endpoints; see `#668`,
+/// `#664`, and `DECISIONS #43`).
 pub fn interp_values_autodiff<const N: usize>(
     init_x: &[DualOrder1<N>],
     coeffs: &[[DualOrder1<N>; 4]],
@@ -135,60 +142,44 @@ pub fn interp_values_autodiff<const N: usize>(
             actual: 0,
         });
     }
-    let bad_dual =
-        |v: &DualOrder1<N>| is_bad(v.val) || v.d1.iter().any(|&d| is_bad(d));
-    if x.iter().any(bad_dual)
-        || init_x.iter().any(bad_dual)
-        || coeffs.iter().any(|c| c.iter().any(bad_dual))
-    {
-        return Err(Interp1dError::NonFiniteInput);
-    }
     if nx == 1 {
         return Ok(vec![coeffs[0][0]; x.len()]);
     }
-    let h0 = init_x[1].val - init_x[0].val;
-    if h0 == 0.0 {
+    // Upstream `do_interp_values_autodiff` assigns `increasing = .true.` only
+    // when `init_x(1) < init_x(nx)`, leaving `increasing` uninitialized
+    // otherwise (`interp_1d_misc.f90:192,204-206,213,226`). Fail explicitly
+    // rather than inventing decreasing-grid behavior (#668, #664, DECISIONS
+    // #43).
+    if init_x[0].val.partial_cmp(&init_x[nx - 1].val)
+        != Some(std::cmp::Ordering::Less)
+    {
         return Err(Interp1dError::NonMonotonicGrid { index: 0 });
     }
-    let increasing = h0 > 0.0;
-    for i in 1..(nx - 1) {
-        let hi = init_x[i + 1].val - init_x[i].val;
-        if hi == 0.0 || (hi > 0.0) != increasing {
-            return Err(Interp1dError::NonMonotonicGrid { index: i });
-        }
-    }
 
+    let mut k_old = 0_usize;
+    let mut xk_old = init_x[k_old];
+    let mut xkp1_old = init_x[k_old + 1];
     let mut vals = Vec::with_capacity(x.len());
+
     for &xk in x {
-        let x_clamped = if increasing {
-            if xk.val > init_x[nx - 1].val {
-                init_x[nx - 1]
-            } else if xk.val < init_x[0].val {
-                init_x[0]
-            } else {
-                xk
+        let mut xk_new = xk;
+        if xk_new.val > init_x[nx - 1].val {
+            xk_new = init_x[nx - 1];
+        } else if xk_new.val < init_x[0].val {
+            xk_new = init_x[0];
+        }
+        while xk_new.val > xkp1_old.val {
+            k_old += 1;
+            if k_old >= nx - 1 {
+                k_old -= 1;
+                xk_new = xkp1_old;
+                break;
             }
-        } else if xk.val < init_x[nx - 1].val {
-            init_x[nx - 1]
-        } else if xk.val > init_x[0].val {
-            init_x[0]
-        } else {
-            xk
-        };
-        let pos = if increasing {
-            init_x.partition_point(|pt| pt.val < x_clamped.val)
-        } else {
-            init_x.partition_point(|pt| pt.val > x_clamped.val)
-        };
-        let k = if pos == 0 {
-            0
-        } else if pos >= nx {
-            nx - 2
-        } else {
-            pos - 1
-        };
-        let delta = x_clamped - init_x[k];
-        let c = &coeffs[k];
+            xk_old = xkp1_old;
+            xkp1_old = init_x[k_old + 1];
+        }
+        let delta = xk_new - xk_old;
+        let c = &coeffs[k_old];
         vals.push(c[0] + delta * (c[1] + delta * (c[2] + delta * c[3])));
     }
     Ok(vals)

@@ -27,8 +27,8 @@ use flexmesa_interp1d::{
     integrate_values, interp_3_to_1, interp_3_to_2, interp_4_to_1,
     interp_4pt_pm, interp_m3a, interp_m3b, interp_m3q, interp_pm,
     interp_pm_slopes_only, interp_value_and_slope, interp_values,
-    interp_values_and_slopes, interpolate_vector_pm,
-    interpolate_vector_pm_autodiff,
+    interp_values_and_slopes, interp_values_autodiff, interpolate_vector_pm,
+    interpolate_vector_pm_autodiff, Interp1dError,
 };
 use flexmesa_testing::assert_values_match;
 use proptest::prelude::*;
@@ -340,4 +340,141 @@ proptest! {
             prop_assert!((slopes[0] - slope).abs() <= tol_s);
         }
     }
+}
+
+/// Verifies `interp_values_autodiff` evaluates an interior-knot query on the
+/// left interval `(x_{k-1}, x_k]` (`interp_1d_misc.f90:226`).
+#[test]
+fn test_interp_values_autodiff_interior_knot_uses_left_interval() {
+    let init_x: Vec<AutoDiffReal2VarOrder1> = [0.0, 1.0, 2.0, 3.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    // Distinct polynomials on intervals 0, 1, 2 so wrong-interval lookup is
+    // immediately visible in both value and parameter partial.
+    let c0 = AutoDiffReal2VarOrder1::independent(10.0, 1);
+    let c1 = AutoDiffReal2VarOrder1::independent(100.0, 1);
+    let coeffs = [
+        [
+            c0,
+            AutoDiffReal2VarOrder1::constant(2.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+        ],
+        [
+            c1,
+            AutoDiffReal2VarOrder1::constant(5.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+        ],
+        [
+            AutoDiffReal2VarOrder1::constant(999.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+        ],
+        [AutoDiffReal2VarOrder1::constant(0.0); 4],
+    ];
+    let xq = [
+        AutoDiffReal2VarOrder1::independent(1.0, 0),
+        AutoDiffReal2VarOrder1::independent(2.0, 0),
+    ];
+    let res = interp_values_autodiff(&init_x, &coeffs, &xq).unwrap();
+    // Query 1.0 stays on interval 0 (delta = 1.0): 10.0 + 2.0 * 1.0 = 12.0.
+    assert_close(res[0].val, 12.0, "knot 1.0 val");
+    assert_close(res[0].d1[0], 2.0, "knot 1.0 d/dx");
+    assert_close(res[0].d1[1], 1.0, "knot 1.0 d/dc0");
+    // Query 2.0 advances to interval 1 (delta = 1.0): 100.0 + 5.0 * 1.0.
+    assert_close(res[1].val, 105.0, "knot 2.0 val");
+    assert_close(res[1].d1[0], 5.0, "knot 2.0 d/dx");
+    assert_close(res[1].d1[1], 1.0, "knot 2.0 d/dc1");
+}
+
+/// Verifies `interp_values_autodiff` forward-only `k_old` pointer behavior on
+/// out-of-order queries, `nx == 1` fast return, and interior-non-monotone grid.
+#[test]
+fn test_interp_values_autodiff_forward_pointer_and_edge_paths() {
+    let init_x: Vec<AutoDiffReal2VarOrder1> = [0.0, 1.0, 2.0, 3.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    let coeffs = [
+        [AutoDiffReal2VarOrder1::constant(0.0); 4],
+        [AutoDiffReal2VarOrder1::constant(0.0); 4],
+        [
+            AutoDiffReal2VarOrder1::constant(7.0),
+            AutoDiffReal2VarOrder1::constant(3.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+            AutoDiffReal2VarOrder1::constant(0.0),
+        ],
+        [AutoDiffReal2VarOrder1::constant(0.0); 4],
+    ];
+    // Second query 0.5 is left of init_x[2] = 2.0; forward-only pointer keeps
+    // k_old = 2 and computes negative delta = 0.5 - 2.0 = -1.5.
+    let queries = [
+        AutoDiffReal2VarOrder1::constant(2.5),
+        AutoDiffReal2VarOrder1::constant(0.5),
+    ];
+    let res = interp_values_autodiff(&init_x, &coeffs, &queries).unwrap();
+    assert_close(res[0].val, 7.0 + 3.0 * 0.5, "in-order query val");
+    assert_close(res[1].val, 7.0 + 3.0 * (-1.5), "out-of-order forward k_old");
+
+    // Non-monotonic interior point with init_x[0] < init_x[nx - 1] runs
+    // without validation error, matching upstream (`interp_1d_misc.f90:204`).
+    let non_mono_x: Vec<AutoDiffReal2VarOrder1> = [0.0, 1.5, 1.0, 3.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    let nm_res =
+        interp_values_autodiff(&non_mono_x, &coeffs, &queries).unwrap();
+    // k_old advances 0 -> 1 -> 2 (xk_old = 1.0, delta = 1.5):
+    // 7.0 + 3.0 * 1.5 = 11.5.
+    assert_close(nm_res[0].val, 11.5, "interior non-monotone interval 2");
+
+    // nx == 1 returns coeffs[0][0] directly even with NaN/unused fields.
+    let single_x = [AutoDiffReal2VarOrder1::constant(f64::NAN)];
+    let single_c = [[
+        AutoDiffReal2VarOrder1::constant(4.25),
+        AutoDiffReal2VarOrder1::constant(f64::INFINITY),
+        AutoDiffReal2VarOrder1::constant(0.0),
+        AutoDiffReal2VarOrder1::constant(0.0),
+    ]];
+    let single_q = [AutoDiffReal2VarOrder1::constant(10.0)];
+    let single_out =
+        interp_values_autodiff(&single_x, &single_c, &single_q).unwrap();
+    assert_close(single_out[0].val, 4.25, "nx=1 fast return");
+}
+
+/// Verifies `interp_values_autodiff` returns an explicit error on
+/// non-ascending endpoints (`#668`, `DECISIONS #43`).
+#[test]
+fn test_interp_values_autodiff_non_ascending_endpoints_errors() {
+    let dec_x: Vec<AutoDiffReal2VarOrder1> = [3.0, 2.0, 1.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    let coeffs = [[AutoDiffReal2VarOrder1::constant(1.0); 4]; 3];
+    let q = [AutoDiffReal2VarOrder1::constant(2.0)];
+    assert_eq!(
+        interp_values_autodiff(&dec_x, &coeffs, &q),
+        Err(Interp1dError::NonMonotonicGrid { index: 0 })
+    );
+
+    let eq_x: Vec<AutoDiffReal2VarOrder1> = [1.0, 2.0, 1.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    assert_eq!(
+        interp_values_autodiff(&eq_x, &coeffs, &q),
+        Err(Interp1dError::NonMonotonicGrid { index: 0 })
+    );
+
+    let nan_x: Vec<AutoDiffReal2VarOrder1> = [f64::NAN, 1.0, 2.0]
+        .iter()
+        .map(|&v| AutoDiffReal2VarOrder1::constant(v))
+        .collect();
+    assert_eq!(
+        interp_values_autodiff(&nan_x, &coeffs, &q),
+        Err(Interp1dError::NonMonotonicGrid { index: 0 })
+    );
 }

@@ -1,12 +1,12 @@
 {
- "claims": 101,
- "claims_verified": 87,
+ "claims": 114,
+ "claims_verified": 100,
  "not_counted_only_on_scope_or_precision": [
   "neu/private/mod_neu.f90::ifermi12",
   "neu/private/mod_neu.f90::zfermim12",
   "star/private/rsp_lina.f90::do_LINA"
  ],
- "routines_claimed": 64,
+ "routines_claimed": 67,
  "routines_exact": [
   "eos/private/eos_blend.f90::is_contained",
   "eos/private/eos_blend.f90::min_distance_to_polygon",
@@ -30,6 +30,9 @@
   "interp_2d/private/bipm_db.f90::do_mkbipm_db",
   "neu/private/mod_neu.f90::neutrinos",
   "neu/public/neu_lib.f90::neu_get",
+  "num/private/mod_newuoa.f::BIGDEN",
+  "num/private/mod_newuoa.f::do_newuoa",
+  "num/public/num_newuoa.dek::newuoa",
   "star/private/diffusion_support.f90::get_matrix_coeffs",
   "star/private/eps_mdot.f90::calculate_eps_mdot",
   "star/private/init_model.f90::get_zams_model",

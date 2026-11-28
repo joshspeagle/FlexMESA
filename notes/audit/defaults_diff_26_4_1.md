@@ -8,14 +8,14 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | Namelist | Upstream `26.4.1` Scalars | Matched & Compared | Agree | Value Mismatch | Active Limit Disabled (`None`) | Skipped (Non-Scalar/Computed Rust) | Skipped (No Rust Field) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | star &controls | 1444 | 1201 | 1201 | 0 | 0 | 17 | 226 |
-| star &star_job | 455 | 210 | 210 | 0 | 0 | 1 | 244 |
+| star &star_job | 455 | 213 | 213 | 0 | 0 | 1 | 241 |
 | binary &binary_controls + &binary_job | 209 | 152 | 152 | 0 | 0 | 1 | 56 |
 | astero &astero_search_controls | 150 | 137 | 137 | 0 | 0 | 1 | 12 |
 | eos &eos | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
 | kap &kap | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
-| **Total** | **2396** | **1781** | **1781** | **0** | **0** | **20** | **595** |
+| **Total** | **2396** | **1784** | **1784** | **0** | **0** | **20** | **592** |
 
-Denominator: `1781 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1781` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `595` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
+Denominator: `1784 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched and compared (`1784` agree, `0` value mismatches, `0` `None`-disabled active limits); `20` skipped due to non-scalar/computed Rust initializers; `592` skipped with no Rust field in `FlexMESA` (plus `11` multi-subscript array-only upstream controls outside the scalar denominator).
 
 ## Skipped Controls with Rust Fields (Non-Scalar / Computed Initializers)
 
@@ -38,7 +38,7 @@ Denominator: `1781 / 2396` upstream MESA `26.4.1` scalar/1-slot defaults matched
 | star &controls | `xa_surface_lower_limit_species` | `star/defaults/controls.defaults:1181` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:855` | `Vec::new()` | empty Vec initializer |
 | star &controls | `xa_surface_upper_limit` | `star/defaults/controls.defaults:1203` | `0` | `crates/flexmesa-star/src/controls_timestep_stop.rs:858` | `Vec::new()` | empty Vec initializer |
 | star &controls | `xa_surface_upper_limit_species` | `star/defaults/controls.defaults:1202` | `''` | `crates/flexmesa-star/src/controls_timestep_stop.rs:857` | `Vec::new()` | empty Vec initializer |
-| star &star_job | `required_termination_code_string` | `star/defaults/star_job.defaults:250` | `''` | `crates/flexmesa-star/src/job_controls.rs:1417` | `Vec::new()` | empty Vec initializer |
+| star &star_job | `required_termination_code_string` | `star/defaults/star_job.defaults:250` | `''` | `crates/flexmesa-star/src/job_controls.rs:1433` | `Vec::new()` | empty Vec initializer |
 | binary &binary_controls + &binary_job | `inlist_names` | `binary/defaults/binary_job.defaults:55` | `'inlist1'` | `crates/flexmesa-binary/src/inlist.rs:363` | `[String::from("inlist1"), String::from("inlist2")]` | non-uniform array initializer |
 | astero &astero_search_controls | `l0_n_obs` | `astero/defaults/astero_search.defaults:289` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:420` | `Vec::new()` | empty Vec initializer |
 
@@ -48,7 +48,7 @@ All `1201` matched scalar defaults agree with MESA `26.4.1` (`17` skipped as non
 
 ## star &star_job
 
-All `210` matched scalar defaults agree with MESA `26.4.1` (`1` skipped as non-scalar/computed Rust initializers; `244` have no Rust field).
+All `213` matched scalar defaults agree with MESA `26.4.1` (`1` skipped as non-scalar/computed Rust initializers; `241` have no Rust field).
 
 ## binary &binary_controls + &binary_job
 

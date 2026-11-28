@@ -8,9 +8,9 @@
   },
   "summary": {
     "total_cases": 106,
-    "strict_pass_cases": 98,
-    "strict_fail_cases": 8,
-    "distinct_unsupported_controls": 23,
+    "strict_pass_cases": 99,
+    "strict_fail_cases": 7,
+    "distinct_unsupported_controls": 20,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -19,11 +19,11 @@
     {
       "section": "star_job",
       "upstream_keys": 455,
-      "supported_keys": 224,
+      "supported_keys": 227,
       "unused_keys": 4,
       "headless_gui_keys": 3,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 216
+      "unimplemented_upstream_keys": 213
     },
     {
       "section": "eos",
@@ -224,15 +224,6 @@
     },
     {
       "section": "star_job",
-      "key": "fallback_check_total_energy",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
       "key": "rate_cache_suffix",
       "category": "unimplemented",
       "case_count": 1,
@@ -247,24 +238,6 @@
       "case_count": 1,
       "cases": [
         "star/custom_rates"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_fallback_at_each_step",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "star_job",
-      "key": "remove_fallback_speed_limit",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
       ]
     },
     {
@@ -5294,7 +5267,7 @@
     {
       "suite": "star",
       "case": "ccsn_IIp",
-      "strict_ok": false,
+      "strict_ok": true,
       "entry_files": [
         "inlist_infall_header",
         "inlist_end_infall_header",
@@ -5303,11 +5276,7 @@
         "inlist_shock_part4_header",
         "inlist_shock_part5_header"
       ],
-      "unsupported_controls": [
-        "star_job::fallback_check_total_energy::unimplemented",
-        "star_job::remove_fallback_at_each_step::unimplemented",
-        "star_job::remove_fallback_speed_limit::unimplemented"
-      ],
+      "unsupported_controls": [],
       "unknown_controls": [],
       "headless_plotting_keys_count": 100,
       "terminal_output_keys": [

@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 19,
-      "closed": 17,
+      "open": 16,
+      "closed": 20,
       "issues": [
         {
           "number": 152,
@@ -187,7 +187,7 @@
         {
           "number": 299,
           "title": "[Audit C8/C12] Wire remaining photo/log I/O and test-harness driver controls",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 365,
@@ -272,12 +272,12 @@
         {
           "number": 539,
           "title": "[Parity] star/magnetic_braking: pass/fail flips on the upstream eval_slope summation order",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 541,
           "title": "[Parity] other_cgrav is applied once per step instead of at every set_vars and set_final_vars",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 587,
@@ -342,21 +342,6 @@
     {
       "number": 747,
       "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
-      "draft": false
-    },
-    {
-      "number": 751,
-      "title": "dashboard: read the deferred register from the children of #727",
-      "draft": false
-    },
-    {
-      "number": 753,
-      "title": "test(oracles): EOS oracle captures for ideal, HELM, PC, Skye and get1_for_eosdt",
-      "draft": false
-    },
-    {
-      "number": 756,
-      "title": "audit: Python and JAX port inventory (P1.5)",
       "draft": false
     },
     {

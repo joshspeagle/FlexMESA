@@ -6054,7 +6054,13 @@ upstream_lines = 475
 upstream_sha256 = "81095d869c6edcd941138d0c4eb860df3aaf6de59e227133f608769bb9af98c6"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_1_zone", "burn_1_zone::burner_derivs", "burn_1_zone::jakob_or_derivs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_1_zone" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: honours a positive stptry_in where upstream overwrites it with max(start*1d-10, 1d-16) at net_burn.f90:242-243; adds the dxdt_source_term to f, which upstream accepts but never uses; mismatching species/reaction counts are errors where upstream returns with ierr = 0
+"burn_1_zone::burner_derivs" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: adds the dxdt_source_term to f (upstream burner_derivs does not use it)
+"burn_1_zone::burner_jakob" = "crates/flexmesa-net/src/burn.rs::burn_1_zone"
+"burn_1_zone::jakob_or_derivs" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: adds the dxdt_source_term to f; the EOS call is eos_dt_get_from_weights_with_tables with the (rho, lgRho, T, lgT) quadruple instead of eosDT_get by handle
 
 [[files]]
 upstream_path = "net/private/net_burn_const_density.f90"

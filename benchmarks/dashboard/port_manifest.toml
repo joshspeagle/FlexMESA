@@ -5537,7 +5537,26 @@ upstream_lines = 1241
 upstream_sha256 = "0b2f6a93e7f822709cae496511f0686c0ecb75e7e76afa1ab4d66451275dfc39"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["Get1_kap_CO_Results", "Get_Kap_for_CO_X", "Get_Kap_for_dXCO", "Get_Kap_for_dXCO::matches_table", "Find_CO_Tables::matches_table"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Get1_kap_CO_Results" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results" # partial: selects the table set by prefix and omits the ascending-Zbase check (ierr = -3); the use_closest_Z branch is a compile-time false constant upstream and is not ported
+"Get_Kap_for_CO_Z_cubic" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_Z_cubic::interp1" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_Z_linear" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_X" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x" # partial: omits the ascending-X check (ierr = -3) and the X1 <= X0 check (ierr = 1)
+"Get_Kap_for_CO_X_cubic" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_CO_X_cubic::interp1" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_CO_X_linear" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_dXCO" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: omits the num_CO_tables < 1 error and the final is_bad(logK) ierr = -1 return
+"Get_Kap_for_dXCO::matches_table" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: index < 1 returns false where upstream calls mesa_error for i < 1 or i > num_CO_tables (kap_eval_co.f90:813-826)
+"Get_Kap_for_dXCO::Get_Kap_at_dXO" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxo"
+"Get_Kap_for_dXCO::Get_Kap_at_dXC" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxc"
+"Find_CO_Tables" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream indexes co_tables(i) out of bounds
+"Find_CO_Tables::on_midline" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Find_CO_Tables::on_diagonal" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Get_CO_Kap_for_logRho_logT" = "crates/flexmesa-kap/src/co_find.rs::get_co_kap_for_log_rho_log_t"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_fixed.f90"

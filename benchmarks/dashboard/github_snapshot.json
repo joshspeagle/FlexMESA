@@ -340,9 +340,9 @@
   ],
   "open_pull_requests": [
     {
-      "number": 639,
-      "title": "Train 16 (draft): #573 complete, solver and hydro parity fixes, pisn, tzo, routine tooling",
-      "draft": true
+      "number": 683,
+      "title": "ci: tiered testing; trains merge on CI plus a canary, full campaign nightly when main moved (DECISIONS #81)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -973,6 +973,86 @@
     {
       "number": 638,
       "title": "[Deferred bug] eps_grav/hydro_riemann/hydro_temperature: missing ierr on bad composition term, i_L_00 index in d_uface_domega, mlt_vc_old(k) index, and OMP stop",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 657,
+      "title": "[Deferred bug] takata reads unset yy points when iasn >= 2",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 658,
+      "title": "[Deferred bug] signew leaves its result unassigned on icry = -1, and callers use it",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 668,
+      "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 669,
+      "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 671,
+      "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 674,
+      "title": "[Deferred bug] mtx 0-based sparse helpers mix index bases: row_sparse_0_based_to_dense and find_loc_in_column_0_based read out of bounds",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 675,
+      "title": "[Deferred bug] get1_derivs indexes n% y(0) when a two- or three-input reaction's first or second input is not in the net",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 677,
+      "title": "[Deferred bug] integer_dict_define documents an error for keys longer than 50 characters but silently truncates them",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 680,
+      "title": "[Deferred bug] bicub_db.f has implicit none commented out, so fvbicub_db's basis locals are single precision in a real(dp) interpolator",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 681,
+      "title": "[Deferred bug] split_line reads line(k:k) past the end of the line when it has fewer than num fields",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

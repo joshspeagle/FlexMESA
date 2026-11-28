@@ -11,18 +11,18 @@
         "module": "star",
         "upstream_files": 173,
         "upstream_lines": 120509,
-        "absent": 17759,
+        "absent": 17101,
         "stub": 6378,
         "partial": 54084,
-        "ported_unverified": 36648,
+        "ported_unverified": 37306,
         "kernel_reference_vectors": 5640,
         "case_level_evidence": 0,
-        "ported_total": 42288,
+        "ported_total": 42946,
         "verified_total": 5640,
-        "pct_ported": 35.1,
+        "pct_ported": 35.6,
         "pct_verified": 4.7,
-        "rust_lines": 111279,
-        "python_jax_lines": 3987
+        "rust_lines": 115124,
+        "python_jax_lines": 3985
       },
       {
         "module": "star_data",
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 13916,
+        "rust_lines": 14822,
         "python_jax_lines": 1244
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11488,
+        "rust_lines": 12230,
         "python_jax_lines": 1295
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 11499,
+        "rust_lines": 11705,
         "python_jax_lines": 728
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2989,
+        "rust_lines": 3236,
         "python_jax_lines": 3116
       },
       {
@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5976,
+        "rust_lines": 8420,
         "python_jax_lines": 1775
       },
       {
@@ -385,9 +385,9 @@
         "module": "gyre",
         "upstream_files": 171,
         "upstream_lines": 55708,
-        "absent": 55708,
+        "absent": 29427,
         "stub": 0,
-        "partial": 0,
+        "partial": 26281,
         "ported_unverified": 0,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
@@ -402,9 +402,9 @@
         "module": "adipls",
         "upstream_files": 133,
         "upstream_lines": 30923,
-        "absent": 30923,
+        "absent": 20829,
         "stub": 0,
-        "partial": 0,
+        "partial": 10094,
         "ported_unverified": 0,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 22857,
-      "python_testing_bench": 23447
+      "rust_bridge_testing_bench": 23233,
+      "python_testing_bench": 25348
     }
   },
   "numerics": {
@@ -591,13 +591,13 @@
     "by_suite": {
       "star": {
         "total": 90,
-        "mesa_26_4_1_ref": 86,
-        "no_reference_yet": 4,
+        "mesa_26_4_1_ref": 87,
+        "no_reference_yet": 3,
         "strict_validated": 78,
         "diagnostic_runs": 12,
         "reached_termination": 75,
         "within_numeric_tol": 59,
-        "passing": 55,
+        "passing": 56,
         "declared_gaps": 30,
         "undeclared_failures": 0
       },
@@ -638,11 +638,6 @@
         "issue": "#587"
       },
       {
-        "suite": "star",
-        "case": "relax_composition_j_entropy",
-        "issue": "#154"
-      },
-      {
         "suite": "binary",
         "case": "wind_fed_bhhmxb",
         "issue": "#587"
@@ -655,8 +650,8 @@
     ],
     "gaps_by_issue": {
       "#161": 13,
-      "#162": 7,
-      "#154": 6,
+      "#162": 8,
+      "#154": 5,
       "#157": 5,
       "#158": 3,
       "#587": 3,
@@ -689,12 +684,12 @@
     {
       "namelist": "binary &binary_controls + &binary_job",
       "upstream_scalars": 209,
-      "matched_in_flexmesa": 145,
-      "defaults_agree": 145,
+      "matched_in_flexmesa": 152,
+      "defaults_agree": 152,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 1,
-      "unimplemented": 63
+      "unimplemented": 56
     },
     {
       "namelist": "astero &astero_search_controls",
@@ -1173,7 +1168,7 @@
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-star/src/tests.rs:246",
+        "location": "crates/flexmesa-star/src/tests.rs:286",
         "reason": "10-yr step on a coarse (d_log10_P = 0.15) pre-MS model ends singular with the upstream pre-MS builder; setup not run in MESA; tracked in #154",
         "issues": "#154"
       }
@@ -1294,14 +1289,14 @@
     "unlinked_locations": []
   },
   "test_taxonomy": {
-    "total_files": 312,
-    "total_tests": 1772,
+    "total_files": 329,
+    "total_tests": 1911,
     "by_kind": {
       "oracle": {
-        "files": 131
+        "files": 133
       },
       "invariant": {
-        "files": 179
+        "files": 194
       },
       "regression": {
         "files": 2
@@ -1309,12 +1304,12 @@
     },
     "by_language": {
       "rust": {
-        "files": 220,
-        "tests": 1078
+        "files": 231,
+        "tests": 1143
       },
       "python": {
-        "files": 92,
-        "tests": 694
+        "files": 98,
+        "tests": 768
       }
     },
     "mislabeled_count": 2,
@@ -1332,12 +1327,10 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 401,
-    "listed_oracle_routines_total": 71,
-    "listed_oracle_routines_pct": 17.7,
+    "mapped_routines_total": 1623,
+    "listed_oracle_routines_total": 69,
+    "listed_oracle_routines_pct": 4.3,
     "listed_oracle_routine_ids": [
-      "binary/private/binary_disk.f90::eval_L2_mass_loss_fraction",
-      "binary/public/binary_lib.f90::binary_L2_mass_loss_fraction",
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
       "eos/private/eos_blend.f90::is_contained",
@@ -1411,27 +1404,27 @@
     "by_module": [
       {
         "module": "star",
-        "oracle_files": 38,
-        "invariant_files": 78,
+        "oracle_files": 39,
+        "invariant_files": 84,
         "regression_files": 1,
-        "total_files": 117,
-        "total_tests": 698,
+        "total_files": 124,
+        "total_tests": 752,
         "mislabeled_files": 2,
-        "mapped_routines": 189,
+        "mapped_routines": 924,
         "listed_oracle_routines": 25,
-        "listed_oracle_routines_pct": 13.2
+        "listed_oracle_routines_pct": 2.7
       },
       {
         "module": "binary",
         "oracle_files": 5,
-        "invariant_files": 13,
+        "invariant_files": 15,
         "regression_files": 0,
-        "total_files": 18,
-        "total_tests": 90,
+        "total_files": 20,
+        "total_tests": 103,
         "mislabeled_files": 0,
-        "mapped_routines": 70,
-        "listed_oracle_routines": 2,
-        "listed_oracle_routines_pct": 2.9
+        "mapped_routines": 116,
+        "listed_oracle_routines": 0,
+        "listed_oracle_routines_pct": 0.0
       },
       {
         "module": "astero",
@@ -1441,7 +1434,7 @@
         "total_files": 10,
         "total_tests": 56,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 93,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,17 +1470,17 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 12,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
       {
         "module": "rates",
         "oracle_files": 5,
-        "invariant_files": 0,
+        "invariant_files": 1,
         "regression_files": 0,
-        "total_files": 5,
-        "total_tests": 25,
+        "total_files": 6,
+        "total_tests": 27,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -1525,9 +1518,9 @@
         "total_files": 7,
         "total_tests": 22,
         "mislabeled_files": 0,
-        "mapped_routines": 18,
+        "mapped_routines": 25,
         "listed_oracle_routines": 6,
-        "listed_oracle_routines_pct": 33.3
+        "listed_oracle_routines_pct": 24.0
       },
       {
         "module": "chem",
@@ -1663,13 +1656,13 @@
       },
       {
         "module": "gyre",
-        "oracle_files": 7,
+        "oracle_files": 8,
         "invariant_files": 3,
         "regression_files": 0,
-        "total_files": 10,
-        "total_tests": 36,
+        "total_files": 11,
+        "total_tests": 39,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 283,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1681,7 +1674,7 @@
         "total_files": 7,
         "total_tests": 28,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 46,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1700,10 +1693,10 @@
       {
         "module": "tooling",
         "oracle_files": 2,
-        "invariant_files": 33,
+        "invariant_files": 39,
         "regression_files": 1,
-        "total_files": 36,
-        "total_tests": 300,
+        "total_files": 42,
+        "total_tests": 367,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2053,9 +2046,9 @@
     ],
     "open_pull_requests": [
       {
-        "number": 639,
-        "title": "Train 16 (draft): #573 complete, solver and hydro parity fixes, pisn, tzo, routine tooling",
-        "draft": true
+        "number": 683,
+        "title": "ci: tiered testing; trains merge on CI plus a canary, full campaign nightly when main moved (DECISIONS #81)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -2686,6 +2679,86 @@
       {
         "number": 638,
         "title": "[Deferred bug] eps_grav/hydro_riemann/hydro_temperature: missing ierr on bad composition term, i_L_00 index in d_uface_domega, mlt_vc_old(k) index, and OMP stop",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 657,
+        "title": "[Deferred bug] takata reads unset yy points when iasn >= 2",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 658,
+        "title": "[Deferred bug] signew leaves its result unassigned on icry = -1, and callers use it",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 668,
+        "title": "[Deferred bug] do_interp_values_autodiff reads `increasing` unset when init_x(1) >= init_x(nx)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 669,
+        "title": "[Deferred bug] do_look_for_brackets computes 2**i in default integer, which overflows for i >= 31",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 671,
+        "title": "[Deferred bug] find_max_quadratic tests y2 < max(y1, y2) where y2 < max(y1, y3) is meant",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 674,
+        "title": "[Deferred bug] mtx 0-based sparse helpers mix index bases: row_sparse_0_based_to_dense and find_loc_in_column_0_based read out of bounds",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 675,
+        "title": "[Deferred bug] get1_derivs indexes n% y(0) when a two- or three-input reaction's first or second input is not in the net",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 677,
+        "title": "[Deferred bug] integer_dict_define documents an error for keys longer than 50 characters but silently truncates them",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 680,
+        "title": "[Deferred bug] bicub_db.f has implicit none commented out, so fvbicub_db's basis locals are single precision in a real(dp) interpolator",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 681,
+        "title": "[Deferred bug] split_line reads line(k:k) past the end of the line when it has fewer than num fields",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -4292,6 +4365,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "79"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "dc390490",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "89"
     }
   ]
 }

@@ -267,13 +267,22 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         .expect("clean surface_effects case");
     let staged = cleaned.as_path();
 
-    let ctrl = parse_astero_search_controls(staged)
+    let mut ctrl = parse_astero_search_controls(staged)
         .expect("parse cleaned surface_effects controls");
     assert_eq!(ctrl.nl, [23, 21, 20, 17]);
     assert_eq!(ctrl.l0_n_obs.len(), 23);
     assert!(!ctrl.add_atmosphere);
     assert!(!ctrl.keep_surface_point);
     assert!(ctrl.add_center_point);
+    // MESA's `surface_effects` inlist sets `chi2_seismo_fraction = 0` so
+    // `astero/private/extras_support.f90:266` skips mode scanning during
+    // search steps, while
+    // `astero/test_suite/surface_effects/src/run_star_extras.f90:147-159`
+    // calls `astero_get_one_el_info` directly at `after_evolve`. Verify the
+    // parser preserves `0.0`, then enable `chi2_seismo_fraction = 1.0` to
+    // exercise `eval_model_astero_sample`'s 81-mode scanner here.
+    assert_eq!(ctrl.weights.chi2_seismo_fraction, 0.0);
+    ctrl.weights.chi2_seismo_fraction = 1.0;
 
     let bundle = InlistBundle::from_file_in_case_dir(
         staged,

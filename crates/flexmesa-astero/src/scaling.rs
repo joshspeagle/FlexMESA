@@ -129,12 +129,13 @@ pub fn eval_delta_nu_radius_scaling(m_g: f64, r_phot_cm: f64) -> f64 {
 /// $$\nu_{\max} = \nu_{\max,\odot} \frac{M / M_\odot}{(R_{\mathrm{phot}} / R_\odot)^2
 ///   \sqrt{T_{\mathrm{eff}} / T_{\mathrm{eff},\odot}}}$$
 ///
-/// Corresponds to `report.f90:353-354`.
+/// Corresponds to `star/private/report.f90:353-354`.
 #[must_use]
 pub fn eval_nu_max(m_g: f64, r_phot_cm: f64, teff_k: f64) -> f64 {
     let r_rsun = r_phot_cm / RSUN;
+    let teff = teff_k.max(0.0);
     NU_MAX_SUN * (m_g / MSUN)
-        / (r_rsun * r_rsun * (teff_k / TEFF_SUN_ASTERO).sqrt())
+        / (r_rsun * r_rsun * (teff / TEFF_SUN_ASTERO).sqrt())
 }
 
 /// Evaluates the isothermal surface acoustic cutoff frequency $\nu_{\mathrm{ac}}$
@@ -142,7 +143,7 @@ pub fn eval_nu_max(m_g: f64, r_phot_cm: f64, teff_k: f64) -> f64 {
 ///
 /// $$\nu_{\mathrm{ac}} = \frac{0.25 \times 10^6}{\pi} g_1 \sqrt{\frac{\Gamma_{1,1} \rho_1}{P_1}}$$
 ///
-/// Corresponds to `report.f90:355-356`.
+/// Corresponds to `star/private/report.f90:355-356`.
 #[must_use]
 pub fn eval_nu_ac(
     g_surf_cgs: f64,
@@ -162,7 +163,7 @@ pub fn eval_nu_ac(
 /// $$\Delta\Pi_1 = \frac{\sqrt{2}\,\pi^2}{\displaystyle\sum_{k=2,\,N_k^2 > 0}^{N_z}
 ///   \sqrt{N_k^2}\,\frac{r_{\mathrm{mid},k-1} - r_{\mathrm{mid},k}}{r_k}}$$
 ///
-/// Corresponds to `get_delta_Pg_traditional` in `star_utils.f90:920-958`.
+/// Corresponds to `get_delta_Pg_traditional` in `star/private/star_utils.f90:920-958`.
 #[must_use]
 pub fn eval_delta_pg_traditional(
     r: &[f64],
@@ -191,7 +192,9 @@ pub fn eval_delta_pg_traditional(
 /// gravity-mode period spacing $\Delta\Pi_1$ (s) with inner WKB tunneling
 /// truncation ($I_{\mathrm{decay}} > 0.5$).
 ///
-/// Corresponds to `get_delta_Pg_bildsten2012` in `star_utils.f90:960-1022`.
+/// Corresponds to `get_delta_Pg_bildsten2012` in
+/// `star/private/star_utils.f90:960-1022` (with Lamb cutoff `omega2 >= sl2` at
+/// every zone, `star/private/star_utils.f90:992-994`).
 #[must_use]
 pub fn eval_delta_pg_bildsten2012(
     r: &[f64],
@@ -213,7 +216,7 @@ pub fn eval_delta_pg_bildsten2012(
         let rk = r[k].max(1.0);
         let cs2 = csound_face[k] * csound_face[k];
         let sl2 = 2.0 * cs2 / (rk * rk);
-        if !entered_g_cavity && omega2 >= sl2 {
+        if omega2 >= sl2 {
             continue;
         }
         let dr = (r_mid[k - 1] - r_mid[k]).max(0.0);

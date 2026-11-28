@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Powell (`2006`) unconstrained derivative-free quadratic interpolation
 //! trust-region optimizer (`NEWUOA` in `num/private/mod_newuoa.f`).
 //!
@@ -21,7 +22,8 @@ pub struct NewuoaResult {
 }
 
 /// Minimizes an unconstrained $n$-dimensional objective `calfun` via Powell's
-/// `NEWUOA` quadratic-interpolation trust-region algorithm (`num_newuoa.dek`).
+/// `NEWUOA` quadratic-interpolation trust-region algorithm
+/// (`num/private/mod_newuoa.f`, `num/public/num_newuoa_proc.dek`).
 ///
 /// Updates `x` in-place to the best point found and returns [`NewuoaResult`].
 ///
@@ -32,8 +34,9 @@ pub struct NewuoaResult {
 ///   (n + 1)(n + 2) / 2$; typically $2 n + 1$).
 /// - `x`: Initial guess of length $n$, updated in-place to $x_{\min}$.
 /// - `rhobeg`: Initial trust-region radius ($> 0$).
-/// - `rhoend`: Final trust-region radius ($0 < \mathrm{rhoend} \le
-///   \mathrm{rhobeg}$).
+/// - `rhoend`: Final trust-region radius ($> 0$; upstream `do_newuoa` in
+///   `num/private/mod_newuoa.f:48-77, 663` permits `rhoend > rhobeg`, in which
+///   case the run finishes after completing the initial `rho = rhobeg` cycle).
 /// - `maxfun`: Maximum number of objective evaluations allowed.
 /// - `max_valid_value`: Upper bound on acceptable objective values (`1e99`).
 /// - `calfun`: Objective callable `calfun(x) -> Result<f64, NumError>`.
@@ -41,7 +44,7 @@ pub struct NewuoaResult {
 /// # Errors
 ///
 /// Returns [`NumError::InvalidParameter`] if `n < 2`, `npt` is outside
-/// $[n + 2, (n + 1)(n + 2) / 2]$, or `rhobeg < rhoend <= 0`.
+/// $[n + 2, (n + 1)(n + 2) / 2]$, `rhobeg <= 0`, or `rhoend <= 0`.
 pub fn newuoa<F>(
     n: usize,
     npt: usize,
@@ -62,10 +65,9 @@ where
         || npt > max_npt
         || rhobeg <= 0.0
         || rhoend <= 0.0
-        || rhoend > rhobeg
     {
         return Err(NumError::InvalidParameter(
-            "require n >= 2, n+2 <= npt <= (n+1)(n+2)/2, and 0 < rhoend <= rhobeg in newuoa",
+            "require n >= 2, n+2 <= npt <= (n+1)(n+2)/2, rhobeg > 0, and rhoend > 0 in newuoa",
         ));
     }
 
@@ -79,7 +81,8 @@ where
         Ok(val.min(max_valid_value))
     };
 
-    // Build initial interpolation set around x[0..n] (mod_newuoa.f:158-183)
+    // Build initial interpolation set around x[0..n]
+    // (`num/private/mod_newuoa.f:158-238`).
     let xbase = x[..n].to_vec();
     let mut xpt = vec![vec![0.0_f64; n]; npt];
     let mut fval = vec![0.0_f64; npt];
@@ -131,86 +134,116 @@ where
 
     let mut h_mat = vec![0.0_f64; n * n];
     let mut rho = rhobeg;
-    let mut delta = rhobeg;
+    let mut delta = rho;
+    let mut diffa = 0.0_f64;
+    let mut diffb = 0.0_f64;
+    let mut diffc = 0.0_f64;
+    let mut nfsav = nf;
 
     while nf < maxfun {
         let (grad, h_new) =
             fit_min_frobenius_quad(n, npt, kopt, delta, &xpt, &fval, &h_mat);
         h_mat = h_new;
 
-        let d = trsbox_unconstrained(n, &grad, &h_mat, delta);
-        let dnorm = d.iter().map(|&v| v * v).sum::<f64>().sqrt();
+        let (d, crvmin) = trsbox_unconstrained(n, &grad, &h_mat, delta);
+        let dsq_tr: f64 = d.iter().map(|&v| v * v).sum();
+        let dnorm = delta.min(dsq_tr.sqrt());
 
+        // Short trust-region step branch (`num/private/mod_newuoa.f:265-274`).
         if dnorm < 0.5 * rho {
-            // Check if any interpolation point is far from xopt
-            let mut kfar = kopt;
-            let mut max_dist_sq = 0.0_f64;
-            let dist_thresh = flexmesa_math::pow2(2.0 * delta)
-                .max(flexmesa_math::pow2(10.0 * rho));
-            for k in 0..npt {
-                if k == kopt {
-                    continue;
-                }
-                let dsq: f64 = (0..n)
-                    .map(|j| flexmesa_math::pow2(xpt[k][j] - xpt[kopt][j]))
-                    .sum();
-                if dsq > max_dist_sq {
-                    max_dist_sq = dsq;
-                    kfar = k;
+            delta *= 0.1;
+            if delta <= 1.5 * rho {
+                delta = rho;
+            }
+            let temp = 0.125 * crvmin * rho * rho;
+            let need_model_step =
+                nf <= nfsav + 2 || temp <= diffa.max(diffb).max(diffc);
+            if need_model_step {
+                if let Some((kfar, max_dsq)) = farthest_point_beyond(
+                    n,
+                    npt,
+                    kopt,
+                    flexmesa_math::pow2(2.0 * delta),
+                    &xpt,
+                ) {
+                    if nf < maxfun {
+                        let dstep =
+                            (0.1 * max_dsq.sqrt()).min(0.5 * delta).max(rho);
+                        let d_geo = geometry_step_unconstrained(
+                            n, npt, kopt, kfar, dstep, &xpt,
+                        );
+                        let xnew: Vec<f64> =
+                            (0..n).map(|j| xpt[kopt][j] + d_geo[j]).collect();
+                        let pt: Vec<f64> =
+                            (0..n).map(|j| xbase[j] + xnew[j]).collect();
+                        let fnew = eval_f(&pt, &mut nf)?;
+                        let vquad = quad_step_change(n, &grad, &h_mat, &d_geo);
+                        diffc = diffb;
+                        diffb = diffa;
+                        diffa = (fnew - fval[kopt] - vquad).abs();
+                        if dstep > rho {
+                            nfsav = nf;
+                        }
+                        xpt[kfar] = xnew;
+                        fval[kfar] = fnew;
+                        if fnew < fval[kopt] {
+                            kopt = kfar;
+                        }
+                        continue;
+                    }
+                    break;
                 }
             }
-            if max_dist_sq > dist_thresh && nf < maxfun {
-                let d_geo =
-                    geometry_step_unconstrained(n, npt, kopt, kfar, rho, &xpt);
-                let xnew: Vec<f64> =
-                    (0..n).map(|j| xpt[kopt][j] + d_geo[j]).collect();
-                let pt: Vec<f64> = (0..n).map(|j| xbase[j] + xnew[j]).collect();
-                let fnew = eval_f(&pt, &mut nf)?;
-                xpt[kfar] = xnew;
-                fval[kfar] = fnew;
-                if fnew < fval[kopt] {
-                    kopt = kfar;
-                }
+            if rho > rhoend {
+                (rho, delta) = reduce_rho(rho, rhoend);
+                nfsav = nf;
                 continue;
             }
-            if rho <= rhoend {
-                break;
+            // Final Newton-Raphson probe at short step
+            // (`num/private/mod_newuoa.f:688, 444, 689-694`).
+            if nf < maxfun {
+                let xnew: Vec<f64> =
+                    (0..n).map(|j| xpt[kopt][j] + d[j]).collect();
+                let pt: Vec<f64> = (0..n).map(|j| xbase[j] + xnew[j]).collect();
+                let fnew = eval_f(&pt, &mut nf)?;
+                if fnew < fval[kopt] {
+                    x[..n].copy_from_slice(&pt);
+                    return Ok(NewuoaResult {
+                        x_min: pt,
+                        f_min: fnew,
+                        num_evals: nf,
+                    });
+                }
             }
-            delta = 0.5 * rho;
-            let ratio = rho / rhoend;
-            rho = if ratio <= 16.0 {
-                rhoend
-            } else if ratio <= 250.0 {
-                ratio.sqrt() * rhoend
-            } else {
-                0.1 * rho
-            };
-            delta = delta.max(rho);
-            continue;
+            break;
         }
 
         let xnew: Vec<f64> = (0..n).map(|j| xpt[kopt][j] + d[j]).collect();
         let pt: Vec<f64> = (0..n).map(|j| xbase[j] + xnew[j]).collect();
         let fnew = eval_f(&pt, &mut nf)?;
-        let fopt = fval[kopt];
+        let fsave = fval[kopt];
 
-        // Predicted reduction vquad = - (g^T d + 0.5 d^T H d)
-        let mut g_dot_d = 0.0_f64;
-        let mut d_h_d = 0.0_f64;
-        for i in 0..n {
-            g_dot_d += grad[i] * d[i];
-            for j in 0..n {
-                d_h_d += d[i] * h_mat[i * n + j] * d[j];
-            }
+        // Predicted change vquad = g^T d + 0.5 d^T H d
+        // (`num/private/mod_newuoa.f:449-467`).
+        let vquad = quad_step_change(n, &grad, &h_mat, &d);
+        diffc = diffb;
+        diffb = diffa;
+        diffa = (fnew - fsave - vquad).abs();
+        if dnorm > rho {
+            nfsav = nf;
         }
-        let pred = -(g_dot_d + 0.5 * d_h_d);
-        let ratio = if pred > 1e-30 {
-            (fopt - fnew) / pred
-        } else if fnew < fopt {
-            1.0
-        } else {
-            0.0
-        };
+        if vquad >= 0.0 {
+            if fnew < fsave {
+                x[..n].copy_from_slice(&pt);
+                return Ok(NewuoaResult {
+                    x_min: pt,
+                    f_min: fnew,
+                    num_evals: nf,
+                });
+            }
+            break;
+        }
+        let ratio = (fnew - fsave) / vquad;
 
         delta = if ratio <= 0.1 {
             0.5 * dnorm
@@ -224,7 +257,8 @@ where
         }
 
         // Select point to replace: farthest from the new best point
-        let k_ref = if fnew < fopt { usize::MAX } else { kopt };
+        // (`num/private/mod_newuoa.f:504-529`).
+        let k_ref = if fnew < fsave { usize::MAX } else { kopt };
         let mut knew = 0usize;
         let mut best_score = -1.0_f64;
         for k in 0..npt {
@@ -246,16 +280,15 @@ where
                 knew = k;
             }
         }
-        if fnew < fopt
+        if fnew < fsave
             || max_dist_sq_from(&xpt, kopt) > flexmesa_math::pow2(2.0 * delta)
         {
             xpt[knew] = xnew;
             fval[knew] = fnew;
-            if fnew < fopt {
+            if fnew < fsave {
                 kopt = knew;
             }
         } else {
-            // Replace knew if the new point is closer than knew to xopt
             let dsq_knew: f64 = (0..n)
                 .map(|j| flexmesa_math::pow2(xpt[knew][j] - xpt[kopt][j]))
                 .sum();
@@ -264,6 +297,54 @@ where
                 fval[knew] = fnew;
             }
         }
+
+        // Post-step sufficient-decrease, geometry, and rho-termination checks
+        // (`num/private/mod_newuoa.f:630-683`).
+        if fnew <= fsave + 0.1 * vquad {
+            continue;
+        }
+        if let Some((kfar, max_dsq)) = farthest_point_beyond(
+            n,
+            npt,
+            kopt,
+            flexmesa_math::pow2(2.0 * delta),
+            &xpt,
+        ) {
+            if nf < maxfun {
+                let dstep = (0.1 * max_dsq.sqrt()).min(0.5 * delta).max(rho);
+                let d_geo = geometry_step_unconstrained(
+                    n, npt, kopt, kfar, dstep, &xpt,
+                );
+                let xnew_m: Vec<f64> =
+                    (0..n).map(|j| xpt[kopt][j] + d_geo[j]).collect();
+                let pt_m: Vec<f64> =
+                    (0..n).map(|j| xbase[j] + xnew_m[j]).collect();
+                let fnew_m = eval_f(&pt_m, &mut nf)?;
+                let vquad_m = quad_step_change(n, &grad, &h_mat, &d_geo);
+                diffc = diffb;
+                diffb = diffa;
+                diffa = (fnew_m - fval[kopt] - vquad_m).abs();
+                if dstep > rho {
+                    nfsav = nf;
+                }
+                xpt[kfar] = xnew_m;
+                fval[kfar] = fnew_m;
+                if fnew_m < fval[kopt] {
+                    kopt = kfar;
+                }
+                continue;
+            }
+            break;
+        }
+        if ratio > 0.0 || delta.max(dnorm) > rho {
+            continue;
+        }
+        if rho > rhoend {
+            (rho, delta) = reduce_rho(rho, rhoend);
+            nfsav = nf;
+            continue;
+        }
+        break;
     }
 
     for j in 0..n {
@@ -274,6 +355,60 @@ where
         f_min: fval[kopt],
         num_evals: nf,
     })
+}
+
+pub(crate) fn quad_step_change(
+    n: usize,
+    grad: &[f64],
+    h_mat: &[f64],
+    d: &[f64],
+) -> f64 {
+    let mut g_dot_d = 0.0_f64;
+    let mut d_h_d = 0.0_f64;
+    for i in 0..n {
+        g_dot_d += grad[i] * d[i];
+        for j in 0..n {
+            d_h_d += d[i] * h_mat[i * n + j] * d[j];
+        }
+    }
+    g_dot_d + 0.5 * d_h_d
+}
+
+pub(crate) fn reduce_rho(rho: f64, rhoend: f64) -> (f64, f64) {
+    let delta = 0.5 * rho;
+    let ratio = rho / rhoend;
+    let next_rho = if ratio <= 16.0 {
+        rhoend
+    } else if ratio <= 250.0 {
+        ratio.sqrt() * rhoend
+    } else {
+        0.1 * rho
+    };
+    (next_rho, delta.max(next_rho))
+}
+
+pub(crate) fn farthest_point_beyond(
+    n: usize,
+    npt: usize,
+    kopt: usize,
+    distsq_thresh: f64,
+    xpt: &[Vec<f64>],
+) -> Option<(usize, f64)> {
+    let mut kfar = kopt;
+    let mut max_dist_sq = distsq_thresh;
+    for k in 0..npt {
+        if k == kopt {
+            continue;
+        }
+        let dsq: f64 = (0..n)
+            .map(|j| flexmesa_math::pow2(xpt[k][j] - xpt[kopt][j]))
+            .sum();
+        if dsq > max_dist_sq {
+            max_dist_sq = dsq;
+            kfar = k;
+        }
+    }
+    (kfar != kopt).then_some((kfar, max_dist_sq))
 }
 
 fn max_dist_sq_from(xpt: &[Vec<f64>], kopt: usize) -> f64 {
@@ -360,22 +495,24 @@ pub(crate) fn fit_min_frobenius_quad(
 }
 
 /// Solves $\min_{\|d\|_2 \le \Delta} g^T d + \frac{1}{2} d^T H d$ via
-/// Steihaug-Toint truncated conjugate gradient (`TRSBOX` unconstrained).
+/// Steihaug-Toint truncated conjugate gradient (`TRSAPP`,
+/// `num/private/mod_newuoa.f:1259-1354`), returning `(step, crvmin)`.
 fn trsbox_unconstrained(
     n: usize,
     grad: &[f64],
     h_mat: &[f64],
     delta: f64,
-) -> Vec<f64> {
+) -> (Vec<f64>, f64) {
     let mut d = vec![0.0_f64; n];
     let mut r = grad.to_vec();
     let mut p: Vec<f64> = r.iter().map(|&v| -v).collect();
     let mut rr: f64 = r.iter().map(|&v| v * v).sum();
     if rr <= 1e-30 {
-        return d;
+        return (d, 0.0);
     }
 
-    for _iter in 0..(2 * n) {
+    let mut crvmin = 0.0_f64;
+    for iter in 0..(2 * n) {
         let mut hp = vec![0.0_f64; n];
         for i in 0..n {
             let mut s = 0.0_f64;
@@ -395,8 +532,10 @@ fn trsbox_unconstrained(
             for i in 0..n {
                 d[i] += tau * p[i];
             }
-            return d;
+            return (d, 0.0);
         }
+        let curv = p_hp / pp.max(1e-30);
+        crvmin = if iter == 0 { curv } else { crvmin.min(curv) };
         let alpha = rr / p_hp;
         for i in 0..n {
             d[i] += alpha * p[i];
@@ -414,7 +553,7 @@ fn trsbox_unconstrained(
         }
         rr = rr_new;
     }
-    d
+    (d, crvmin)
 }
 
 /// Chooses a geometry-improving step of length `rho` orthogonal to the active

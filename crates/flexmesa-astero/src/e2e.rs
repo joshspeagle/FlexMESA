@@ -312,9 +312,11 @@ fn run_astero_search_case(
         .best_sample_idx
         .and_then(|i| search_rep.samples.get(i));
 
+    // `eval1` treats `best_chi2 < 0` as failure; non-negative `chi2 == 0` passes
+    // (`astero/private/astero_run_support.f90:237-246`).
     let assertions_passed = best.is_some_and(|b| {
         b.chi2.is_finite()
-            && b.chi2 > 0.0
+            && b.chi2 >= 0.0
             && (max_steps_per_stage.is_some() || b.chi2 < 1.0e90)
     });
 

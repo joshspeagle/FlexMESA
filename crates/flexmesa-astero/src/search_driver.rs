@@ -980,6 +980,16 @@ fn run_track(
     if let Some(err) = extras.eval_error.take() {
         return Err(err);
     }
+    // Emit a 1-row track history when evolution terminated before step 1
+    // completed (`steps_taken == 0`), because `IncrementalHistoryWriter` opens
+    // the file lazily on first row write; without this, a track whose step 1
+    // fails leaves a numbering gap in `sample_NNNN_history.data` (`DECISIONS #65`).
+    if let Some(lw) = logs_writer.as_mut() {
+        if lw.needs_history_header() {
+            lw.sync_history_target(&mut model);
+            lw.record_step(&model, true, true)?;
+        }
+    }
     let results_dir = output_root.join(&ctrl.astero_results_directory);
     if let Some(ref best_model) = extras.best_model {
         write_best_model_artifacts(&results_dir, ctrl, best_model, case_dir)?;

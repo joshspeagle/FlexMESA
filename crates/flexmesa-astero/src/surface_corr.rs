@@ -47,8 +47,8 @@ pub fn interpolate_l0_inertia(
 }
 
 /// Estimates radial orders `l0_n_obs` using upstream MESA `init_obs_data`
-/// (`astero_support.f90:655-664`), falling back to `floor(nu_0 / delta_nu)` when
-/// `nu_max <= 0`.
+/// (`astero/private/astero_support.f90:655-664`), falling back to
+/// `floor(nu_0 / delta_nu)` when `nu_max <= 0`.
 #[must_use]
 pub fn estimate_l0_n_obs_with_numax(
     l0_obs_freqs: &[f64],
@@ -88,7 +88,8 @@ pub fn estimate_l0_n_obs_with_numax(
         .collect()
 }
 
-/// Estimates radial orders `l0_n_obs(j)` when omitted (`astero_support.f90:655-664`).
+/// Estimates radial orders `l0_n_obs(j)` when omitted
+/// (`astero/private/astero_support.f90:655-664`).
 #[must_use]
 pub fn estimate_l0_n_obs(l0_obs_freqs: &[f64], delta_nu: f64) -> Vec<f64> {
     estimate_l0_n_obs_with_numax(
@@ -214,14 +215,16 @@ pub fn eval_kjeldsen_corr(
         .iter()
         .enumerate()
         .map(|(idx, &f_mod)| {
-            if idx < l0_obs_freqs.len() && l0_obs_freqs[idx] < 0.0 {
-                return f_mod;
-            }
             if b_power <= 0.0 || f_mod <= 0.0 {
                 return f_mod;
             }
             let is_l0 =
                 idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
+            // Only compare against `l0_obs_freqs` on `l = 0` modes
+            // (`astero/private/astero_support.f90:739-741, 764-766`).
+            if is_l0 && idx < l0_obs_freqs.len() && l0_obs_freqs[idx] < 0.0 {
+                return f_mod;
+            }
             let q_nl = if is_l0 {
                 1.0
             } else if idx < all_inertias.len() && !l0_model_freqs.is_empty() {
@@ -240,7 +243,8 @@ pub fn eval_kjeldsen_corr(
     (corr, a_div_r, r_scale)
 }
 
-/// Evaluates the Ball & Gizon (2014) 1-term cubic surface correction (`astero_support.f90:865-927`).
+/// Evaluates the Ball & Gizon (2014) 1-term cubic surface correction
+/// (`astero/private/astero_support.f90:865-927`).
 #[must_use]
 pub fn eval_cubic_corr(
     obs_freqs: &[f64],

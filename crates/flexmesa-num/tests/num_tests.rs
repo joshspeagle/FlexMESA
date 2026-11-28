@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Golden and property tests for root-finding, optimization, search, and
 //! quadrature in `flexmesa-num`.
 //!
@@ -28,6 +29,7 @@
 //! - `test_nm_simplex_and_park_miller_prng_match_upstream_oracles`:
 //!   Nelder-Mead simplex optimization and Park-Miller `ran1_zah` PRNG.
 
+#![forbid(unsafe_code)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::many_single_char_names,
@@ -417,6 +419,64 @@ fn test_newuoa_and_bobyqa_match_upstream_chebyquad_suite() {
     }
 }
 
+/// Verifies [`newuoa`] and [`bobyqa`] permit `rhoend > rhobeg` and exit after
+/// completing the initial `rho = rhobeg` cycle (8 evaluations for `n = 3,
+/// npt = 7` when eval 8 does not improve on the best initial point), matching
+/// `num/private/mod_newuoa.f:48-77, 630-689` and
+/// `num/private/mod_bobyqa.f:58-137, 802-887`.
+///
+/// Previously `newuoa` and `bobyqa` rejected `rhoend > rhobeg` with
+/// `NumError::InvalidParameter`, and lacked the post-step label-`490`/`680` exit
+/// when `f > fsave + 0.1 * vquad`, `ratio <= 0`, and `max(delta, dnorm) <= rho`,
+/// causing `astero/fast_newuoa` (`newuoa_rhoend = 1.0`, `rhobeg = 0.45`) to
+/// run past MESA's 8 evaluations.
+#[test]
+fn test_newuoa_and_bobyqa_with_rhoend_above_rhobeg_stop_after_one_cycle() {
+    let t11b_init_f = [
+        333_512.809_551_508_5,
+        334_677.624_765_606_1,
+        333_656.019_489_406_1,
+        333_376.792_678_517_1,
+        333_338.757_633_439_8,
+        334_180.878_889_758_8,
+        334_070.005_649_359_6,
+        333_405.247_483_259_5,
+    ];
+    let mut x_new = [0.0_f64; 3];
+    let mut eval_idx = 0usize;
+    let res_new = newuoa(3, 7, &mut x_new, 0.45, 1.0, 1_000, 1.0e6, |_| {
+        let val = if eval_idx < t11b_init_f.len() {
+            t11b_init_f[eval_idx]
+        } else {
+            400_000.0
+        };
+        eval_idx += 1;
+        Ok(val)
+    })
+    .expect("newuoa accepts rhoend > rhobeg");
+    assert_eq!(res_new.num_evals, 8);
+    assert!((res_new.f_min - 333_338.757_633_439_8).abs() <= 1.0e-12);
+    assert!((res_new.x_min[0] - (-0.45)).abs() <= 1.0e-12);
+
+    let mut x_bob = [0.0_f64; 3];
+    let xl = [-1.0_f64; 3];
+    let xu = [1.0_f64; 3];
+    let mut bob_idx = 0usize;
+    let res_bob =
+        bobyqa(3, 7, &mut x_bob, &xl, &xu, 0.45, 1.0, 1_000, 1.0e6, |_| {
+            let val = if bob_idx < t11b_init_f.len() {
+                t11b_init_f[bob_idx]
+            } else {
+                400_000.0
+            };
+            bob_idx += 1;
+            Ok(val)
+        })
+        .expect("bobyqa accepts rhoend > rhobeg");
+    assert_eq!(res_bob.num_evals, 8);
+    assert!((res_bob.f_min - 333_338.757_633_439_8).abs() <= 1.0e-12);
+}
+
 /// Verifies [`nm_simplex`] on all 6 benchmark functions (`FR4`, `ER`, `WD`,
 /// `BLE`, `PS`, `TR`) from `num/test/src/test_simplex.f90` (`num/test/test_output:131-149`).
 #[test]
@@ -620,8 +680,8 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
 }
 
 /// Verifies `nm_simplex` honors `max_iters` separately from `max_evals`
-/// (`mod_simplex.f90:127`) and leaves `x_first` unclamped when
-/// `enforce_bounds == false` (`mod_simplex.f90:218-236`).
+/// (`num/private/mod_simplex.f90:127`) and leaves `x_first` unclamped when
+/// `enforce_bounds == false` (`num/private/mod_simplex.f90:218-236`).
 #[test]
 fn test_nm_simplex_respects_max_iters_and_unclamped_initial_vertex() {
     let mut visited: Vec<[f64; 2]> = Vec::new();

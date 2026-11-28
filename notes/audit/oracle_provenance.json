@@ -1,9 +1,7 @@
 {
  "claims": 94,
- "claims_verified": 78,
+ "claims_verified": 80,
  "not_counted_only_on_scope_or_precision": [
-  "eos/private/eospt_eval.f90::get_Pgas",
-  "eos/private/ion_offset.f90::compute_ion_offset",
   "neu/private/mod_neu.f90::ifermi12",
   "neu/private/mod_neu.f90::zfermim12",
   "star/private/rsp_lina.f90::do_LINA"
@@ -16,6 +14,8 @@
   "eos/private/eosdt_eval.f90::get_Rho",
   "eos/private/eosdt_eval.f90::get_T",
   "eos/private/eospt_eval.f90::Get_PT_Results_using_DT",
+  "eos/private/eospt_eval.f90::get_Pgas",
+  "eos/private/ion_offset.f90::compute_ion_offset",
   "eos/public/eos_lib.f90::eosDT_get",
   "eos/public/eos_lib.f90::eosDT_get_Rho",
   "eos/public/eos_lib.f90::eosDT_get_T",
@@ -41,32 +41,6 @@
   "turb/public/turb.f90::set_thermohaline"
  ],
  "routines_not_counted": {
-  "eos/private/eospt_eval.f90::get_Pgas": [
-   {
-    "failures": [
-     [
-      "scope",
-      "no #[test] function reaches both a call to ['eos_pt_get_pgas'] and the reference data"
-     ]
-    ],
-    "precision": "print",
-    "reference": "tests/fixtures/golden/eos/test_output.txt",
-    "test": "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs"
-   }
-  ],
-  "eos/private/ion_offset.f90::compute_ion_offset": [
-   {
-    "failures": [
-     [
-      "scope",
-      "no #[test] function reaches both a call to ['compute_ion_offset'] and the reference data"
-     ]
-    ],
-    "precision": "print",
-    "reference": "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv",
-    "test": "crates/flexmesa-eos/tests/wave3a1_golden_tests.rs"
-   }
-  ],
   "neu/private/mod_neu.f90::ifermi12": [
    {
     "failures": [

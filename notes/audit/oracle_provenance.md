@@ -7,19 +7,17 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | Measure | Value |
 | :--- | ---: |
 | Claims (test, reference, routine) | 94 |
-| Claims verified | 78 |
+| Claims verified | 80 |
 | Routines claimed | 64 |
-| Routines verified exact (0 ULP) | 29 |
+| Routines verified exact (0 ULP) | 31 |
 | Routines verified at print precision only | 29 |
-| Routines not counted | 6 |
-| Not counted only because of `scope` or `precision` | 5 |
+| Routines not counted | 4 |
+| Not counted only because of `scope` or `precision` | 3 |
 
 ## Routines claimed but not counted
 
 | Routine | Test | Reference | Failing checks |
 | :--- | :--- | :--- | :--- |
-| `eos/private/eospt_eval.f90::get_Pgas` | `crates/flexmesa-eos/tests/wave3b1_golden_tests.rs` | `tests/fixtures/golden/eos/test_output.txt` | `scope`: no #[test] function reaches both a call to ['eos_pt_get_pgas'] and the reference data |
-| `eos/private/ion_offset.f90::compute_ion_offset` | `crates/flexmesa-eos/tests/wave3a1_golden_tests.rs` | `benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv` | `scope`: no #[test] function reaches both a call to ['compute_ion_offset'] and the reference data |
 | `neu/private/mod_neu.f90::ifermi12` | `crates/flexmesa-neu/tests/mesa_26_4_1_oracles_test.rs` | `benchmarks/fortran_mesa/neu_oracles/mesa_26_4_1_neu_oracles.tsv` | `scope`: no #[test] function reaches both a call to ['ifermi12'] and the reference data |
 | `neu/private/mod_neu.f90::zfermim12` | `crates/flexmesa-neu/tests/mesa_26_4_1_oracles_test.rs` | `benchmarks/fortran_mesa/neu_oracles/mesa_26_4_1_neu_oracles.tsv` | `scope`: no #[test] function reaches both a call to ['zfermim12'] and the reference data |
 | `star/private/hydro_chem_eqns.f90::do1_chem_eqns` | `crates/flexmesa-star/tests/equ_he3_parity_test.rs` | `mesa_stepdumps:mesa_stepdumps/star/1.3M_ms_high_Z.stepdump` | `consts`: embedded values need a committed repository reference, not a bundle member |
@@ -35,6 +33,8 @@ Each `[[tests.oracles]]` entry of `benchmarks/dashboard/test_taxonomy.toml` is c
 | `eos/private/eosdt_eval.f90::get_Rho` | exact |
 | `eos/private/eosdt_eval.f90::get_T` | exact |
 | `eos/private/eospt_eval.f90::Get_PT_Results_using_DT` | exact |
+| `eos/private/eospt_eval.f90::get_Pgas` | exact |
+| `eos/private/ion_offset.f90::compute_ion_offset` | exact |
 | `eos/public/eos_lib.f90::eosDT_get` | exact |
 | `eos/public/eos_lib.f90::eosDT_get_Rho` | exact |
 | `eos/public/eos_lib.f90::eosDT_get_T` | exact |

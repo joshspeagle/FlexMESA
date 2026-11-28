@@ -1,0 +1,35 @@
+# FlexMESA MESA 26.4.1 eosPT_eval::get_Pgas / ion_offset::compute_ion_offset oracle vectors (#161, DECISIONS #80)
+# mesa_version: r26.4.1
+# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd
+# mesasdk_version: x86_64-linux-26.6.1
+# math_backend: CRMATH
+# compiler: GCC version 15.2.0
+# fflags: -march=x86-64 -mtune=generic -mfpmath=sse -O2 -fopenmp -ffp-contract=off -fprotect-parens -fno-sign-zero -fno-range-check -ffree-line-length-none
+case_id	role	field	part	raw_bits_hex	decimal
+ion_offset_pure_h	in	xa_0	val	0x3FF0000000000000	1.00000000000000000E+000
+ion_offset_pure_h	out	offset	val	0x42A7DDB4D83E7A26	1.31204946409570742E+013
+ion_offset_solar_3sp	in	xa_0	val	0x3FE6666666666666	6.99999999999999956E-001
+ion_offset_solar_3sp	in	xa_1	val	0x3FD1EB851EB851EC	2.80000000000000027E-001
+ion_offset_solar_3sp	in	xa_2	val	0x3F947AE147AE147B	2.00000000000000004E-002
+ion_offset_solar_3sp	out	offset	val	0x42B310F261DDEF08	2.09635069045590312E+013
+eospt_get_pgas_solar_15_7p2	in	xa_0	val	0x3FE6666666666666	6.99999999999999956E-001
+eospt_get_pgas_solar_15_7p2	in	xa_1	val	0x3FD1EB851EB851EC	2.80000000000000027E-001
+eospt_get_pgas_solar_15_7p2	in	xa_2	val	0x3F6C653B6E15316A	3.46623999999999977E-003
+eospt_get_pgas_solar_15_7p2	in	xa_3	val	0x3F516CCF6126B678	1.06353999999999997E-003
+eospt_get_pgas_solar_15_7p2	in	xa_4	val	0x3F83C24F45628ABA	9.64796000000000056E-003
+eospt_get_pgas_solar_15_7p2	in	xa_5	val	0x3F602ABABEAD4F59	1.97349999999999999E-003
+eospt_get_pgas_solar_15_7p2	in	xa_6	val	0x3F6F876F4A909E00	3.84876000000011764E-003
+eospt_get_pgas_solar_15_7p2	in	logT	val	0x401CCCCCCCCCCCCD	7.20000000000000018E+000
+eospt_get_pgas_solar_15_7p2	in	target_lne	val	0x4041FD25E9EB5EA5	3.59777195357576502E+001
+eospt_get_pgas_solar_15_7p2	in	logPgas_guess	val	0x402D99999999999A	1.48000000000000007E+001
+eospt_get_pgas_solar_15_7p2	in	logPgas_tol	val	0x3EB0C6F7A0B5ED8D	9.99999999999999955E-007
+eospt_get_pgas_solar_15_7p2	in	other_tol	val	0x3EC350C38AB65FEE	2.30258509299404516E-006
+eospt_get_pgas_solar_15_7p2	out	logPgas_result	val	0x402E000000000000	1.50000000000000000E+001
+eospt_get_pgas_solar_15_7p2	out	Rho	val	0x3FDE2E21AD20B509	4.71565646238403746E-001
+eospt_get_pgas_solar_15_7p2	out	logRho	val	0xBFD4E4AF6D9E1B67	-3.26457840965693469E-001
+eospt_get_pgas_solar_15_7p2	out	dlnRho_dlnPgas_c_T	val	0x3FF000EF00F3628C	1.00022793170333824E+000
+eospt_get_pgas_solar_15_7p2	out	dlnRho_dlnT_c_Pgas	val	0xBFF0044D7DD6E9AE	-1.00105046421104360E+000
+eospt_get_pgas_solar_15_7p2	out	res_lnE	val	0x4041FD25E9EB5EA5	3.59777195357576502E+001
+eospt_get_pgas_solar_15_7p2	out	res_lnPgas	val	0x404144F69FF9FF2E	3.45387763949096183E+001
+eospt_get_pgas_solar_15_7p2	out	eos_calls	val	0x4000000000000000	2.00000000000000000E+000
+eospt_get_pgas_solar_15_7p2	out	ierr	val	0x0000000000000000	0.00000000000000000E+000

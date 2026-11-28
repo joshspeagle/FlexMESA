@@ -458,9 +458,14 @@ routines = [
   "eos/private/gauss_fermi.f90::dfermi",
   "eos/private/ideal.f90::get_ideal_eos_results",
   "eos/private/ideal.f90::get_ideal_for_eosdt",
-  "eos/private/ion_offset.f90::compute_ion_offset",
   "eos/public/eos_lib.f90::eos_fermi_dirac_integral",
 ]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/ion_offset.f90::compute_ion_offset"]
 
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3a2_helm_regimes_tests.rs"
@@ -570,7 +575,6 @@ routines = [
   "eos/private/eosdt_eval.f90::get_Rho",
   "eos/private/eosdt_eval.f90::get_T",
   "eos/private/eospt_eval.f90::Get_PT_Results_using_DT",
-  "eos/private/eospt_eval.f90::get_Pgas",
   "eos/public/eos_lib.f90::eosDT_get",
   "eos/public/eos_lib.f90::eosDT_get_Rho",
   "eos/public/eos_lib.f90::eosDT_get_T",
@@ -588,6 +592,12 @@ routines = [
   "eos/private/eospt_eval.f90::get_T",
   "eos/public/eos_lib.f90::eosPT_get_T",
 ]
+
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/eospt_eval.f90::get_Pgas"]
 
 [[tests]]
 path = "crates/flexmesa-gyre/tests/g1_vectors.rs"

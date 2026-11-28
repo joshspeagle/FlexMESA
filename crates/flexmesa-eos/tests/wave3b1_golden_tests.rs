@@ -427,6 +427,43 @@ fn test_wave3b1_golden_eospt_for_ck_matches_fortran_mesa() {
     assert_eq!(pt.eos.res[I_FRAC_OPAL_SCVH], 1.0);
 }
 
+/// MESA `26.4.1` outputs of `eosPT_eval::get_Pgas` at the operating point
+/// below, written by
+/// `benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90`.
+const EOS_PGAS_ION_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+);
+
+/// Return the MESA bit pattern of `field` in `case` (`role` is `in` or `out`).
+fn mesa_pgas_bits(case: &str, role: &str, field: &str) -> u64 {
+    for line in EOS_PGAS_ION_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[1] == role
+            && cols[2] == field
+            && cols[3] == "val"
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA eosPT_get_Pgas oracle row for {case} {role} {field}");
+}
+
+fn assert_pgas_bits(label: &str, actual: f64, expected_bits: u64) {
+    let actual_bits = actual.to_bits();
+    assert_eq!(
+        actual_bits,
+        expected_bits,
+        "{label}: MESA {expected:.17e} ({expected_bits:016X}) vs Flex {actual:.17e} ({actual_bits:016X})",
+        expected = f64::from_bits(expected_bits),
+    );
+}
+
 #[test]
 fn test_wave3b1_components_cms_and_eospt_inversions() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
@@ -564,6 +601,43 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         1.0e-12,
     );
 
+    for (idx, &x) in xa.iter().enumerate() {
+        assert_pgas_bits(
+            &format!("eosPT_get_Pgas.in.xa_{idx}"),
+            x,
+            mesa_pgas_bits(
+                "eospt_get_pgas_solar_15_7p2",
+                "in",
+                &format!("xa_{idx}"),
+            ),
+        );
+    }
+    assert_pgas_bits(
+        "eosPT_get_Pgas.in.logT",
+        7.2,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "in", "logT"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.in.target_lne",
+        target_lne,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "in", "target_lne"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.in.logPgas_guess",
+        14.8,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "in", "logPgas_guess"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.in.logPgas_tol",
+        1.0e-6,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "in", "logPgas_tol"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.in.other_tol",
+        LN10 * 1.0e-6,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "in", "other_tol"),
+    );
+
     let inv_pgas = eos_pt_get_pgas(
         ht,
         &chem_id,
@@ -583,6 +657,54 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         inv_pgas.log10_result,
         15.0,
         1.0e-5,
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.logPgas_result",
+        inv_pgas.log10_result,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "logPgas_result"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.Rho",
+        inv_pgas.pt.rho,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "Rho"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.logRho",
+        inv_pgas.pt.log10_rho,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "logRho"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.dlnRho_dlnPgas_c_T",
+        inv_pgas.pt.dln_rho_dln_pgas_const_t,
+        mesa_pgas_bits(
+            "eospt_get_pgas_solar_15_7p2",
+            "out",
+            "dlnRho_dlnPgas_c_T",
+        ),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.dlnRho_dlnT_c_Pgas",
+        inv_pgas.pt.dln_rho_dln_t_const_pgas,
+        mesa_pgas_bits(
+            "eospt_get_pgas_solar_15_7p2",
+            "out",
+            "dlnRho_dlnT_c_Pgas",
+        ),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.res_lnE",
+        inv_pgas.pt.eos.res[I_LN_E],
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "res_lnE"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.res_lnPgas",
+        inv_pgas.pt.eos.res[I_LN_PGAS],
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "res_lnPgas"),
+    );
+    assert_pgas_bits(
+        "eosPT_get_Pgas.out.eos_calls",
+        inv_pgas.eos_calls as f64,
+        mesa_pgas_bits("eospt_get_pgas_solar_15_7p2", "out", "eos_calls"),
     );
     assert_eq!(pt_ref.eos.d_dxa.len(), 7);
     assert!(eos_dt_get_t(

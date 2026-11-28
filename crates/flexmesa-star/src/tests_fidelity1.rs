@@ -142,8 +142,11 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     );
 
     // 3. PC blending across [gamma_ln_s_eps_grav_full_off, gamma_ln_s_eps_grav_full_on] = [120, 150]
-    model.gam[k] = 135.0; // midpoint of [120, 150] -> w_gam = 0.5
-    model.aux.eos_frac_pc[k] = 0.8; // alfa_lns = 0.4
+    // Upstream uses `using_PC = (eos_frac_PC(k) > 0)` and `gam_start(k)`, so
+    // `alfa = (135 - 120) / (150 - 120) = 0.5`, with `eps_grav_factor` applied
+    // once at the end (`star/private/eps_grav.f90:67,85-100`).
+    model.gam_start[k] = 135.0; // midpoint of [120, 150] -> alfa = 0.5
+    model.aux.eos_frac_pc[k] = 0.8; // using_PC = true
     model.controls.eps_grav_factor = 0.75;
     model.controls.include_composition_in_eps_grav = true;
     let base = k * model.species;
@@ -154,7 +157,8 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let eg_lns = eval_eps_grav_lns_cell(&model, k);
     let eg_std =
         eval_eps_grav_std_cell(&model, k).expect("eval_eps_grav_std_cell");
-    let blended_expected = eg_lns.val * 0.4 + eg_std.val * 0.6;
+    let blended_expected =
+        model.controls.eps_grav_factor * (0.5 * eg_lns.val + 0.5 * eg_std.val);
     assert!(
         (model.eps_grav_ad[k].val - blended_expected).abs()
             / blended_expected.abs().max(1.0)
@@ -705,7 +709,7 @@ fn test_eval_eps_grav_composition_finite_difference_partials_and_d_eps_grav_dx()
     }
 
     model.aux.eos_frac_pc[k] = 1.0;
-    model.gam[k] = model.controls.gamma_ln_s_eps_grav_full_on + 10.0;
+    model.gam_start[k] = model.controls.gamma_ln_s_eps_grav_full_on + 10.0;
     eval_eps_grav(&mut model).expect("eval_eps_grav lns");
     assert!(
         model.aux.d_eps_grav_dx[base..base + sp]

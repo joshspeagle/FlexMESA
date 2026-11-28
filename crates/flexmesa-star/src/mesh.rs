@@ -494,6 +494,8 @@ impl StarModel {
         self.ln_peos_start.clone_from(&self.ln_peos);
         self.ln_e_start.clone_from(&self.ln_e);
         self.ln_s_start.clone_from(&self.ln_s);
+        // `s% gam_start(k) = s% gam(k)` (`star/private/struct_burn_mix.f90:320`).
+        self.gam_start.clone_from(&self.gam);
         self.energy_start.clone_from(&self.energy);
         // `save_start_values` leaves `total_internal_energy_old` alone
         // (`star/private/struct_burn_mix.f90:268-356`): it is set once per
@@ -620,6 +622,7 @@ impl StarModel {
             &mut self.ln_peos_start,
             &mut self.ln_e_start,
             &mut self.ln_s_start,
+            &mut self.gam_start,
             &mut self.energy_start,
             &mut self.peos_start,
             &mut self.non_nuc_neu_start,

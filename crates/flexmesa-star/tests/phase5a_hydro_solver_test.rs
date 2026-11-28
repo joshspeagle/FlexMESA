@@ -207,8 +207,12 @@ fn freeze_microphysics_tangents(m: &mut StarModel) {
 /// follows the perturbed `lnR` through `dxh_lnR`.
 fn sync_solver_dxh_lnr(m: &mut StarModel) {
     m.aux.dxh_lnr.resize(m.nz, 0.0);
+    m.aux.dxh_v.resize(m.nz, 0.0);
     for k in 0..m.nz {
         m.aux.dxh_lnr[k] = m.ln_r[k] - m.ln_r_start[k];
+        if k < m.v.len() && k < m.v_start.len() {
+            m.aux.dxh_v[k] = m.v[k] - m.v_start[k];
+        }
     }
 }
 

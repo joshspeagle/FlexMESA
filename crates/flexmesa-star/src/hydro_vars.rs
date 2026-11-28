@@ -1569,10 +1569,16 @@ pub(crate) fn set_hydro_vars_with_skips(
         set_cgrav(model)?;
         model.set_m_grav_and_grav();
     }
-    // `update_vars` sets `irradiation_heat` (`star/private/hydro_vars.f90:
-    // 258-265`) from `set_vars`; the solver leaves it, and `set_final_vars`
-    // restores the start-of-step value at its call site.
+    // Upstream calls `s% other_momentum` in `update_vars` when
+    // `use_other_momentum` is set (`star/private/hydro_vars.f90:249-256`)
+    // before setting `irradiation_heat` (`:258-265`); the solver leaves both,
+    // and `set_final_vars` restores start-of-step values at its call site.
     if !skips.solver {
+        if model.controls.use_other_momentum {
+            return Err(StarError::InvalidInput(String::from(
+                "use_other_momentum = .true. requires an other_momentum hook (star/private/hydro_vars.f90:249-256)",
+            )));
+        }
         set_irradiation_heat(model);
     }
     if model.aux.mixing.mlt_mixing_type.len() != nz {

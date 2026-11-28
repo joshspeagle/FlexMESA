@@ -5467,7 +5467,14 @@ upstream_lines = 449
 upstream_sha256 = "78b18c9ccc5b244fe0b53349236870af15d71365b70d25167873a997ffa1475d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["init_potekhin"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"init_potekhin" = "crates/flexmesa-kap/src/conduction.rs::init_potekhin" # partial: parses the embedded copy of condtabl.data (include_str) once under a OnceLock instead of reading kap_dir/condtabl.data on first call; failures return KapError instead of mesa_error; ilinx/iliny not retained (unused downstream)
+"do_electron_conduction_potekhin" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction_potekhin"
+"do_electron_conduction_potekhin::get1" = "crates/flexmesa-kap/src/conduction.rs::eval_potekhin_z_slice"
+"do_electron_conduction_blouin" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction_blouin"
+"do_electron_conduction" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction"
 
 [[files]]
 upstream_path = "kap/private/cubic_interpolator.f90"

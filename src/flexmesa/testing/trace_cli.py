@@ -13,7 +13,7 @@ import os
 import pathlib
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from flexmesa import _dispatch
@@ -726,6 +726,17 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "form one complete campaign."
         ),
     )
+    p_merge.add_argument(
+        "--stale-gap-status",
+        type=int,
+        default=1,
+        help=(
+            "Exit status when the gate's only finding is declared gaps that "
+            "now pass (default 1). The nightly campaign uses 3 to ask for a "
+            "rebaseline instead of raising the regression alert "
+            "(DECISIONS #81)."
+        ),
+    )
     return parser
 
 
@@ -1338,12 +1349,13 @@ def _report_and_gate(
             + "; ".join(problems),
             file=sys.stderr,
         )
-    if ns.gate and (
-        summary["undeclared_failures"]
-        or summary["stale_known_gaps"]
-        or regressions
-        or problems
-    ):
+    status = gate_status(
+        summary,
+        has_regressions=bool(regressions),
+        has_problems=bool(problems),
+        stale_gap_status=int(getattr(ns, "stale_gap_status", 1)),
+    )
+    if ns.gate and status != 0:
         if summary["undeclared_failures"]:
             print(
                 "undeclared failures: "
@@ -1356,7 +1368,38 @@ def _report_and_gate(
                 + ", ".join(summary["stale_known_gaps"]),
                 file=sys.stderr,
             )
+        return status
+    return 0
+
+
+def gate_status(
+    summary: Mapping[str, Any],
+    *,
+    has_regressions: bool,
+    has_problems: bool,
+    stale_gap_status: int = 1,
+) -> int:
+    """Return the gate's exit status for one run or merged campaign.
+
+    The nightly campaign reports a run whose only finding is improvement
+    (declared gaps that now pass) with its own status, so it asks for a
+    rebaseline instead of raising the regression alert (DECISIONS #81).
+    Undeclared failures, regressions against the baseline and incomplete
+    shard sets are always status 1.
+
+    Args:
+        summary: The report payload's ``summary`` block.
+        has_regressions: Whether any case regressed against the baseline.
+        has_problems: Whether the shard reports are not one campaign.
+        stale_gap_status: Status for a stale-gaps-only result.
+
+    Returns:
+        ``0`` (clean), ``stale_gap_status`` or ``1``.
+    """
+    if summary["undeclared_failures"] or has_regressions or has_problems:
         return 1
+    if summary["stale_known_gaps"]:
+        return stale_gap_status
     return 0
 
 

@@ -201,6 +201,8 @@ def test_synthetic_gate_rejects_closed_issue_and_unexpected_ignored_outcomes(
     )
     assert not res_stale_pass.ok
     assert any("stale_known_gap" in s for s in res_stale_pass.unexpected_passes)
+    # DECISIONS #81: an improvement alone is told apart from a regression.
+    assert res_stale_pass.only_unexpected_passes
 
     # When expect_fail_when_run = false, FAILED must fail the gate.
     repo_pass_expected = _write_fake_repo(
@@ -273,3 +275,44 @@ def test_fail_on_imperative_skips_and_live_github_pagination(
     states = known_gaps_gate.load_issue_states(repo, fetch_github_api=True)
     assert states[161] == "closed"
     assert 999 not in states
+
+
+def test_stale_gap_status_only_when_unexpected_passes_are_the_sole_finding(
+    tmp_path: pathlib.Path,
+) -> None:
+    """An ignored test that now passes exits with --stale-gap-status (3).
+
+    Any other finding, such as a declared failure that fails when it is
+    expected to pass, still exits 1 (DECISIONS #81).
+    """
+    repo = _write_fake_repo(
+        tmp_path / "improve",
+        expect_fail_rust=True,
+        issue_states={161: "open", 153: "open"},
+    )
+    log_pass = tmp_path / "pass.log"
+    log_pass.write_text("test nested::test_alpha ... ok\n", encoding="utf-8")
+    args = [
+        "--repo-root",
+        str(repo),
+        "--cargo-ignored-log",
+        str(log_pass),
+        "--stale-gap-status",
+        "3",
+    ]
+    assert known_gaps_gate.main(args) == 3
+
+    repo_bad = _write_fake_repo(tmp_path / "regress", expect_fail_rust=False)
+    log_fail = tmp_path / "fail.log"
+    log_fail.write_text(
+        "test nested::test_alpha ... FAILED\n", encoding="utf-8"
+    )
+    args_bad = [
+        "--repo-root",
+        str(repo_bad),
+        "--cargo-ignored-log",
+        str(log_fail),
+        "--stale-gap-status",
+        "3",
+    ]
+    assert known_gaps_gate.main(args_bad) == 1

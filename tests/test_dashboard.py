@@ -43,6 +43,7 @@ def test_port_manifest_matches_mesa_26_4_1_and_verified_evidence() -> None:
     expected_kernel_verified = {
         "star/private/diffusion.f90",
         "star/private/diffusion_support.f90",
+        "star/private/paquette_coeffs.f90",
         "star/private/phase_separation.f90",
         "star/private/solve_omega_mix.f90",
     }

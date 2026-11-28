@@ -9,15 +9,15 @@ Instead of capping steps or loosening checks to force green runs, unfinished or 
 
 | Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | Strict-Validated | Diagnostic Runs | Reach Upstream Term | Declared Gaps | Verified Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 90 | 87 | 3 | 78 | 12 | 75 | 29 | 56 |
-| `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 3 | 4 |
+| `star` | 90 | 87 | 3 | 78 | 12 | 75 | 30 | 56 |
+| `binary` | 8 | 8 | 0 | 8 | 0 | 8 | 4 | 4 |
 | `astero` | 8 | 8 | 0 | 8 | 0 | 7 | 2 | 3 |
-| **Total** | **106** | **103** | **3** | **94** | **12** | **90** | **34** | **63** |
+| **Total** | **106** | **103** | **3** | **94** | **12** | **90** | **36** | **63** |
 
 `Strict-Validated` counts cases whose unmodified inlists pass strict control validation (`#147`). `Diagnostic Runs` counts cases that strict validation rejects and that were rerun with the unsupported controls ignored; their numbers show where the engine stands and can never count as a pass (`DECISIONS #26`). `Reach Upstream Term` counts runs of either kind.
 
-- **Undeclared Failures**: `2`
-- **Within Numeric Tolerance While Governed as Gaps**: `8` cases (`star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb`, `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
+- **Undeclared Failures**: `0`
+- **Within Numeric Tolerance While Governed as Gaps**: `8` cases (`star/gyre_in_mesa_wd` ([#157](https://github.com/joshspeagle/FlexMESA/issues/157)), `star/make_planets` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `star/ns_h` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `binary/wind_fed_bhhmxb` ([#587](https://github.com/joshspeagle/FlexMESA/issues/587)), `astero/fast_from_file` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_newuoa` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_scan_grid` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162)), `astero/fast_simplex` ([#162](https://github.com/joshspeagle/FlexMESA/issues/162))) meet numeric tolerances while remaining declared gaps under active tracking issues.
 
 ## Cases Without a Stored `26.4.1` Reference (`no_reference_yet`)
 
@@ -34,15 +34,15 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | Tracking Issue | Declared Case Count | Primary Focus |
 | :--- | ---: | :--- |
 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 13 | Restore upstream EOS, opacity, network, and atm control paths |
+| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 5 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | 5 | Align `astero` search and chi-squared drivers |
-| [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | 4 | Align `timestep.rs` and `star` mass-change `do_adjust_mass` |
 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 4 | Restore MLT/TDC controls and remove non-upstream fallbacks |
 | [#158](https://github.com/joshspeagle/FlexMESA/issues/158) | 3 | Align shellular rotation solver variables and Spruit-Tayler |
+| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 3 | Open #140 parity sub-issue |
 | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | 2 | Align coupled `BinarySystem` step ordering, tides, and RLOF |
-| [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | 2 | Open #140 parity sub-issue |
 | [#231](https://github.com/joshspeagle/FlexMESA/issues/231) | 1 | Open #140 parity sub-issue |
 
-## Complete Known-Gaps Registry (34 Cases)
+## Complete Known-Gaps Registry (36 Cases)
 
 | Suite | Case | Issue | Expected Term | Baseline Outcome | Mechanism |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -74,14 +74,16 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `star` | `tzo` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: Have reached requested NS mass` | `timeout` (724 steps; diagnostic (1 controls ignored)) | Diagnostic run (1 unsupported control ignored) ends on the 3000 s campaign budget after 724 history rows (348 retries; runner dependent); MESA takes [1, 1, 467] steps; final values out of tolerance: rel_star_age, log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_L, log_R, log_center_T, log_center_Rho, log_Teff (first at step 4) (Train 15 campaign; #161). |
 | `star` | `wd_aic` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `PASS: A=20 electron captures have started a thermal runaway in the core` | `max_model_number` (1600 steps; diagnostic (5 controls ignored)) | Diagnostic run (5 unsupported controls ignored) reaches max_model_number in [1600] steps (MESA [524]); final values out of tolerance: rel_star_age, log_L, log_Teff, log_R, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_R, log_center_T, log_center_Rho (first at step 138) (Train 14 campaign; #161). |
 | `star` | `wd_nova_burst` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `extras_check_model` | `extras_check_model` (483 steps; strict) | Strict run reaches extras_check_model in [11, 472] steps (MESA [11, 480]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_R (first at step 409) (Train 14 campaign; #161). |
+| `star` | `wd_stable_h_burn` | [#154](https://github.com/joshspeagle/FlexMESA/issues/154) | `star_mass_max_limit` | `star_mass_max_limit` (830 steps; strict) | Strict run reaches star_mass_max_limit in [830] steps (MESA [829]); track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_R (first at step 322) (Train 14 campaign; #154). |
 | `star` | `zams_to_cc_80` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `fe_core_infall_limit` | `fe_core_infall_limit` (175 steps; strict) | Strict run reaches fe_core_infall_limit in [2470] steps (MESA [2477]); final values out of tolerance: log_L, log_Teff, log_center_T, log_center_Rho; track columns out of tolerance: rel_num_zones, log_Teff, log_L, log_center_T, log_center_Rho (first at step 2344) (Train 15 campaign; #161). |
 | `binary` | `double_bh` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | `extras_binary_finish_step` | `extras_binary_finish_step` (1022 steps; strict) | Strict run reaches extras_binary_finish_step in [1022] steps (MESA [888]); final values out of tolerance: star_1_mass, star_2_mass, period_days; track columns out of tolerance: star_1_mass, star_2_mass (first at step 149); MESA's recorded step count (888) is star 1's model number, while the harness compares the binary model number (Train 14 campaign; #161). |
 | `binary` | `star_plus_point_mass` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (308 steps; strict) | Strict run reaches xa_central_lower_limit in [308] steps (MESA [309]); final values out of tolerance: rel_age, period_days (Train 14 campaign; #160). |
 | `binary` | `star_plus_point_mass_explicit_mdot` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | `xa_central_lower_limit` | `xa_central_lower_limit` (539 steps; strict) | Strict run reaches xa_central_lower_limit in [539] steps (MESA [548]); final values out of tolerance: rel_age, period_days; track columns out of tolerance: star_1_mass, star_2_mass (first at step 254) (Train 14 campaign; #160). |
+| `binary` | `wind_fed_bhhmxb` | [#587](https://github.com/joshspeagle/FlexMESA/issues/587) | `xa_central_lower_limit` | `xa_central_lower_limit` (392 steps; strict) | Strict run reaches xa_central_lower_limit in [392] steps (MESA [393]); every compared column is within tolerance (Train 14 campaign; #587). |
 | `astero` | `example_astero` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2` (737 steps; strict) | Strict run reaches astero_use_first_values_samples=1_best_chi2=2.800488e0_term=chi2_search_limit2 in [734] steps (MESA [737]); every compared column is within tolerance; the after-evolve step is not ported and search-stage step accounting differs (#162) (Train 14 campaign; #162). |
 | `astero` | `fast_newuoa` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `age_target` | `astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target` (3835 steps; strict) | Strict run reaches astero_newuoa_samples=8_best_chi2=3.333388e5_term=age_target in [480] steps (MESA [480, 479, 479, 479, 480, 479, 480, 479]); every compared column is within tolerance; it calls no oscillation code; the search run is reported as one stage against MESA's eight (#162) (Train 14 campaign; #162). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 40 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 37 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -124,9 +126,6 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `python_xfail` | `tests/unit/test_kap_wave3b2_jax.py` | `test_kapcn_knot_and_multi_zone_batch_consistency` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps pure f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12. |
 | `rust_ignore` | `crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs` | `star_plus_point_mass_model5_and_model115_match_mesa_26_4_1` | `physics_gap` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-115 period_days, binary_separation and star_1_mass leave the MESA 26.4.1 binary_history.data values by 1.3e-9 to 1.95e-9 against a 1e-9 tolerance (age 6e-12). The case is sensitive at rounding level, downstream of brunt_B (#530). |
 | `rust_ignore` | `crates/flexmesa-binary/tests/binary_160_mesa_parity_test.rs` | `star_plus_point_mass_explicit_mdot_model5_and_model110_match_mesa_26_4_1` | `physics_gap` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | With #518's upstream get_face_values arithmetic for the Brunt face values (star_utils.f90:2046-2060), the model-110 age leaves the MESA 26.4.1 binary_history.data value by 4.7e-8 (other quantities at or below 3e-12). The Ledoux/semiconvection path downstream of brunt_B is suspected (#530). |
-| `python_xfail` | `tests/test_hybrid_bridge.py` | `test_interp2d_rust_strict_and_jax_consistency_and_autodiff` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured diffs are f rel=1.800e-8 (abs=5.557e-9), df_dx rel=5.789e-10 (abs=4.896e-10), df_dy rel=2.034e-8 (abs=3.031e-9) against rtol=1e-12. |
-| `python_xfail` | `tests/test_interp_2d.py` | `test_interp2d_bicub_rust_strict_vs_jax_autodiff` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas jax.grad/jax.hessian differentiate the frozen pure-f64 JAX twin; measured diffs at (0.1, 0.2) are df_dx rel=2.112e-8 (abs=1.736e-8), df_dy rel=7.129e-9 (abs=4.157e-10), d2f_dx2 rel=3.211e-8 (abs=1.826e-8), d2f_dy2 rel=3.313e-8 (abs=4.680e-9), d2f_dxdy rel=1.844e-8 (abs=1.001e-8) against rtol=1e-13, atol=1e-14. |
-| `python_xfail` | `tests/test_bench.py` | `test_wave1_interp_2d_stages_agree` | `physics_gap` | [#295](https://github.com/joshspeagle/FlexMESA/issues/295) | Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured cross-stage max_rel_err is 2.980e-8 (N=4) and 2.980e-8 (N=8) against 1.0e-12. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
@@ -169,7 +168,7 @@ from flexmesa.testing import case_manifest
 manifest = case_manifest.load_case_manifest()
 gaps = case_manifest.load_known_gaps()
 assert len(manifest.cases) == 106
-assert len(gaps) == 38
+assert len(gaps) == 40
 no_ref = [
     c.case for c in manifest.cases
     if c.reference_status == "no_reference_yet"

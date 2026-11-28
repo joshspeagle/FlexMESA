@@ -12,14 +12,14 @@
 //!
 //! # Contents
 //!
-//! - [`dlangb`] (`SRC/dlangb.f`): norm of a general band matrix.
-//! - [`dgbcon`] (`SRC/dgbcon.f`): reciprocal condition number from the band
-//!   LU factors, calling [`dlatbs`], [`drscl`] and `DLACN2`
+//! - [`dlangb`](fn@dlangb) (`SRC/dlangb.f`): norm of a general band matrix.
+//! - [`dgbcon`](fn@dgbcon) (`SRC/dgbcon.f`): reciprocal condition number from the band
+//!   LU factors, calling [`dlatbs`](fn@dlatbs), [`drscl`](fn@drscl) and `DLACN2`
 //!   ([`crate::lapack::aux::dlacn2`], already a one-to-one transcription of
 //!   `SRC/dlacn2.f`, re-checked against it for this part).
-//! - [`dlatbs`] (`SRC/dlatbs.f`): scaled banded triangular solve.
-//! - [`drscl`] (`SRC/drscl.f`): `x := x / sa` without overflow.
-//! - [`dtbsv`] (`BLAS/SRC/dtbsv.f`): banded triangular solve, needed by
+//! - [`dlatbs`](fn@dlatbs) (`SRC/dlatbs.f`): scaled banded triangular solve.
+//! - [`drscl`](fn@drscl) (`SRC/drscl.f`): `x := x / sa` without overflow.
+//! - [`dtbsv`](fn@dtbsv) (`BLAS/SRC/dtbsv.f`): banded triangular solve, needed by
 //!   `DLATBS`.
 //!
 //! `DGBTRF`/`DGBTRS` stay in [`crate::band`]; they are not duplicated here.
@@ -30,7 +30,7 @@
 //! vector argument such as `AB(KD+1,J)` is the slice starting at that
 //! element. `IPIV` is passed 1-based, as `DGBTRF` returns it. Where the
 //! Fortran calls `XERBLA`, the routine returns
-//! [`LapackError::IllegalArgument`] with the same negative `INFO`.
+//! [`LapackError::IllegalArgument`](crate::lapack::LapackError::IllegalArgument) with the same negative `INFO`.
 
 #![allow(
     clippy::cast_possible_wrap,

@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 7196,
+        "rust_lines": 7328,
         "python_jax_lines": 3359
       },
       {
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2727,
+        "rust_lines": 2876,
         "python_jax_lines": 984
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4452,
+        "rust_lines": 4600,
         "python_jax_lines": 1033
       },
       {
@@ -310,7 +310,7 @@
         "verified_total": 0,
         "pct_ported": 0.9,
         "pct_verified": 0.0,
-        "rust_lines": 2853,
+        "rust_lines": 2697,
         "python_jax_lines": 2288
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 23209,
+      "rust_bridge_testing_bench": 23307,
       "python_testing_bench": 26448
     }
   },
@@ -598,8 +598,8 @@
         "reached_termination": 75,
         "within_numeric_tol": 59,
         "passing": 56,
-        "declared_gaps": 29,
-        "undeclared_failures": 1
+        "declared_gaps": 30,
+        "undeclared_failures": 0
       },
       "binary": {
         "total": 8,
@@ -610,8 +610,8 @@
         "reached_termination": 8,
         "within_numeric_tol": 5,
         "passing": 4,
-        "declared_gaps": 3,
-        "undeclared_failures": 1
+        "declared_gaps": 4,
+        "undeclared_failures": 0
       },
       "astero": {
         "total": 8,
@@ -638,6 +638,11 @@
         "issue": "#587"
       },
       {
+        "suite": "binary",
+        "case": "wind_fed_bhhmxb",
+        "issue": "#587"
+      },
+      {
         "suite": "astero",
         "case": "fast_newuoa",
         "issue": "#162"
@@ -646,11 +651,11 @@
     "gaps_by_issue": {
       "#161": 13,
       "#162": 8,
+      "#154": 5,
       "#157": 5,
-      "#154": 4,
       "#158": 3,
+      "#587": 3,
       "#160": 2,
-      "#587": 2,
       "#231": 1
     },
     "comparison_figures_count": 0
@@ -659,12 +664,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 1189,
-      "defaults_agree": 1189,
+      "matched_in_flexmesa": 1190,
+      "defaults_agree": 1190,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "skipped_unparseable_rust": 17,
-      "unimplemented": 238
+      "unimplemented": 237
     },
     {
       "namelist": "star &star_job",
@@ -1168,25 +1173,20 @@
         "issues": "#154"
       }
     ],
-    "python_xfail_or_skip_count": 25,
+    "python_xfail_or_skip_count": 22,
     "python_skips": [
       {
-        "location": "tests/test_bench.py:105",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust interp_evbicub_db in strict mode now reproduces MESA \" \"26.4.1 fvbicub_db implicit-REAL (f32) basis scalars \" \"(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the \" \"frozen JAX twin keeps pure f64 basis scalars; measured cross-stage \" \"max_rel_err is 2.980e-8 (N=4) and 2.980e-8 (N=8) against 1.0e-12.\" ), )",
-        "issues": "#295, #672, #680"
-      },
-      {
-        "location": "tests/test_bench.py:165",
+        "location": "tests/test_bench.py:142",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust Fe56He4Table uses MESA 26.4.1 fvbicub_db implicit f32 \" \"basis scalars (interp_2d/private/bicub_db.f:1371-1575; #413), \" \"whereas the frozen JAX twin keeps f64 basis scalars; measured \" \"cross-stage max_rel_err is 3.250e-8 against 1.0e-12.\" ), )",
         "issues": "#295, #413"
       },
       {
-        "location": "tests/test_bench.py:198",
+        "location": "tests/test_bench.py:175",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust PC uses the MESA 26.4.1 EXCOR7 bicubic spline table \" \"(eos/private/pc_eos.f90:1895, create_EXCOR7_table.f90:136 \" \"THETA > 0.005; #161), whereas the frozen JAX twin keeps analytical \" \"EXCOR7 (THETA > 0.04); measured cross-stage max_rel_err is \" \"3.716e-9 against 2.0e-9.\" ), )",
         "issues": "#161, #295"
       },
       {
-        "location": "tests/test_bench.py:231",
+        "location": "tests/test_bench.py:208",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust table_atm uses MESA 26.4.1 interp_2d/private/bicub_db.f \" \"implicit f32 fvbicub_db basis scalars in strict mode (#420, #161), \" \"whereas the frozen JAX twin keeps pure f64 basis scalars per \" \"DECISIONS #43; measured cross-stage max_rel_err is 6.897e-8 (N=4) \" \"and 4.705e-6 (N=8) against 5.0e-12.\" ), )",
         "issues": "#43, #161, #295, #420"
       },
@@ -1204,16 +1204,6 @@
         "location": "tests/test_eos_wave3b1.py:807",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: AutoDiffReal2VarOrder3 evaluates MESA 26.4.1's auto_diff \" \"expressions (#349), which moves the cancellation-dominated de_dd \" \"of the Rust ideal-gas EOS by a few ULPs of its 5.7e10 terms; the \" \"JAX twin keeps its own rounding.\" ), )",
         "issues": "#295, #349"
-      },
-      {
-        "location": "tests/test_hybrid_bridge.py:220",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust interp_evbicub_db in strict mode now reproduces MESA \" \"26.4.1 fvbicub_db implicit-REAL (f32) basis scalars \" \"(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the \" \"frozen JAX twin keeps pure f64 basis scalars; measured diffs are \" \"f rel=1.800e-8 (abs=5.557e-9), df_dx rel=5.789e-10 (abs=4.896e-10), \" \"df_dy rel=2.034e-8 (abs=3.031e-9) against rtol=1e-12.\" ), )",
-        "issues": "#295, #672, #680"
-      },
-      {
-        "location": "tests/test_interp_2d.py:185",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"#295: Rust interp_evbicub_db in strict mode now reproduces MESA \" \"26.4.1 fvbicub_db implicit-REAL (f32) basis scalars \" \"(interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas \" \"jax.grad/jax.hessian differentiate the frozen pure-f64 JAX twin; \" \"measured diffs at (0.1, 0.2) are df_dx rel=2.112e-8 (abs=1.736e-8), \" \"df_dy rel=7.129e-9 (abs=4.157e-10), d2f_dx2 rel=3.211e-8 \" \"(abs=1.826e-8), d2f_dy2 rel=3.313e-8 (abs=4.680e-9), \" \"d2f_dxdy rel=1.844e-8 (abs=1.001e-8) against rtol=1e-13, atol=1e-14.\" ), )",
-        "issues": "#295, #672, #680"
       },
       {
         "location": "tests/test_ionization.py:89",
@@ -1300,7 +1290,7 @@
   },
   "test_taxonomy": {
     "total_files": 332,
-    "total_tests": 1971,
+    "total_tests": 1968,
     "by_kind": {
       "oracle": {
         "files": 133
@@ -1319,7 +1309,7 @@
       },
       "python": {
         "files": 100,
-        "tests": 801
+        "tests": 798
       }
     },
     "mislabeled_count": 2,
@@ -1605,7 +1595,7 @@
         "invariant_files": 0,
         "regression_files": 0,
         "total_files": 4,
-        "total_tests": 15,
+        "total_tests": 14,
         "mislabeled_files": 0,
         "mapped_routines": 2,
         "listed_oracle_routines": 2,
@@ -1701,7 +1691,7 @@
         "invariant_files": 41,
         "regression_files": 1,
         "total_files": 44,
-        "total_tests": 395,
+        "total_tests": 393,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,

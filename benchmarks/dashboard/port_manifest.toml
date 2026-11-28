@@ -6045,7 +6045,14 @@ upstream_lines = 3374
 upstream_sha256 = "e643adb6b5fd60887d797c96ff3d7d6b2b126ed20babccf18063be1a7f5016de"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["approx21_weak_rates"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
+"approx21_pa_pg_fractions::set1" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
+"approx21_weak_rates" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the ni56/co56 rates go through eval_single_weak_blended (eval_weak_reaction_info) with abar = zbar = z2bar = 1; no ierr is returned
+"approx21_eval_PPII_fraction" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eval_ppii_fraction"
+"eval_fe56ec_fake_factor" = "crates/flexmesa-net/src/approx21_dydt.rs::eval_fe56ec_fake_factor"
 
 [[files]]
 upstream_path = "net/private/net_burn.f90"

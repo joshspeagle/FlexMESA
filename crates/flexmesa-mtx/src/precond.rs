@@ -238,21 +238,26 @@ pub fn compute_block_preconditioner(
         let blk_off = j * blk_sz;
         for k in 0..nvar {
             let row_off = blk_off + k * nvar;
-            let mut sum = 0.0_f64;
-            for m in 0..nvar {
-                sum += dblk[row_off + m].abs();
-            }
-            if j + 1 < nz {
+            // `pre_conditioner(k,j) = pre_conditioner(k,j) + sum(abs(...))`
+            // for `dblk`, then `ublk`, then `lblk`
+            // (`mtx/private/pre_conditioners.f90:36-44`): each `sum` is its
+            // own left-to-right reduction, added to the running value (#662).
+            let row_sum = |blk: &[f64]| -> f64 {
+                let mut s = 0.0_f64;
                 for m in 0..nvar {
-                    sum += ublk[row_off + m].abs();
+                    s += blk[row_off + m].abs();
                 }
+                s
+            };
+            let mut p = 0.0_f64;
+            p += row_sum(dblk);
+            if j + 1 < nz {
+                p += row_sum(ublk);
             }
             if j > 0 {
-                for m in 0..nvar {
-                    sum += lblk[row_off + m].abs();
-                }
+                p += row_sum(lblk);
             }
-            pre_conditioner[j * nvar + k] = sum;
+            pre_conditioner[j * nvar + k] = p;
         }
     }
     Ok(())

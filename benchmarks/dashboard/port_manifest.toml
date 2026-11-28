@@ -5552,12 +5552,12 @@ notes = "seeded from coverage-map.md section 7: partial / uncompared"
 "Get_Kap_for_CO_X_cubic" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
 "Get_Kap_for_CO_X_cubic::interp1" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
 "Get_Kap_for_CO_X_linear" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
-"Get_Kap_for_dXCO" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: omits the num_CO_tables < 1 error and the final is_bad(logK) ierr = -1 return
-"Get_Kap_for_dXCO::matches_table" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: index < 1 returns false where upstream calls mesa_error for i < 1 or i > num_CO_tables (kap_eval_co.f90:813-826)
+"Get_Kap_for_dXCO" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: omits the num_CO_tables < 1 error and the final is_bad(logK) ierr = -1 return (#703)
+"Get_Kap_for_dXCO::matches_table" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: index < 1 returns false where upstream calls mesa_error for i < 1 or i > num_CO_tables (kap_eval_co.f90:813-826) (#703)
 "Get_Kap_for_dXCO::Get_Kap_at_dXO" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxo"
 "Get_Kap_for_dXCO::Get_Kap_at_dXC" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxc"
 "Find_CO_Tables" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
-"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream indexes co_tables(i) out of bounds
+"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream indexes co_tables(i) out of bounds (#703)
 "Find_CO_Tables::on_midline" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
 "Find_CO_Tables::on_diagonal" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
 "Get_CO_Kap_for_logRho_logT" = "crates/flexmesa-kap/src/co_find.rs::get_co_kap_for_log_rho_log_t"

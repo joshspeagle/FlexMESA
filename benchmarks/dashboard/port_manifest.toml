@@ -6951,7 +6951,10 @@ upstream_lines = 71
 upstream_sha256 = "fc617f047eb808333910f3e32b5434d1b85d451b86405d1cc59d452e3dcb7049"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_coulomb_set_context"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_coulomb_set_context" = "crates/flexmesa-rates/src/ecapture.rs::coulomb_plasma_params_ad" # partial: gamma_e and rs are computed on demand as auto-diff values seeded as upstream (temp d1val1, den d1val2); no Coulomb_Info struct, so zbar, abar, z2bar, logT and logRho are not stored
 
 [[files]]
 upstream_path = "rates/private/eval_coulomb.f90"

@@ -7208,7 +7208,7 @@ flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
 routine_map_partial = ["do_get_raw_rates", "do_make_rate_tables", "get_net_rates_for_tables"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
-"do_get_raw_rates" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: table lookup, dtab/ddtab and the dT/dRho formulas match; no max_safe_rate_for_any_temp stop and no nrattab == 1 branch (#744)
+"do_get_raw_rates" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: table lookup, dtab/ddtab and the dT/dRho formulas match; no max_safe_rate_for_any_temp stop and no nrattab == 1 branch (#744); the k cap is one cell more permissive than rates_support.f90:150-155, unreachable because logttab[last] == RATTAB_THI
 "do_get_raw_rates::get_rates_from_table" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables"
 "do_make_rate_tables" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: no disk cache (process-wide Arc cache keyed by reaction name), per-reaction splines built in parallel, weak-only sentinel mapped to exp(-99) at spline time, no nrattab == 1 branch
 "get_net_rates_for_tables" = "crates/flexmesa-net/src/initialize.rs::spline_reaction_rate_table" # partial: tfactors plus raw-rate evaluation per grid point; no is_bad check before the spline (#744)
@@ -8398,13 +8398,14 @@ upstream_lines = 408
 upstream_sha256 = "9f76d4460b067e0dd485628664cf5d63afc6ea4bee52287a5c967d611be89726"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/eps_grav.rs"]
+routine_map_partial = ["eval_eps_grav_composition"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `do_std_eps_grav` and `do_lnS_eps_grav` present; blend weight differs (C1-20); composition term via partials rather than EOS re-evaluation at `xa_start`"
 [files.routine_map]
 "eval_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
 "eval1_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_cell"
 "do_std_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_std_cell+eval_eps_grav_std_cell_with_ctx"
 "do_lnS_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_lns_cell"
-"eval_eps_grav_composition" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_composition_term+fill_d_eps_grav_dx_cell"
+"eval_eps_grav_composition" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_composition_term+fill_d_eps_grav_dx_cell" # partial: s% eps_grav_composition_term(k) is not stored (eps_grav.f90:374, read by profile_getval.f90:1106); a bad value errors where upstream returns with ierr = 0 (:386-397, #638)
 "zero_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
 
 [[files]]
@@ -10512,9 +10513,10 @@ upstream_lines = 706
 upstream_sha256 = "1d768f3e5185e8cec478b8917b858e274b9fec9b148100d6b80895a538acacde"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs", "crates/flexmesa-star/src/evolve.rs"]
+routine_map_partial = ["set_mdot"]
 notes = "updated for #159: all wind schemes + 'other', eval_super_eddington_wind (0.5*vesc2, prev_Ledd), eval_rlo_wind, T_center taper, envelope/He-layer limits, dt ramp, and surface-averaged v_div_v_crit boost shared with flexmesa-binary"
 [files.routine_map]
-"set_mdot" = "crates/flexmesa-star/src/evolve.rs::set_step_mdot"
+"set_mdot" = "crates/flexmesa-star/src/evolve.rs::set_step_mdot" # partial: restores explicit_step_mdot and rotational_mdot_boost_old when other_adjust_mdot declines without changing mstar_dot; winds.f90:35-51 has no restore (#758)
 "do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot_with_extras+do_set_mdot+net_h1_he4_surface_center"
 "do_set_mdot::eval_wind_for_scheme" = "crates/flexmesa-star/src/winds_driver.rs::eval_wind_for_scheme+scheme_eta"
 "do_set_mdot::rotation_enhancement" = "crates/flexmesa-star/src/winds_driver.rs::apply_rotation_enhancement"

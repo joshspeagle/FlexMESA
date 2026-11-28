@@ -509,8 +509,9 @@ fn test_num_module_hex_zero_ulp() {
         );
 
         // 6..10: test_find_max_quadratic
-        let (xmax, ymax) =
-            find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0).unwrap();
+        let (xmax, ymax, ierr) =
+            find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0);
+        assert_eq!(ierr, 0, "test_find_max_quadratic returned ierr={ierr}");
         idx = check_section(
             "test_find_max_quadratic",
             &[xmax, 1.85_f64, ymax, 12.4083_f64],

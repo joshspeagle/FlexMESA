@@ -15,8 +15,8 @@
 //! - `test_qsort_index_orders_values_monotonically`: index permutation sort.
 //! - `test_find0_and_find0_quadratic_match_upstream_golden_roots`: linear and
 //!   quadratic root interpolation against `test_find0_quadratic`.
-//! - `test_find_max_quadratic_matches_upstream_and_fixes_y3_concavity_bug`:
-//!   concave quadratic maximum against `test_find_max_quadratic` and bug fix.
+//! - `test_find_max_quadratic_matches_upstream_verbatim`:
+//!   quadratic maximum and `ierr` checks against `num/public/num_lib.f90:558-578`.
 //! - `test_dfridr_and_integrate_match_upstream_simp38_oracles`: Ridders
 //!   differentiation and adaptive Simpson 3/8 quadrature (`simp38`).
 //! - `test_brent_safe_zero_and_minimization_match_analytical_oracles`: Brent
@@ -159,25 +159,66 @@ fn test_find0_and_find0_quadratic_match_upstream_golden_roots() {
     assert!((r3 - 8.0).abs() <= 1e-14 && y3.abs() <= 1e-14);
 }
 
-/// Verifies [`find_max_quadratic`] against upstream `test_find_max_quadratic`
-/// (`xmax = 1.85`, `ymax = 12.408333333333333`) and confirms that the upstream
-/// `y2 < max(y1, y2)` typo is fixed by rejecting `y3 > y2`.
+/// Tests [`find_max_quadratic`] against `num/public/num_lib.f90:558-578`
+/// (`test_find_max_quadratic` inputs, reverse ordering, all three `ierr = -1`
+/// checks, deferred bug `#671` `y2 < max(y1, y2)` acceptance when `y3 > y2`,
+/// and returning `(xmax, ymax)` without early exits).
 #[test]
-fn test_find_max_quadratic_matches_upstream_and_fixes_y3_concavity_bug() {
-    // Upstream golden test: (0, 1), (1, 10), (3, 8)
-    let (xm, ym) = find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0).unwrap();
+fn test_find_max_quadratic_matches_upstream_verbatim() {
+    // Upstream test_find_max_quadratic: (0, 1), (1, 10), (3, 8)
+    let (xm, ym, ierr) = find_max_quadratic(0.0, 1.0, 1.0, 10.0, 3.0, 8.0);
+    assert_eq!(ierr, 0);
     assert!((xm - 1.85).abs() <= 1e-14);
     assert!((ym - 12.408_333_333_333_333).abs() <= 1e-14);
 
     // Reverse knot order: (3, 8), (1, 10), (0, 1)
-    let (xm_rev, ym_rev) =
-        find_max_quadratic(3.0, 8.0, 1.0, 10.0, 0.0, 1.0).unwrap();
+    let (xm_rev, ym_rev, ierr_rev) =
+        find_max_quadratic(3.0, 8.0, 1.0, 10.0, 0.0, 1.0);
+    assert_eq!(ierr_rev, 0);
     assert!((xm_rev - 1.85).abs() <= 1e-14);
     assert!((ym_rev - 12.408_333_333_333_333).abs() <= 1e-14);
 
-    // Non-interior maximum (y3 > y2 >= y1) must be rejected by the fixed check
-    let res_bad = find_max_quadratic(0.0, 1.0, 1.0, 5.0, 2.0, 10.0);
-    assert!(res_bad.is_err());
+    // Convex parabola (0, 1), (1, 5), (2, 10): c = 0.5, xmax = -3.5,
+    // ymax = -5.125 < y2 sets ierr = -1 (num_lib.f90:575) while returning
+    // (xmax, ymax).
+    let (xm_conv, ym_conv, ierr_conv) =
+        find_max_quadratic(0.0, 1.0, 1.0, 5.0, 2.0, 10.0);
+    assert_eq!(ierr_conv, -1);
+    assert!((xm_conv - (-3.5)).abs() <= 1e-14);
+    assert!((ym_conv - (-5.125)).abs() <= 1e-14);
+
+    // Deferred bug #671 (num_lib.f90:576): concave parabola with y3 > y2 >= y1
+    // has ymax >= y2 and passes y2 < max(y1, y2), so upstream leaves ierr = 0.
+    // p(x) = 1 + 5.5*x - 1.5*x^2 -> xmax = 11/6, ymax = 145/24.
+    let (xm_y3, ym_y3, ierr_y3) =
+        find_max_quadratic(0.0, 1.0, 1.0, 5.0, 2.0, 6.0);
+    assert_eq!(ierr_y3, 0);
+    assert!((xm_y3 - (11.0 / 6.0)).abs() <= 1e-14);
+    assert!((ym_y3 - (145.0 / 24.0)).abs() <= 1e-14);
+
+    // Concave parabola with y2 < y1 and ymax > y2: (0, 6), (1, 5), (2, 1) has
+    // xmax = 1/6, ymax = 145/24 > y2; only y2 < max(y1, y2) (:576) sets -1.
+    let (xm_y1, ym_y1, ierr_y1) =
+        find_max_quadratic(0.0, 6.0, 1.0, 5.0, 2.0, 1.0);
+    assert_eq!(ierr_y1, -1);
+    assert!((xm_y1 - (1.0 / 6.0)).abs() <= 1e-14);
+    assert!((ym_y1 - (145.0 / 24.0)).abs() <= 1e-14);
+
+    // Non-monotonic abscissas (0, 1), (3, 10), (1, 8): p(x) = 1 + 9x - 2x^2
+    // has xmax = 2.25, ymax = 11.125; only :577 sets ierr = -1.
+    let (xm_nm, ym_nm, ierr_nm) =
+        find_max_quadratic(0.0, 1.0, 3.0, 10.0, 1.0, 8.0);
+    assert_eq!(ierr_nm, -1);
+    assert!((xm_nm - 2.25).abs() <= 1e-14);
+    assert!((ym_nm - 11.125).abs() <= 1e-14);
+
+    // Collinear points (c = 0): upstream computes without a c >= 0 or
+    // finiteness guard; dxmax = -inf, xmax = -inf, ymax = NaN, ierr = 0.
+    let (xm_lin, ym_lin, ierr_lin) =
+        find_max_quadratic(0.0, 1.0, 1.0, 2.0, 2.0, 3.0);
+    assert_eq!(ierr_lin, 0);
+    assert!(xm_lin.is_infinite() && xm_lin.is_sign_negative());
+    assert!(ym_lin.is_nan());
 }
 
 /// Verifies [`dfridr`] and [`integrate`] against upstream `test_integrate.f90`

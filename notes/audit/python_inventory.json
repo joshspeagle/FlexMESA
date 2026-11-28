@@ -64,11 +64,11 @@
       "pyo3_wrapper": 24,
       "jax_kernel": 10,
       "jax_engine_twin_frozen": 0,
-      "mirror_current": 43,
-      "mirror_stale": 4,
+      "mirror_current": 42,
+      "mirror_stale": 5,
       "python_only": 2,
       "rust_only": 26,
-      "xfail_295": 6
+      "xfail_295": 7
     },
     {
       "subpackage": "binary",
@@ -236,7 +236,7 @@
       "mirror_current": 21,
       "mirror_stale": 12,
       "python_only": 1,
-      "rust_only": 60,
+      "rust_only": 70,
       "xfail_295": 0
     },
     {
@@ -328,7 +328,7 @@
       "mirror_stale": 20,
       "python_only": 0,
       "rust_only": 659,
-      "xfail_295": 6
+      "xfail_295": 8
     },
     {
       "subpackage": "turb",
@@ -364,11 +364,11 @@
     "pyo3_wrapper": 212,
     "jax_kernel": 200,
     "jax_engine_twin_frozen": 55,
-    "mirror_current": 500,
-    "mirror_stale": 171,
+    "mirror_current": 499,
+    "mirror_stale": 172,
     "python_only": 31,
-    "rust_only": 1491,
-    "xfail_295": 19
+    "rust_only": 1501,
+    "xfail_295": 22
   },
   "oldest_mirror_stale": [
     {
@@ -855,8 +855,19 @@
   "xfail_295_tests": [
     {
       "test_path": "tests/test_bench.py",
-      "line": 151,
-      "test_ref": "tests/test_bench.py:151",
+      "line": 115,
+      "test_ref": "tests/test_bench.py:115",
+      "test_name": "test_wave1_interp_2d_stages_agree",
+      "subpackage": "bench",
+      "targets": [
+        "bench_interp2d"
+      ],
+      "reason": "#295: Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured cross-stage max_rel_err is 2.980e-8 (N=4) and 2.980e-8 (N=8) against 1.0e-12."
+    },
+    {
+      "test_path": "tests/test_bench.py",
+      "line": 174,
+      "test_ref": "tests/test_bench.py:174",
       "test_name": "test_wave2_ion_fe56_stages_agree",
       "subpackage": "bench",
       "targets": [
@@ -867,8 +878,8 @@
     },
     {
       "test_path": "tests/test_bench.py",
-      "line": 185,
-      "test_ref": "tests/test_bench.py:185",
+      "line": 208,
+      "test_ref": "tests/test_bench.py:208",
       "test_name": "test_wave3a_eos_pc_stages_agree",
       "subpackage": "bench",
       "targets": [
@@ -880,8 +891,8 @@
     },
     {
       "test_path": "tests/test_bench.py",
-      "line": 218,
-      "test_ref": "tests/test_bench.py:218",
+      "line": 241,
+      "test_ref": "tests/test_bench.py:241",
       "test_name": "test_wave3b_atm_table_stages_agree",
       "subpackage": "bench",
       "targets": [
@@ -1010,6 +1021,24 @@
         "kap_get_results"
       ],
       "reason": "#295: Rust AESOPUS evaluates MESA 26.4.1 interp_2d/private/bicub_db.f implicit f32 fvbicub_db basis scalars in strict mode (#433, #161), whereas the frozen JAX twin keeps f64 basis scalars per DECISIONS #43; measured max rel diff is 1.713e-8 against rtol=1e-12, atol=1e-12."
+    },
+    {
+      "test_path": "tests/test_hybrid_bridge.py",
+      "line": 231,
+      "test_ref": "tests/test_hybrid_bridge.py:231",
+      "test_name": "test_interp2d_rust_strict_and_jax_consistency_and_autodiff",
+      "subpackage": "star",
+      "targets": [],
+      "reason": "#295: Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas the frozen JAX twin keeps pure f64 basis scalars; measured diffs are f rel=1.800e-8 (abs=5.557e-9), df_dx rel=5.789e-10 (abs=4.896e-10), df_dy rel=2.034e-8 (abs=3.031e-9) against rtol=1e-12."
+    },
+    {
+      "test_path": "tests/test_interp_2d.py",
+      "line": 198,
+      "test_ref": "tests/test_interp_2d.py:198",
+      "test_name": "test_interp2d_bicub_rust_strict_vs_jax_autodiff",
+      "subpackage": "star",
+      "targets": [],
+      "reason": "#295: Rust interp_evbicub_db in strict mode now reproduces MESA 26.4.1 fvbicub_db implicit-REAL (f32) basis scalars (interp_2d/private/bicub_db.f:24,1371-1698; #672, #680), whereas jax.grad/jax.hessian differentiate the frozen pure-f64 JAX twin; measured diffs at (0.1, 0.2) are df_dx rel=2.112e-8 (abs=1.736e-8), df_dy rel=7.129e-9 (abs=4.157e-10), d2f_dx2 rel=3.211e-8 (abs=1.826e-8), d2f_dy2 rel=3.313e-8 (abs=4.680e-9), d2f_dxdy rel=1.844e-8 (abs=1.001e-8) against rtol=1e-13, atol=1e-14."
     },
     {
       "test_path": "tests/test_star_wave4_1.py",
@@ -2027,8 +2056,8 @@
       "python_name": "eval_table",
       "python_type": "function",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 447,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:447",
+      "rust_line": 404,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:404",
       "rust_name": "eval_table",
       "rust_crate": "flexmesa-atm",
       "match_source": "pyo3-call",
@@ -2051,8 +2080,8 @@
       "python_name": "get_table_alfa_beta",
       "python_type": "function",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 556,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:556",
+      "rust_line": 513,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:513",
       "rust_name": "get_table_alfa_beta",
       "rust_crate": "flexmesa-atm",
       "match_source": "pyo3-call",
@@ -2075,8 +2104,8 @@
       "python_name": "get_table_base",
       "python_type": "function",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 650,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:650",
+      "rust_line": 607,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:607",
       "rust_name": "get_table_base",
       "rust_crate": "flexmesa-atm",
       "match_source": "pyo3-call",
@@ -2185,7 +2214,7 @@
       "rs_last_date": "2026-11-25T23:18Z",
       "rs_last_sha": "4fd18fcc",
       "xfail_295": [
-        "tests/test_bench.py:218::test_wave3b_atm_table_stages_agree"
+        "tests/test_bench.py:241::test_wave3b_atm_table_stages_agree"
       ]
     },
     {
@@ -2269,8 +2298,8 @@
       "python_name": "eval_table_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 447,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:447",
+      "rust_line": 404,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:404",
       "rust_name": "eval_table",
       "rust_crate": "flexmesa-atm",
       "match_source": "name-match",
@@ -2283,7 +2312,7 @@
       "rs_last_date": "2026-11-25T23:18Z",
       "rs_last_sha": "4fd18fcc",
       "xfail_295": [
-        "tests/test_bench.py:218::test_wave3b_atm_table_stages_agree"
+        "tests/test_bench.py:241::test_wave3b_atm_table_stages_agree"
       ]
     },
     {
@@ -3326,20 +3355,20 @@
       "python_path_line": "src/flexmesa/bench/bicub_fast.py:16",
       "python_name": "locate_uniform_cell_jax",
       "python_type": "function",
-      "rust_path": "crates/flexmesa-bench/src/bicub_fast.rs",
-      "rust_line": 38,
-      "rust_path_line": "crates/flexmesa-bench/src/bicub_fast.rs:38",
-      "rust_name": "locate_and_basis_1d",
-      "rust_crate": "flexmesa-bench",
+      "rust_path": "crates/flexmesa-interp2d/src/bicub_eval.rs",
+      "rust_line": 116,
+      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:116",
+      "rust_name": "herm2xy_prevalidated_db",
+      "rust_crate": "flexmesa-interp2d",
       "match_source": "explicit",
       "kind": "JAX kernel",
-      "state": "mirror-current",
+      "state": "mirror-stale",
       "py_last_ts": 1793931468,
       "py_last_date": "2026-11-06T02:17Z",
       "py_last_sha": "c382e47b",
-      "rs_last_ts": 1793931468,
-      "rs_last_date": "2026-11-06T02:17Z",
-      "rs_last_sha": "c382e47b",
+      "rs_last_ts": 1793987803,
+      "rs_last_date": "2026-11-06T17:56Z",
+      "rs_last_sha": "809e0544",
       "xfail_295": []
     },
     {
@@ -3351,8 +3380,8 @@
       "python_name": "eval_bicub_point_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-bench/src/bicub_fast.rs",
-      "rust_line": 85,
-      "rust_path_line": "crates/flexmesa-bench/src/bicub_fast.rs:85",
+      "rust_line": 28,
+      "rust_path_line": "crates/flexmesa-bench/src/bicub_fast.rs:28",
       "rust_name": "eval_bicub_prevalidated",
       "rust_crate": "flexmesa-bench",
       "match_source": "explicit",
@@ -3639,8 +3668,8 @@
       "python_name": "bench_interp2d",
       "python_type": "function",
       "rust_path": "crates/flexmesa-bench/src/bicub_fast.rs",
-      "rust_line": 85,
-      "rust_path_line": "crates/flexmesa-bench/src/bicub_fast.rs:85",
+      "rust_line": 28,
+      "rust_path_line": "crates/flexmesa-bench/src/bicub_fast.rs:28",
       "rust_name": "eval_bicub_prevalidated",
       "rust_crate": "flexmesa-bench",
       "match_source": "pyo3-call",
@@ -3652,7 +3681,9 @@
       "rs_last_ts": 1793931468,
       "rs_last_date": "2026-11-06T02:17Z",
       "rs_last_sha": "c382e47b",
-      "xfail_295": []
+      "xfail_295": [
+        "tests/test_bench.py:115::test_wave1_interp_2d_stages_agree"
+      ]
     },
     {
       "subpackage": "bench",
@@ -3807,8 +3838,8 @@
       "python_name": "bench_ion_fe56",
       "python_type": "function",
       "rust_path": "crates/flexmesa-ionization/src/fe56_he4.rs",
-      "rust_line": 41,
-      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:41",
+      "rust_line": 40,
+      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:40",
       "rust_name": "Fe56He4Table",
       "rust_crate": "flexmesa-ionization",
       "match_source": "pyo3-call",
@@ -3821,7 +3852,7 @@
       "rs_last_date": "2026-11-06T13:07Z",
       "rs_last_sha": "785481da",
       "xfail_295": [
-        "tests/test_bench.py:151::test_wave2_ion_fe56_stages_agree"
+        "tests/test_bench.py:174::test_wave2_ion_fe56_stages_agree"
       ]
     },
     {
@@ -3967,7 +3998,7 @@
       "rs_last_date": "2026-11-07T01:46Z",
       "rs_last_sha": "c97ebe3b",
       "xfail_295": [
-        "tests/test_bench.py:185::test_wave3a_eos_pc_stages_agree"
+        "tests/test_bench.py:208::test_wave3a_eos_pc_stages_agree"
       ]
     },
     {
@@ -4123,8 +4154,8 @@
       "python_name": "bench_atm_table",
       "python_type": "function",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 64,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:64",
+      "rust_line": 63,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:63",
       "rust_name": "AtmTables",
       "rust_crate": "flexmesa-atm",
       "match_source": "pyo3-call",
@@ -4137,7 +4168,7 @@
       "rs_last_date": "2026-11-07T23:06Z",
       "rs_last_sha": "3e23d059",
       "xfail_295": [
-        "tests/test_bench.py:218::test_wave3b_atm_table_stages_agree"
+        "tests/test_bench.py:241::test_wave3b_atm_table_stages_agree"
       ]
     },
     {
@@ -8009,7 +8040,7 @@
       "rs_last_date": "2026-11-07T05:34Z",
       "rs_last_sha": "97265a53",
       "xfail_295": [
-        "tests/test_bench.py:185::test_wave3a_eos_pc_stages_agree"
+        "tests/test_bench.py:208::test_wave3a_eos_pc_stages_agree"
       ]
     },
     {
@@ -8083,7 +8114,7 @@
       "rs_last_date": "2026-11-07T05:34Z",
       "rs_last_sha": "97265a53",
       "xfail_295": [
-        "tests/test_bench.py:185::test_wave3a_eos_pc_stages_agree",
+        "tests/test_bench.py:208::test_wave3a_eos_pc_stages_agree",
         "tests/test_eos_wave3a3.py:1013::test_pc_multispecies_buckets_rust_matches_frozen_jax",
         "tests/test_eos_wave3a3.py:496::test_eval_pc_eos_and_zones_match_across_rust_and_jax"
       ]
@@ -9160,8 +9191,8 @@
       "python_name": "herm2xy_db",
       "python_type": "function",
       "rust_path": "crates/flexmesa-interp2d/src/bicub_eval.rs",
-      "rust_line": 40,
-      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:40",
+      "rust_line": 47,
+      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:47",
       "rust_name": "herm2xy_db",
       "rust_crate": "flexmesa-interp2d",
       "match_source": "name-match",
@@ -9184,8 +9215,8 @@
       "python_name": "interp_evbicub_db",
       "python_type": "function",
       "rust_path": "crates/flexmesa-interp2d/src/bicub_eval.rs",
-      "rust_line": 172,
-      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:172",
+      "rust_line": 179,
+      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:179",
       "rust_name": "interp_evbicub_db",
       "rust_crate": "flexmesa-interp2d",
       "match_source": "pyo3-call",
@@ -9208,8 +9239,8 @@
       "python_name": "interp_evbicub_mask_db",
       "python_type": "function",
       "rust_path": "crates/flexmesa-interp2d/src/bicub_eval.rs",
-      "rust_line": 344,
-      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:344",
+      "rust_line": 500,
+      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:500",
       "rust_name": "interp_evbicub_mask_db",
       "rust_crate": "flexmesa-interp2d",
       "match_source": "name-match",
@@ -9496,8 +9527,8 @@
       "python_name": "eval_charge_of_fe56_in_he4_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-ionization/src/fe56_he4.rs",
-      "rust_line": 314,
-      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:314",
+      "rust_line": 271,
+      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:271",
       "rust_name": "eval_charge_of_fe56_in_he4",
       "rust_crate": "flexmesa-ionization",
       "match_source": "name-match",
@@ -9520,8 +9551,8 @@
       "python_name": "eval_charge_of_fe56_in_he4",
       "python_type": "function",
       "rust_path": "crates/flexmesa-ionization/src/fe56_he4.rs",
-      "rust_line": 41,
-      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:41",
+      "rust_line": 40,
+      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:40",
       "rust_name": "Fe56He4Table",
       "rust_crate": "flexmesa-ionization",
       "match_source": "pyo3-call",
@@ -9534,7 +9565,7 @@
       "rs_last_date": "2026-11-06T13:07Z",
       "rs_last_sha": "785481da",
       "xfail_295": [
-        "tests/test_bench.py:151::test_wave2_ion_fe56_stages_agree",
+        "tests/test_bench.py:174::test_wave2_ion_fe56_stages_agree",
         "tests/test_ionization.py:98::test_fe56_in_he4_golden_rust_vs_jax"
       ]
     },
@@ -9547,8 +9578,8 @@
       "python_name": "eval_charge_of_fe56_in_he4_zones",
       "python_type": "function",
       "rust_path": "crates/flexmesa-ionization/src/fe56_he4.rs",
-      "rust_line": 41,
-      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:41",
+      "rust_line": 40,
+      "rust_path_line": "crates/flexmesa-ionization/src/fe56_he4.rs:40",
       "rust_name": "Fe56He4Table",
       "rust_crate": "flexmesa-ionization",
       "match_source": "pyo3-call",
@@ -9940,8 +9971,8 @@
       "python_name": "eval_aesopus_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-kap/src/low_t.rs",
-      "rust_line": 23,
-      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:23",
+      "rust_line": 21,
+      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:21",
       "rust_name": "aesopus_get",
       "rust_crate": "flexmesa-kap",
       "match_source": "explicit",
@@ -9964,8 +9995,8 @@
       "python_name": "eval_kapcn_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-kap/src/low_t.rs",
-      "rust_line": 387,
-      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:387",
+      "rust_line": 255,
+      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:255",
       "rust_name": "kapcn_get",
       "rust_crate": "flexmesa-kap",
       "match_source": "explicit",
@@ -10012,8 +10043,8 @@
       "python_name": "interp_evbicub_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-interp2d/src/bicub_eval.rs",
-      "rust_line": 227,
-      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:227",
+      "rust_line": 378,
+      "rust_path_line": "crates/flexmesa-interp2d/src/bicub_eval.rs:378",
       "rust_name": "interp_evbicub_prevalidated_db",
       "rust_crate": "flexmesa-interp2d",
       "match_source": "explicit",
@@ -10350,8 +10381,8 @@
       "python_name": "kap_get_aesopus",
       "python_type": "function",
       "rust_path": "crates/flexmesa-kap/src/low_t.rs",
-      "rust_line": 23,
-      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:23",
+      "rust_line": 21,
+      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:21",
       "rust_name": "aesopus_get",
       "rust_crate": "flexmesa-kap",
       "match_source": "pyo3-call",
@@ -10544,8 +10575,8 @@
       "python_name": "get_kapcn_jax",
       "python_type": "function",
       "rust_path": "crates/flexmesa-kap/src/low_t.rs",
-      "rust_line": 387,
-      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:387",
+      "rust_line": 255,
+      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:255",
       "rust_name": "kapcn_get",
       "rust_crate": "flexmesa-kap",
       "match_source": "explicit",
@@ -11864,8 +11895,8 @@
       "python_name": "dgbtrf",
       "python_type": "function",
       "rust_path": "crates/flexmesa-mtx/src/band.rs",
-      "rust_line": 159,
-      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:159",
+      "rust_line": 167,
+      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:167",
       "rust_name": "dgbtrf",
       "rust_crate": "flexmesa-mtx",
       "match_source": "name-match",
@@ -11874,9 +11905,9 @@
       "py_last_ts": 1793909953,
       "py_last_date": "2026-11-05T20:19Z",
       "py_last_sha": "7c789567",
-      "rs_last_ts": 1794872529,
-      "rs_last_date": "2026-11-16T23:42Z",
-      "rs_last_sha": "28081182",
+      "rs_last_ts": 1795866300,
+      "rs_last_date": "2026-11-28T11:45Z",
+      "rs_last_sha": "62fa7e02",
       "xfail_295": []
     },
     {
@@ -11888,8 +11919,8 @@
       "python_name": "dgbtrs",
       "python_type": "function",
       "rust_path": "crates/flexmesa-mtx/src/band.rs",
-      "rust_line": 350,
-      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:350",
+      "rust_line": 412,
+      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:412",
       "rust_name": "dgbtrs",
       "rust_crate": "flexmesa-mtx",
       "match_source": "name-match",
@@ -11912,8 +11943,8 @@
       "python_name": "solve_banded",
       "python_type": "function",
       "rust_path": "crates/flexmesa-mtx/src/band.rs",
-      "rust_line": 368,
-      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:368",
+      "rust_line": 430,
+      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:430",
       "rust_name": "solve_banded",
       "rust_crate": "flexmesa-mtx",
       "match_source": "name-match",
@@ -11936,8 +11967,8 @@
       "python_name": "rcond_banded",
       "python_type": "function",
       "rust_path": "crates/flexmesa-mtx/src/band.rs",
-      "rust_line": 398,
-      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:398",
+      "rust_line": 460,
+      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:460",
       "rust_name": "rcond_banded",
       "rust_crate": "flexmesa-mtx",
       "match_source": "name-match",
@@ -19726,8 +19757,8 @@
       "group": "atm",
       "crate": "flexmesa-atm",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 32,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:32",
+      "rust_line": 31,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:31",
       "item_kind": "struct",
       "rust_name": "AtmTableInfo",
       "state": "rust-only"
@@ -19736,8 +19767,8 @@
       "group": "atm",
       "crate": "flexmesa-atm",
       "rust_path": "crates/flexmesa-atm/src/table.rs",
-      "rust_line": 227,
-      "rust_path_line": "crates/flexmesa-atm/src/table.rs:227",
+      "rust_line": 226,
+      "rust_path_line": "crates/flexmesa-atm/src/table.rs:226",
       "item_kind": "fn",
       "rust_name": "get_table_values",
       "state": "rust-only"
@@ -24326,8 +24357,8 @@
       "group": "kap",
       "crate": "flexmesa-kap",
       "rust_path": "crates/flexmesa-kap/src/low_t.rs",
-      "rust_line": 45,
-      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:45",
+      "rust_line": 43,
+      "rust_path_line": "crates/flexmesa-kap/src/low_t.rs:43",
       "item_kind": "fn",
       "rust_name": "aesopus_get_with_data",
       "state": "rust-only"
@@ -24526,8 +24557,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/band.rs",
-      "rust_line": 253,
-      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:253",
+      "rust_line": 306,
+      "rust_path_line": "crates/flexmesa-mtx/src/band.rs:306",
       "item_kind": "fn",
       "rust_name": "dgbtrs_trans",
       "state": "rust-only"
@@ -24545,11 +24576,111 @@
     {
       "group": "mtx",
       "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbmv.rs",
+      "rust_line": 26,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbmv.rs:26",
+      "item_kind": "fn",
+      "rust_name": "dgbmv",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs",
+      "rust_line": 15,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs:15",
+      "item_kind": "struct",
+      "rust_name": "Refinement",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs",
+      "rust_line": 23,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs:23",
+      "item_kind": "type",
+      "rust_name": "SolveFn",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs",
+      "rust_line": 44,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbrfs.rs:44",
+      "item_kind": "fn",
+      "rust_name": "dgbrfs",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbsvx.rs",
+      "rust_line": 28,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbsvx.rs:28",
+      "item_kind": "struct",
+      "rust_name": "DgbsvxSolution",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbsvx.rs",
+      "rust_line": 67,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbsvx.rs:67",
+      "item_kind": "fn",
+      "rust_name": "dgbsvx_fact_n",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs",
+      "rust_line": 23,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs:23",
+      "item_kind": "fn",
+      "rust_name": "dgbtrf_block_size",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs",
+      "rust_line": 35,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs:35",
+      "item_kind": "fn",
+      "rust_name": "dgbtrf_uses_blocked_code",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs",
+      "rust_line": 78,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dgbtrf.rs:78",
+      "item_kind": "fn",
+      "rust_name": "dgbtrf_blocked",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/band_lapack/dlangb.rs",
       "rust_line": 21,
       "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dlangb.rs:21",
       "item_kind": "fn",
       "rust_name": "dlangb",
+      "state": "rust-only"
+    },
+    {
+      "group": "mtx",
+      "crate": "flexmesa-mtx",
+      "rust_path": "crates/flexmesa-mtx/src/band_lapack/dlantb.rs",
+      "rust_line": 19,
+      "rust_path_line": "crates/flexmesa-mtx/src/band_lapack/dlantb.rs:19",
+      "item_kind": "fn",
+      "rust_name": "dlantb",
       "state": "rust-only"
     },
     {
@@ -24866,8 +24997,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 34,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:34",
+      "rust_line": 35,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:35",
       "item_kind": "enum",
       "rust_name": "Equilibration",
       "state": "rust-only"
@@ -24876,8 +25007,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 47,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:47",
+      "rust_line": 48,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:48",
       "item_kind": "struct",
       "rust_name": "EquilibrationFactors",
       "state": "rust-only"
@@ -24886,8 +25017,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 67,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:67",
+      "rust_line": 68,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:68",
       "item_kind": "struct",
       "rust_name": "PreconditionedSolve",
       "state": "rust-only"
@@ -24896,8 +25027,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 134,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:134",
+      "rust_line": 139,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:139",
       "item_kind": "fn",
       "rust_name": "compute_band_preconditioner",
       "state": "rust-only"
@@ -24906,8 +25037,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 211,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:211",
+      "rust_line": 216,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:216",
       "item_kind": "fn",
       "rust_name": "compute_block_preconditioner",
       "state": "rust-only"
@@ -24916,8 +25047,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 266,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:266",
+      "rust_line": 276,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:276",
       "item_kind": "fn",
       "rust_name": "compute_block_left_preconditioner",
       "state": "rust-only"
@@ -24926,8 +25057,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 341,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:341",
+      "rust_line": 353,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:353",
       "item_kind": "fn",
       "rust_name": "dgbsvx_banded_from_bands",
       "state": "rust-only"
@@ -24936,8 +25067,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 429,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:429",
+      "rust_line": 451,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:451",
       "item_kind": "fn",
       "rust_name": "dgbsvx_banded",
       "state": "rust-only"
@@ -24946,8 +25077,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 504,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:504",
+      "rust_line": 546,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:546",
       "item_kind": "fn",
       "rust_name": "dgbsvx_block_tridiagonal",
       "state": "rust-only"
@@ -24956,8 +25087,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 620,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:620",
+      "rust_line": 654,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:654",
       "item_kind": "fn",
       "rust_name": "dgeequ",
       "state": "rust-only"
@@ -24966,8 +25097,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 682,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:682",
+      "rust_line": 716,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:716",
       "item_kind": "fn",
       "rust_name": "dlaqge",
       "state": "rust-only"
@@ -24976,8 +25107,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 742,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:742",
+      "rust_line": 776,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:776",
       "item_kind": "fn",
       "rust_name": "dgbequ",
       "state": "rust-only"
@@ -24986,8 +25117,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 820,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:820",
+      "rust_line": 854,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:854",
       "item_kind": "fn",
       "rust_name": "dlaqgb",
       "state": "rust-only"
@@ -24996,8 +25127,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 934,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:934",
+      "rust_line": 969,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:969",
       "item_kind": "fn",
       "rust_name": "solve_dense_equilibrated",
       "state": "rust-only"
@@ -25006,8 +25137,8 @@
       "group": "mtx",
       "crate": "flexmesa-mtx",
       "rust_path": "crates/flexmesa-mtx/src/precond.rs",
-      "rust_line": 973,
-      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:973",
+      "rust_line": 1008,
+      "rust_path_line": "crates/flexmesa-mtx/src/precond.rs:1008",
       "item_kind": "fn",
       "rust_name": "solve_banded_equilibrated",
       "state": "rust-only"

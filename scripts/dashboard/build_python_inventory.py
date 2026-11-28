@@ -106,8 +106,8 @@ EXPLICIT_PY_TO_RUST: dict[tuple[str, str], tuple[str, str]] = {
         "eval_frequency_ratios_r02",
     ),
     ("src/flexmesa/bench/bicub_fast.py", "locate_uniform_cell_jax"): (
-        "crates/flexmesa-bench/src/bicub_fast.rs",
-        "locate_and_basis_1d",
+        "crates/flexmesa-interp2d/src/bicub_eval.rs",
+        "herm2xy_prevalidated_db",
     ),
     ("src/flexmesa/bench/bicub_fast.py", "eval_bicub_point_jax"): (
         "crates/flexmesa-bench/src/bicub_fast.rs",

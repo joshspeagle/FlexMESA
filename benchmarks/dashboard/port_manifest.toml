@@ -7101,7 +7101,23 @@ upstream_lines = 1140
 upstream_sha256 = "5bf45a46436eb4d83f721e364ee37a4b61f8c8e5ad5fe7f930e50898ff5d53d2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["set_raw_rates", "set_raw_rate", "set_raw_rate::do_default", "set_raw_rate::do1", "set_raw_rate::do1_reverse", "eval_which_raw_rate", "eval_raw_rate", "eval_table", "eval_table_reverse", "get_interp_table", "get_reaclib_rate_and_dlnT", "get_reaclib_rate_and_dlnT::get_reaclib_lo_hi", "get_reaclib_rate_and_dlnT::do_jina_reaclib_reverse"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"set_raw_rates" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rates" # partial: loops over reaction ids calling set_raw_rate; per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rate" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do_default" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do1_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"eval_which_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: thin wrapper around eval_raw_rate; same op_code dispatch
+"eval_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: no error for fr < 0, rr < 0 or missing_value (#744)
+"eval_table" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: table evaluation is eval_rate_table on the bundle (op_code 1); no lazy need_to_read file load
+"eval_table_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw_with_overrides" # partial: detailed balance uses eval_reaclib_inverse_ratio on the first REACLIB term; no do_reaclib_indices_for_reaction error path
+"get_interp_table" = "crates/flexmesa-rates/src/raw_rates.rs::RateTable1D::from_str_table" # partial: text parse of the table plus the cubic coefficients built at load; search order and error handling differ from the Fortran file reader
+"get_reaclib_rate_and_dlnT" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle lookup replaces the reaction_is_reverse / reverse_reaction_id caches
+"get_reaclib_rate_and_dlnT::get_reaclib_lo_hi" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: catalog stores the terms per handle instead of lo/hi indices
+"get_reaclib_rate_and_dlnT::do_jina_reaclib" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat"
+"get_reaclib_rate_and_dlnT::do_jina_reaclib_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: is_rev flag swaps forward and reverse values; no mesa_error when the reverse id is unknown
 
 [[files]]
 upstream_path = "rates/private/reaclib_eval.f90"

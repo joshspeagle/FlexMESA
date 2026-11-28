@@ -1,0 +1,145 @@
+{
+ "claims": 85,
+ "claims_verified": 69,
+ "not_counted_only_on_scope_or_precision": [
+  "eos/private/eospt_eval.f90::get_Pgas",
+  "eos/private/ion_offset.f90::compute_ion_offset",
+  "neu/private/mod_neu.f90::ifermi12",
+  "neu/private/mod_neu.f90::zfermim12",
+  "star/private/rsp_lina.f90::do_LINA"
+ ],
+ "routines_claimed": 55,
+ "routines_exact": [
+  "eos/private/eos_blend.f90::is_contained",
+  "eos/private/eos_blend.f90::min_distance_to_polygon",
+  "eos/private/eosdt_eval.f90::Get_eosDT_Results",
+  "eos/private/eosdt_eval.f90::get_Rho",
+  "eos/private/eosdt_eval.f90::get_T",
+  "eos/private/eospt_eval.f90::Get_PT_Results_using_DT",
+  "eos/public/eos_lib.f90::eosDT_get",
+  "eos/public/eos_lib.f90::eosDT_get_Rho",
+  "eos/public/eos_lib.f90::eosDT_get_T",
+  "eos/public/eos_lib.f90::eosPT_get",
+  "interp_2d/private/bipm_db.f90::do_evbipm_db",
+  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
+  "neu/public/neu_lib.f90::neu_get",
+  "star/private/eps_mdot.f90::calculate_eps_mdot",
+  "star/private/init_model.f90::get_zams_model",
+  "star/private/mix_info.f90::update_rotation_mixing_info",
+  "star/private/solve_omega_mix.f90::do_solve_omega_mix",
+  "turb/private/mlt.f90::calc_MLT",
+  "turb/public/turb.f90::set_MLT",
+  "turb/public/turb.f90::set_TDC"
+ ],
+ "routines_not_counted": {
+  "eos/private/eospt_eval.f90::get_Pgas": [
+   {
+    "failures": [
+     [
+      "scope",
+      "no #[test] function reaches both a call to ['eos_pt_get_pgas'] and the reference data"
+     ]
+    ],
+    "precision": "print",
+    "reference": "tests/fixtures/golden/eos/test_output.txt",
+    "test": "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs"
+   }
+  ],
+  "eos/private/ion_offset.f90::compute_ion_offset": [
+   {
+    "failures": [
+     [
+      "scope",
+      "no #[test] function reaches both a call to ['compute_ion_offset'] and the reference data"
+     ]
+    ],
+    "precision": "print",
+    "reference": "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv",
+    "test": "crates/flexmesa-eos/tests/wave3a1_golden_tests.rs"
+   }
+  ],
+  "neu/private/mod_neu.f90::ifermi12": [
+   {
+    "failures": [
+     [
+      "scope",
+      "no #[test] function reaches both a call to ['ifermi12'] and the reference data"
+     ]
+    ],
+    "precision": "exact",
+    "reference": "benchmarks/fortran_mesa/neu_oracles/mesa_26_4_1_neu_oracles.tsv",
+    "test": "crates/flexmesa-neu/tests/mesa_26_4_1_oracles_test.rs"
+   }
+  ],
+  "neu/private/mod_neu.f90::zfermim12": [
+   {
+    "failures": [
+     [
+      "scope",
+      "no #[test] function reaches both a call to ['zfermim12'] and the reference data"
+     ]
+    ],
+    "precision": "exact",
+    "reference": "benchmarks/fortran_mesa/neu_oracles/mesa_26_4_1_neu_oracles.tsv",
+    "test": "crates/flexmesa-neu/tests/mesa_26_4_1_oracles_test.rs"
+   }
+  ],
+  "star/private/hydro_chem_eqns.f90::do1_chem_eqns": [
+   {
+    "failures": [
+     [
+      "consts",
+      "embedded values need a committed repository reference, not a bundle member"
+     ]
+    ],
+    "precision": "exact",
+    "reference": "mesa_stepdumps:mesa_stepdumps/star/1.3M_ms_high_Z.stepdump",
+    "test": "crates/flexmesa-star/tests/equ_he3_parity_test.rs"
+   }
+  ],
+  "star/private/rsp_lina.f90::do_LINA": [
+   {
+    "failures": [
+     [
+      "scope",
+      "no #[test] function reaches both a call to ['do_lina'] and the reference data"
+     ]
+    ],
+    "precision": "print",
+    "reference": "tests/fixtures/golden/rsp/lina_26_4_1.tsv",
+    "test": "crates/flexmesa-star/tests/rsp_parity_test.rs"
+   }
+  ]
+ },
+ "routines_print": [
+  "const/public/const_def.f90::do_const_init",
+  "const/public/const_lib.f90::const_init",
+  "eos/private/eos_helm_eval.f90::get_helm_for_eosdt",
+  "eos/private/eoscms_eval.f90::get_CMS_for_eosdt",
+  "eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results",
+  "eos/private/eosdt_eval.f90::get1_for_eosdt",
+  "eos/private/eospc_eval.f90::Get_PC_alfa",
+  "eos/private/eospc_eval.f90::get_PC_for_eosdt",
+  "eos/private/eospt_eval.f90::get_T",
+  "eos/private/gauss_fermi.f90::dfermi",
+  "eos/private/helm.f90::helmeos2",
+  "eos/private/ideal.f90::get_ideal_eos_results",
+  "eos/private/ideal.f90::get_ideal_for_eosdt",
+  "eos/private/skye.f90::Get_Skye_alfa",
+  "eos/private/skye.f90::Get_Skye_alfa_simple",
+  "eos/private/skye.f90::get_Skye_for_eosdt",
+  "eos/public/eos_lib.f90::eosPT_get_T",
+  "eos/public/eos_lib.f90::eos_fermi_dirac_integral",
+  "eos/public/eos_lib.f90::eos_gamma_DE_get",
+  "eos/public/eos_lib.f90::helmeos2_eval",
+  "neu/private/mod_neu.f90::neutrinos",
+  "star/private/diffusion.f90::do_solve_diffusion",
+  "star/private/diffusion_support.f90::get_matrix_coeffs",
+  "star/private/paquette_coeffs.f90::free_collision_integrals",
+  "star/private/paquette_coeffs.f90::initialise_collision_integrals",
+  "star/private/paquette_coeffs.f90::paquette_coefficients",
+  "star/private/phase_separation.f90::do_phase_separation",
+  "star/private/rsp.f90::build_rsp_model",
+  "star/private/rsp_build.f90::do_rsp_build"
+ ]
+}

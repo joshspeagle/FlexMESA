@@ -86,13 +86,14 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 69 | Per-Case Budgets, the `passes` Preset and the Early Divergence Stop in the History Harness (`#554`) | In force | below |
 | 70 | A Passing Case Takes Exactly MESA's Step Count in Every Stage, and E2E Work Is Triaged by Run Time (`#546`, `#554`) | In force | below |
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
-| 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
+| 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force; routine claims amended by decision 80 | below |
 | 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
 | 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
 | 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
 | 78 | When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`) | In force | below |
 | 79 | A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`) | In force | below |
+| 80 | An Oracle Claim Names Its MESA Artifact and Is Checked per Routine; Only 0-ULP Evidence Raises the Ceiling (`#563`, `#174`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -1049,3 +1050,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keeping the code-edit rule*: the raise then waits for an unrelated code change, or invites no-op edits that satisfy the gate while hiding the actual evidence.
   - *Allowing mapping-only raises up to `ported_unverified`*: that tier claims the whole public interface of the file is ported, which a sampled review cannot establish file by file.
 - **Note**: the first record is the `#610b` review (`notes/audit/routine_map_reviews/610b.md`); its `files` list stays empty until the corrected maps are converted.
+
+## DECISIONS #80: An Oracle Claim Names Its MESA Artifact and Is Checked per Routine; Only 0-ULP Evidence Raises the Ceiling (`#563`, `#174`)
+
+- **Date**: 2026-11-27 (project lead)
+- **Decision**:
+  - A `kind = "oracle"` record in `benchmarks/dashboard/test_taxonomy.toml` claims routines only through `[[tests.oracles]]` entries. Each entry names its `reference` (a committed repository file in a reference area, or `<bundle>:<member>` of a MESA-origin bundle manifest), its `recipe` (the generator or script that produced a repository reference), its `precision` (`exact` for 0 ULP, or `print` with a stated `tolerance`), optional `consts` that embed expected values, and its `routines`. The top-level `routines` list is retired.
+  - `flexmesa.testing._oracle_provenance` checks every (test, reference, routine) claim for reference, origin, recipe, linkage, consts, scope and precision. Embedded values must appear in a committed repository reference, not a bundle member. Scope requires a `#[test]` function that reaches both a call to the routine's Rust target and the reference data. When the source cannot be parsed, the claim fails. Verbatim upstream copies under `tests/fixtures/golden/` are listed with their upstream path and SHA-256 in `tests/fixtures/golden/PROVENANCE.toml`.
+  - The routine table counts `oracle_exact` and `oracle_print` separately, and the `kernel_reference_vectors` ceiling uses exact evidence only. Every claim and its failing checks are published in `notes/audit/oracle_provenance.md`.
+- **Why**: the per-file gate passed any test with a hex literal or a provenance sentence. An independent audit of the 65 routines then counted at the oracle level found 11 whose expected values trace to no committed MESA output, and several entries that cited the wrong source.
+- **Alternatives Rejected**:
+  - *Keep the per-file check and audit by hand*: the audit found the gaps only after they had been counted, and nothing stops new ones.
+  - *Accept embedded values when a bundle member contains them*: bundles are opt-in and large, so the check could not run deterministically in CI.
+  - *Count print-precision evidence towards the ceiling*: a tolerance comparison against printed values cannot show the 0-ULP agreement that `kernel_reference_vectors` claims.

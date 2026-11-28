@@ -22,11 +22,15 @@ only when it is itself mapped (by bare name where that is unambiguous, or as
 ``parent::name``). The own lines of all routines of a file plus its lines
 outside any routine therefore equal the file's line count.
 
-The ``oracle`` level counts a fully mapped routine when a test file
-classified ``oracle`` in ``test_taxonomy.toml`` lists its
-``<upstream path>::<routine>`` id in its ``routines`` field. The ``exercised``
-level needs the coverage job and is not computed. No status in the manifest
-is read as evidence of a routine.
+The oracle levels count a fully mapped routine only through a verified
+``[[tests.oracles]]`` entry of a test classified ``oracle`` in
+``test_taxonomy.toml``, whose expected values trace to a committed MESA
+``26.4.1`` artifact (``_oracle_provenance``, `DECISIONS #80`):
+``oracle_exact`` when some verified entry compares at 0 ULP, otherwise
+``oracle_print`` when a verified entry compares within a stated tolerance
+against printed MESA values. The ``exercised`` level needs the coverage job
+and is not computed. No status in the manifest is read as evidence of a
+routine.
 
 Each file also gets a derived status ceiling (see ``status_ceiling``) from
 full mappings only, and the table reports where the hand-set status exceeds it
@@ -47,6 +51,8 @@ import pathlib
 from typing import Any
 
 from flexmesa.testing import (
+    _oracle_provenance,
+    _routine_call_gate,
     port_manifest,
     routine_backlog,
     routine_gate,
@@ -61,7 +67,7 @@ GENERATOR = "scripts/dashboard/build_routine_table.py"
 BACKLOG_MARKDOWN_ROWS = 40
 ATTRIBUTED_MARKDOWN_ROWS = 40
 CEILING_MARKDOWN_ROWS = 10
-LEVELS = ("full", "partial", "na", "unmapped", "oracle")
+LEVELS = ("full", "partial", "na", "unmapped", "oracle_exact", "oracle_print")
 
 
 def _union_lines(spans: list[tuple[int, int]]) -> int:
@@ -115,8 +121,9 @@ def status_ceiling(
     * no routines, or none mapped in full or in part: ``None``;
     * any routine partial or unmapped: ``partial``;
     * all routines mapped in full: ``ported_unverified``;
-    * all routines mapped in full and each also has oracle evidence:
-      ``kernel_reference_vectors``.
+    * all routines mapped in full and each also has exact (0-ULP) oracle
+      evidence: ``kernel_reference_vectors``. Print-precision oracles do not
+      count toward this ceiling.
 
     ``case_level_evidence`` is never a ceiling because the ``exercised`` level
     is not derived. Contained procedures count as routines, so a file is
@@ -125,7 +132,7 @@ def status_ceiling(
     Args:
         routines: Number of applicable inventory routines in the file.
         mapped: How many of them are mapped in full.
-        oracle: How many of them have oracle evidence.
+        oracle: How many of them have exact (0-ULP) oracle evidence.
         partial: How many of them are mapped in part.
 
     Returns:
@@ -155,14 +162,28 @@ def _credited(keys: list[str], routines: list[list[Any]]) -> set[int]:
     return out
 
 
-def oracle_routine_ids(repo_root: pathlib.Path) -> set[str]:
-    """Return ``<upstream path>::<routine>`` ids listed by ``oracle`` tests."""
+def oracle_claims(
+    repo_root: pathlib.Path, manifest: port_manifest.PortManifest
+) -> list[_oracle_provenance.ClaimResult]:
+    """Evaluate every ``[[tests.oracles]]`` claim of the test taxonomy."""
     tax = test_taxonomy.load_test_taxonomy(
         repo_root / test_taxonomy.DEFAULT_TAXONOMY_REL
     )
-    return {
-        rid for e in tax.entries if e.kind == "oracle" for rid in e.routines
-    }
+    targets: dict[str, set[str]] = {}
+    for entry in manifest.entries:
+        for key, target in entry.routine_map:
+            targets[f"{entry.upstream_path}::{key}"] = (
+                _routine_call_gate.parse_target_symbols(target)
+            )
+    records = [(e.path, e.oracles) for e in tax.entries if e.kind == "oracle"]
+    return _oracle_provenance.evaluate(repo_root, records, targets)
+
+
+def oracle_routine_ids(
+    repo_root: pathlib.Path, manifest: port_manifest.PortManifest
+) -> tuple[set[str], set[str]]:
+    """Return ``(exact ids, print-only ids)`` of verified oracle routines."""
+    return _oracle_provenance.verified_ids(oracle_claims(repo_root, manifest))
 
 
 def build_table(
@@ -170,7 +191,7 @@ def build_table(
     inventory: dict[str, Any],
     repo_root: pathlib.Path,
     *,
-    oracle_ids: set[str] | None = None,
+    oracle_ids: tuple[set[str], set[str]] | None = None,
     gaps: list[tuple[str, str]] | None = None,
     na_entries: list[routine_na.NotApplicable] | None = None,
 ) -> dict[str, Any]:
@@ -180,8 +201,9 @@ def build_table(
         manifest: Loaded port manifest.
         inventory: Loaded routine inventory.
         repo_root: Repository root (to resolve mapped Rust and Python files).
-        oracle_ids: ``<upstream path>::<routine>`` ids with oracle evidence;
-            read from ``test_taxonomy.toml`` when ``None``.
+        oracle_ids: ``(exact, print-only)`` sets of verified
+            ``<upstream path>::<routine>`` ids; evaluated from
+            ``test_taxonomy.toml`` when ``None``.
         gaps: ``(case id, reason)`` pairs for backlog attribution; read from
             ``known_gaps.toml`` when ``None``.
         na_entries: Routines declared not applicable; read from
@@ -196,7 +218,8 @@ def build_table(
         for v in routine_gate.collect_violations(manifest, inventory, repo_root)
     }
     if oracle_ids is None:
-        oracle_ids = oracle_routine_ids(repo_root)
+        oracle_ids = oracle_routine_ids(repo_root, manifest)
+    exact_ids, print_ids = oracle_ids
     if gaps is None:
         gaps = routine_backlog.load_gap_cases(repo_root)
     if na_entries is None:
@@ -221,16 +244,23 @@ def build_table(
         partial_ids = _credited(list(entry.routine_map_partial), routines)
         partial_ids &= mapped_ids
         full_ids = mapped_ids - partial_ids
-        oracle_ids_here = _credited(
-            [k for k in usable if f"{entry.upstream_path}::{k}" in oracle_ids],
+        exact_here = _credited(
+            [k for k in usable if f"{entry.upstream_path}::{k}" in exact_ids],
             routines,
         )
-        oracle_ids_here &= full_ids
+        exact_here &= full_ids
+        print_here = _credited(
+            [k for k in usable if f"{entry.upstream_path}::{k}" in print_ids],
+            routines,
+        )
+        print_here &= full_ids
+        print_here -= exact_here
         levels = {
             "full": full_ids,
             "partial": partial_ids,
             "na": na_ids,
-            "oracle": oracle_ids_here,
+            "oracle_exact": exact_here,
+            "oracle_print": print_here,
         }
         unmapped_ids = {id(r) for r in routines} - mapped_ids - na_ids
         levels["unmapped"] = unmapped_ids
@@ -238,7 +268,10 @@ def build_table(
         lines = {k: sum(own[i] for i in v) for k, v in levels.items()}
         n_applicable = len(routines) - count["na"]
         ceiling = status_ceiling(
-            n_applicable, count["full"], count["oracle"], count["partial"]
+            n_applicable,
+            count["full"],
+            count["oracle_exact"],
+            count["partial"],
         )
         row: dict[str, Any] = {
             "upstream_path": entry.upstream_path,
@@ -296,7 +329,7 @@ def build_table(
             "generator": GENERATOR,
             "mesa_version": manifest.upstream_version,
             "upstream_commit": manifest.upstream_commit,
-            "evidence_levels": ["full", "partial", "na", "unmapped", "oracle"],
+            "evidence_levels": list(LEVELS),
             "na_declared": len(na_entries),
             "gap_cases": len(gaps),
             "inventory": routine_inventory.INVENTORY_RELPATH,
@@ -363,7 +396,8 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     out["pct_lines_na"] = _pct(out["lines_na"], total)
     out["pct_lines_full_excl_na"] = _pct(out["lines_full"], applicable)
     out["pct_lines_partial_excl_na"] = _pct(out["lines_partial"], applicable)
-    out["pct_lines_oracle"] = _pct(out["lines_oracle"], total)
+    out["pct_lines_oracle_exact"] = _pct(out["lines_oracle_exact"], total)
+    out["pct_lines_oracle_print"] = _pct(out["lines_oracle_print"], total)
     out["pct_whole_file_ported"] = _pct(whole, total)
     return out
 
@@ -389,13 +423,15 @@ def _mod_row(label: str, m: dict[str, Any]) -> str:
         f"| {label} | {m['files']:,} | {m['routines']:,} | "
         f"{m['routines_full']:,} | {m['routines_partial']:,} | "
         f"{m['routines_na']:,} | {m['routines_unmapped']:,} | "
-        f"{m['routines_oracle']:,} | {m['upstream_lines']:,} | "
+        f"{m['routines_oracle_exact']:,} / {m['routines_oracle_print']:,} | "
+        f"{m['upstream_lines']:,} | "
         f"{m['lines_full']:,} | {m['lines_partial']:,} | "
         f"{m['lines_na']:,} | {m['lines_unmapped']:,} | "
         f"{m['lines_outside_routines']:,} | {m['pct_lines_full']:.1f}% | "
         f"{m['pct_lines_partial']:.1f}% | "
         f"{m['pct_lines_full_excl_na']:.1f}% | "
-        f"{m['pct_lines_oracle']:.1f}% | "
+        f"{m['pct_lines_oracle_exact']:.1f}% / "
+        f"{m['pct_lines_oracle_print']:.1f}% | "
         f"{m['pct_whole_file_ported']:.1f}% |"
     )
 
@@ -403,14 +439,15 @@ def _mod_row(label: str, m: dict[str, Any]) -> str:
 def _ceiling_rows(rows: list[dict[str, Any]]) -> list[str]:
     out = [
         "| File | Status | Ceiling | Lines | Routines | Full | Partial | "
-        "N/A | Oracle |",
+        "N/A | Oracle (exact / print) |",
         "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     out.extend(
         f"| `{f['upstream_path']}` | {f['status']} | "
         f"{f['ceiling']} | {f['upstream_lines']:,} | {f['routines']:,} | "
         f"{f['routines_full']:,} | {f['routines_partial']:,} | "
-        f"{f['routines_na']:,} | {f['routines_oracle']:,} |"
+        f"{f['routines_na']:,} | "
+        f"{f['routines_oracle_exact']:,} / {f['routines_oracle_print']:,} |"
         for f in rows[:CEILING_MARKDOWN_ROWS]
     )
     return out
@@ -446,8 +483,9 @@ def render_markdown(table: dict[str, Any]) -> str:
         "",
         f"Derived from `{head['inventory']}` (MESA {head['mesa_version']}, "
         f"commit `{head['upstream_commit'][:7]}`), the `routine_map` entries "
-        "of `benchmarks/dashboard/port_manifest.toml`, the oracle routine "
-        "lists of `benchmarks/dashboard/test_taxonomy.toml`, and the declared "
+        "of `benchmarks/dashboard/port_manifest.toml`, the verified oracle "
+        "entries of `benchmarks/dashboard/test_taxonomy.toml` (see "
+        "`notes/audit/oracle_provenance.md`), and the declared "
         "gaps of `benchmarks/history_harness/known_gaps.toml`. "
         "Machine-readable "
         "copy: `notes/audit/routine_table.json`.",
@@ -471,11 +509,14 @@ def render_markdown(table: dict[str, Any]) -> str:
         "declared). Never counted as mapped and never removed from a "
         "denominator; both fractions are shown.",
         "* `unmapped`: none of the above.",
-        "* `oracle`: the routine is mapped in full and a test file "
-        "classified `oracle` in the taxonomy lists its "
-        "`<upstream path>::<routine>` id in its `routines` field. This is "
-        "the taxonomy's own record of per-routine oracle cover; it is a "
-        "listing, not a call-site check.",
+        "* `oracle exact` / `oracle print`: the routine is mapped in full "
+        "and a verified `[[tests.oracles]]` entry of an `oracle` test "
+        "compares it with a committed MESA 26.4.1 artifact, at 0 ULP "
+        "(`exact`) or within a stated tolerance of printed MESA values "
+        "(`print`). A routine with both is counted as exact. Entries are "
+        "verified by `flexmesa.testing._oracle_provenance` (DECISIONS #80); "
+        "claims that fail a check are listed in "
+        "`notes/audit/oracle_provenance.md` and do not count.",
         "* `exercised` (reached by a strict-pass history case) is not derived.",
         "",
         f"{head['files_not_in_inventory']} manifest files are not in the "
@@ -493,7 +534,10 @@ def render_markdown(table: dict[str, Any]) -> str:
         f"| Lines in not-applicable routines | {eng['lines_na']:,} |",
         f"| Lines in unmapped routines | {eng['lines_unmapped']:,} |",
         f"| Lines outside routines | {eng['lines_outside_routines']:,} |",
-        f"| Lines in routines with oracle evidence | {eng['lines_oracle']:,} |",
+        f"| Lines in routines with exact oracle evidence | "
+        f"{eng['lines_oracle_exact']:,} |",
+        f"| Lines in routines with print-precision oracle evidence only | "
+        f"{eng['lines_oracle_print']:,} |",
         f"| Line-weighted full-mapping fraction (all lines) | "
         f"{eng['pct_lines_full']:.1f}% |",
         f"| Line-weighted partial-mapping fraction (all lines) | "
@@ -504,14 +548,18 @@ def render_markdown(table: dict[str, Any]) -> str:
         f"{eng['pct_lines_partial_excl_na']:.1f}% |",
         f"| Not-applicable fraction of all lines | "
         f"{eng['pct_lines_na']:.1f}% |",
-        f"| Line-weighted oracle fraction | {eng['pct_lines_oracle']:.1f}% |",
+        f"| Line-weighted oracle fraction (exact / print) | "
+        f"{eng['pct_lines_oracle_exact']:.1f}% / "
+        f"{eng['pct_lines_oracle_print']:.1f}% |",
         f"| Whole-file ported fraction (existing headline) | "
         f"{eng['pct_whole_file_ported']:.1f}% |",
         f"| Routines (full / partial / N/A / unmapped / total) | "
         f"{eng['routines_full']:,} / {eng['routines_partial']:,} / "
         f"{eng['routines_na']:,} / {eng['routines_unmapped']:,} / "
         f"{eng['routines']:,} |",
-        f"| Routines with oracle evidence | {eng['routines_oracle']:,} |",
+        f"| Routines with oracle evidence (exact / print) | "
+        f"{eng['routines_oracle_exact']:,} / "
+        f"{eng['routines_oracle_print']:,} |",
         "",
         "The fractions answer different questions. The whole-file figure "
         "counts every line of a file whose hand-set status is ported; the "
@@ -522,9 +570,10 @@ def render_markdown(table: dict[str, Any]) -> str:
         "## Per module",
         "",
         "| Module | Files | Routines | Full | Partial | N/A | Unmapped | "
-        "Oracle | Upstream lines | Lines full | Lines partial | Lines N/A | "
+        "Oracle (exact / print) | Upstream lines | Lines full | "
+        "Lines partial | Lines N/A | "
         "Lines unmapped | Outside routines | Full | Partial | Full excl. "
-        "N/A | Oracle | Whole-file ported |",
+        "N/A | Oracle (exact / print) | Whole-file ported |",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
         "---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
         "---: |",
@@ -543,8 +592,9 @@ def render_markdown(table: dict[str, Any]) -> str:
         "* any applicable routine partial or unmapped: `partial`, and the "
         "file is not eligible for a raise;",
         "* all applicable routines mapped in full: `ported_unverified`;",
-        "* all mapped in full and each has oracle evidence: "
-        "`kernel_reference_vectors`.",
+        "* all mapped in full and each has exact (0-ULP) oracle evidence: "
+        "`kernel_reference_vectors` (print-precision evidence does not "
+        "count).",
         "",
         "`case_level_evidence` is never a ceiling because the `exercised` "
         "level is not derived. Contained procedures count as routines. A "
@@ -572,7 +622,8 @@ def render_markdown(table: dict[str, Any]) -> str:
         "## Per file (files with a non-absent status or a mapped routine)",
         "",
         "| File | Module | Status | Ceiling | Lines | Routines | Full | "
-        "Partial | N/A | Oracle | Lines full | Lines partial | Lines N/A | "
+        "Partial | N/A | Oracle (exact / print) | Lines full | "
+        "Lines partial | Lines N/A | "
         "Lines unmapped | Outside |",
         "| :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | "
         "---: | ---: | ---: | ---: | ---: | ---: |",
@@ -587,7 +638,9 @@ def render_markdown(table: dict[str, Any]) -> str:
             f"{f['ceiling'] or '-'} | "
             f"{f['upstream_lines']:,} | {f['routines']:,} | "
             f"{f['routines_full']:,} | {f['routines_partial']:,} | "
-            f"{f['routines_na']:,} | {f['routines_oracle']:,} | "
+            f"{f['routines_na']:,} | "
+            f"{f['routines_oracle_exact']:,} / "
+            f"{f['routines_oracle_print']:,} | "
             f"{f['lines_full']:,} | {f['lines_partial']:,} | "
             f"{f['lines_na']:,} | {f['lines_unmapped']:,} | "
             f"{f['lines_outside_routines']:,} |"
@@ -664,8 +717,20 @@ def render_outputs(repo_root: pathlib.Path) -> dict[pathlib.Path, str]:
     inventory = routine_inventory.load_inventory(
         repo_root / routine_inventory.INVENTORY_RELPATH
     )
-    table = build_table(manifest, inventory, repo_root)
+    claims = oracle_claims(repo_root, manifest)
+    table = build_table(
+        manifest,
+        inventory,
+        repo_root,
+        oracle_ids=_oracle_provenance.verified_ids(claims),
+    )
     return {
         repo_root / MD_RELPATH: render_markdown(table),
         repo_root / JSON_RELPATH: render_json(table),
+        repo_root / _oracle_provenance.REPORT_MD_RELPATH: (
+            _oracle_provenance.render_report_markdown(claims)
+        ),
+        repo_root / _oracle_provenance.REPORT_JSON_RELPATH: (
+            _oracle_provenance.render_report_json(claims)
+        ),
     }

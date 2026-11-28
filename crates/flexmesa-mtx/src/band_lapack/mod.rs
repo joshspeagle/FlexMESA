@@ -25,7 +25,11 @@
 //!   [`dlantb`](fn@dlantb) (`SRC/dlantb.f`), and [`dgbsvx_fact_n`](fn@dgbsvx_fact_n), the
 //!   `DGBSVX(FACT = 'N')` sequence (`SRC/dgbsvx.f`) built from them.
 //!
-//! `DGBTRF`/`DGBTRS` stay in [`crate::band`]; they are not duplicated here.
+//! - [`dgbtrf`](mod@dgbtrf) (`SRC/dgbtrf.f`): the `DGBTRF` block-size choice
+//!   and blocked code, called by [`crate::band::dgbtrf`].
+//!
+//! The `DGBTF2` loop of `DGBTRF` and `DGBTRS` stay in [`crate::band`]; they
+//! are not duplicated here.
 //!
 //! # Conventions
 //!
@@ -50,6 +54,7 @@ pub mod dgbcon;
 pub mod dgbmv;
 pub mod dgbrfs;
 pub mod dgbsvx;
+pub mod dgbtrf;
 pub mod dlangb;
 pub mod dlantb;
 pub mod dlatbs;

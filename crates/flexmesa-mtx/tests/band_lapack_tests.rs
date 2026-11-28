@@ -21,13 +21,17 @@
     clippy::too_many_lines
 )]
 
+use flexmesa_mtx::band_lapack::dgbtrf::{
+    dgbtrf_block_size, dgbtrf_uses_blocked_code,
+};
 use flexmesa_mtx::band_lapack::{
     dgbcon, dgbmv, dgbrfs, dgbsvx_fact_n, dlangb, dlantb, dlatbs, drscl, dtbsv,
     Refinement,
 };
 use flexmesa_mtx::lapack::{dlamch, ix, LapackError};
 use flexmesa_mtx::{
-    dgbsvx_banded_from_bands, dgbsvx_block_tridiagonal, dgbtrf, MtxError,
+    dense_to_band, dgbsvx_banded_from_bands, dgbsvx_block_tridiagonal, dgbtrf,
+    dgbtrs_trans, MtxError,
 };
 
 /// Column-major `AB(ldab, n)` from `(i, j, value)` triples; unlisted
@@ -1051,4 +1055,284 @@ fn banded_wrapper_with_kl_one_matches_a_direct_solve() {
         assert!((xi - want).abs() <= 1e-14, "{xi} vs {want}");
     }
     assert_eq!(s.ierr, 0);
+}
+
+// ------------------------------------------------- DGBTRF blocked code
+
+#[test]
+fn dgbtrf_block_size_is_one_up_to_ku_64_and_blocked_code_needs_kl_32() {
+    // ilaenv.f:433-446: NB = 1 for KU <= 64, else 32; dgbtrf.f:225 takes
+    // the unblocked DGBTF2 when NB <= 1 or NB > KL.
+    assert_eq!(dgbtrf_block_size(64), 1);
+    assert_eq!(dgbtrf_block_size(65), 32);
+    assert!(!dgbtrf_uses_blocked_code(200, 64));
+    assert!(!dgbtrf_uses_blocked_code(31, 65));
+    assert!(dgbtrf_uses_blocked_code(32, 65));
+    // The DGBSVX_tridiagonal_wrapper bands KL = KU = 2*nvar: nvar >= 33.
+    assert!(!dgbtrf_uses_blocked_code(64, 64));
+    assert!(dgbtrf_uses_blocked_code(66, 66));
+}
+
+/// Row-major dense `A = P_1 L_1 P_2 L_2 ... P_n L_n U` (0-based `k`):
+/// `P_k` swaps rows `k` and `k + d` for each `(k, d)` in `swaps`, `L_k` is
+/// the identity plus multipliers `l_ik` in `{-1/2, 1/2, 1/4}` (`|l| < 1`),
+/// and `U` has integer entries in `-3..=3` and diagonal in `{2, -1, 1, -2}`.
+///
+/// Partial pivoting on `A` reproduces `P_k` (the pivot candidates of step
+/// `k` are `u_kk` at row `k + d` and `l_ik u_kk` elsewhere) and `L_k`
+/// exactly. Every partially reduced matrix is an `M_k = P_k L_k ... U`
+/// whose rows are integer rows of `U` plus `l * (integer row)`, so all
+/// entries are small multiples of `1/4`; every product and sum in the
+/// factorisation and in both solves below is therefore exact, whatever the
+/// operation order. Returns `(A, ipiv)` with 0-based pivots `k + d`.
+fn exact_pivoted_band_matrix(
+    n: usize,
+    kl: usize,
+    ku: usize,
+    swaps: &[(usize, usize)],
+) -> (Vec<f64>, Vec<usize>) {
+    let mut ipiv: Vec<usize> = (0..n).collect();
+    for &(k, d) in swaps {
+        ipiv[k] = k + d;
+    }
+    let target = |i: usize| swaps.iter().any(|&(k, d)| k + d == i);
+    // Upper bandwidth of row k of U: rows moved down by d may reach KU+d
+    // (fill-in), rows moved up by d must stop at KU-d.
+    let bw = |k: usize| -> usize {
+        for &(m, d) in swaps {
+            if m == k {
+                return (ku + d).min(kl + ku);
+            }
+            if m + d == k {
+                return ku - d;
+            }
+        }
+        ku
+    };
+    let mut a = vec![0.0_f64; n * n];
+    for k in 0..n {
+        a[k * n + k] = [2.0, -1.0, 1.0, -2.0][k % 4];
+        for j in (k + 1)..=(k + bw(k)).min(n - 1) {
+            a[k * n + j] = ((3 * k + 5 * j) % 7) as f64 - 3.0;
+        }
+    }
+    for k in (0..n).rev() {
+        // Rows of L_k: none into a pivot target row, and below k + d only
+        // for a swapped column (its row of U is the long one).
+        let d = swaps.iter().find(|&&(m, _)| m == k).map_or(0, |&(_, d)| d);
+        let first = k + 1 + d;
+        let second = first + (5 * k) % kl;
+        let mut rows = vec![(first, if k % 2 == 0 { 0.5 } else { -0.5 })];
+        if second != first {
+            rows.push((second, 0.25));
+        }
+        for (i, l) in rows {
+            if i < n && i <= k + kl && !target(i) {
+                for j in 0..n {
+                    a[i * n + j] += l * a[k * n + j];
+                }
+            }
+        }
+        if d > 0 {
+            for j in 0..n {
+                a.swap(k * n + j, (k + d) * n + j);
+            }
+        }
+    }
+    for i in 0..n {
+        for j in 0..n {
+            let v = a[i * n + j];
+            assert_eq!((4.0 * v).fract(), 0.0, "A({i},{j}) = {v}");
+            if v != 0.0 {
+                assert!(
+                    i <= j + kl && j <= i + ku,
+                    "A({i},{j}) = {v} outside the band"
+                );
+            }
+        }
+    }
+    (a, ipiv)
+}
+
+fn blocked_case(kl: usize, ku: usize, swaps: &[(usize, usize)]) {
+    let n = 200;
+    assert!(dgbtrf_uses_blocked_code(kl, ku));
+    let (a, ipiv_want) = exact_pivoted_band_matrix(n, kl, ku, swaps);
+    let ldab = 2 * kl + ku + 1;
+    let mut ab = vec![0.0_f64; ldab * n];
+    dense_to_band(n, n, &a, kl, ku, &mut ab, ldab).unwrap();
+    let mut lu = ab.clone();
+    let mut ipiv = vec![0usize; n];
+    dgbtrf(n, kl, ku, &mut lu, ldab, &mut ipiv).unwrap();
+    assert_eq!(ipiv, ipiv_want, "kl={kl} ku={ku}");
+
+    // x = integers; b = A x and b^T = A^T x are exact (multiples of 1/4).
+    let x: Vec<f64> = (0..n).map(|i| ((7 * i) % 9) as f64 - 4.0).collect();
+    let mut bn = vec![0.0_f64; n];
+    let mut bt = vec![0.0_f64; n];
+    for i in 0..n {
+        for j in 0..n {
+            bn[i] += a[i * n + j] * x[j];
+            bt[j] += a[i * n + j] * x[i];
+        }
+    }
+    let mut xn = bn.clone();
+    dgbtrs_trans(false, n, kl, ku, &lu, ldab, &ipiv, &mut xn).unwrap();
+    assert_eq!(xn, x, "A x = b, kl={kl} ku={ku}");
+    let mut xt = bt.clone();
+    dgbtrs_trans(true, n, kl, ku, &lu, ldab, &ipiv, &mut xt).unwrap();
+    assert_eq!(xt, x, "A^T x = b, kl={kl} ku={ku}");
+
+    // DGBSVX(FACT='N') on compact storage AB(ku+1+i-j, j): exact x, zero
+    // residual so BERR = 0. U is far from well conditioned, so only the
+    // INFO/RCOND consistency (dgbsvx.f:631-632) is checked for RCOND.
+    let ldc = kl + ku + 1;
+    let mut abc = vec![0.0_f64; ldc * n];
+    for j in 1..=n {
+        for i in j.saturating_sub(ku).max(1)..=(j + kl).min(n) {
+            abc[ix(ku + 1 + i - j, j, ldc)] = a[(i - 1) * n + (j - 1)];
+        }
+    }
+    for (tr, b) in [(b'N', &bn), (b'T', &bt)] {
+        let s = dgbsvx_fact_n(tr, n, kl, ku, &abc, ldc, b).unwrap();
+        assert_eq!(s.x, x, "dgbsvx trans={}", tr as char);
+        assert_eq!(s.berr, 0.0);
+        let info = if s.rcond < dlamch::EPS { n + 1 } else { 0 };
+        assert_eq!(s.info, info);
+        assert!(s.rcond > 0.0 && s.rcond <= 1.0, "{}", s.rcond);
+        assert!(s.ferr > 0.0 && s.ferr.is_finite(), "{}", s.ferr);
+    }
+
+    // A zero column j gives a zero pivot there (INFO = j+1), reported
+    // after the blocked code completes.
+    let mut az = a.clone();
+    for i in 0..n {
+        az[i * n + 150] = 0.0;
+    }
+    let mut abz = vec![0.0_f64; ldab * n];
+    dense_to_band(n, n, &az, kl, ku, &mut abz, ldab).unwrap();
+    let mut ipz = vec![0usize; n];
+    assert_eq!(
+        dgbtrf(n, kl, ku, &mut abz, ldab, &mut ipz),
+        Err(MtxError::SingularMatrix(150))
+    );
+}
+
+#[test]
+fn blocked_dgbtrf_kl_ku_66_recovers_pivots_and_exact_solutions() {
+    // KL = KU = 66 (DGBSVX_tridiagonal_wrapper with nvar = 33), NB = 32.
+    // (31, 66): JJ = 32 pivots on row 98 >= J+KL = 67, the WORK31 branch
+    // (dgbtrf.f:318-321, 494-495); (126, 40): JJ = 127 in the block J = 97
+    // pivots on row 167 >= 163, the same branch; (40, 3) and (150, 1) are
+    // in-band swaps (dgbtrf.f:311-312, 488-489). Rows 31..97 reach KV.
+    blocked_case(66, 66, &[(31, 66), (40, 3), (126, 40), (150, 1)]);
+}
+
+#[test]
+fn blocked_dgbtrf_kl_34_ku_70_recovers_pivots_and_exact_solutions() {
+    // KL < KU: I2 = KL-JB = 2 rows of A22, I3 = JB rows of A31.
+    blocked_case(34, 70, &[(31, 34), (40, 3), (126, 20), (150, 1)]);
+}
+
+// ------------------------------------------- DGBTRS TRANS='T' order
+
+/// `2^-59`, `2^-60` and `2^-61`, exact (powers of two).
+const P2M59: f64 = 1.0 / 576_460_752_303_423_488.0;
+const P2M60: f64 = P2M59 / 2.0;
+const P2M61: f64 = P2M60 / 2.0;
+
+/// `A = U = [[1, 2^-60, 1], [0, 1, 1], [0, 0, 1]]` (`kl = 0`, `ku = 2`) in
+/// `dgbtrf` row-major storage `ab[row*n + j]`, `ldab = 3`, diagonal row 2.
+fn order_u() -> (Vec<f64>, usize, usize) {
+    let e = P2M60;
+    let a = [1.0, e, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+    let mut ab = vec![0.0_f64; 9];
+    dense_to_band(3, 3, &a, 0, 2, &mut ab, 3).unwrap();
+    (ab, 0, 2)
+}
+
+#[test]
+fn dgbtrs_transposed_u_step_sums_rows_in_ascending_order() {
+    // U^T x = [1, 0, 1]: x1 = 1, x2 = 0 - 2^-60*1 = -2^-60, and DTBSV
+    // (dtbsv.f:343-345) forms x3 = (1 - 1*x1) - 1*x2 = 2^-60 (exact).
+    // Descending order would give (1 + 2^-60) - 1 = 0.
+    let (ab, kl, ku) = order_u();
+    let e = P2M60;
+    let mut lu = ab.clone();
+    let mut ipiv = [0usize; 3];
+    dgbtrf(3, kl, ku, &mut lu, 3, &mut ipiv).unwrap();
+    assert_eq!(ipiv, [0, 1, 2]);
+    let mut x = [1.0, 0.0, 1.0];
+    dgbtrs_trans(true, 3, kl, ku, &lu, 3, &ipiv, &mut x).unwrap();
+    assert_eq!(x, [1.0, -e, e]);
+}
+
+#[test]
+fn dgbsvx_transposed_u_step_gives_exact_x_and_hand_ferr() {
+    // Same system through DGBSVX: the residual is 0 (DGBMV rounds
+    // 1 - 2^-60 + 2^-60 to 1), so BERR = 0. W = NZ*eps*(|b| + |A^T||x|)
+    // with NZ = 4 is (8, 2^-57, 8)*eps, and DLACN2 estimates
+    // ||C||_1 for C = diag(W) inv(A) (KASE = 1 solves with TRANST = 'N').
+    // x = 1/3: inv(A) x = (0, 0, 1/3) (DTBSV skips the zero x2), est =
+    // 8*eps/3; x = sign = 1: C^T x = inv(A^T) (W1, W2, W3) peaks at j = 1;
+    // C e1 = (W1, 0, 0), est = 8*eps, the same signs, so the alternating
+    // test runs: C (1, -1.5, 2) = (-8, ~0, 16)*eps, 2*24*eps/9 < 8*eps.
+    // FERR = 8*eps / ||x||_inf = 8*eps (the exact ||C||_1 is 16*eps).
+    let e = P2M60;
+    let abc = band(
+        3,
+        3,
+        0.0,
+        &[
+            (3, 1, 1.0),
+            (2, 2, e),
+            (3, 2, 1.0),
+            (1, 3, 1.0),
+            (2, 3, 1.0),
+            (3, 3, 1.0),
+        ],
+    );
+    let s = dgbsvx_fact_n(b'T', 3, 0, 2, &abc, 3, &[1.0, 0.0, 1.0]).unwrap();
+    assert_eq!(s.x, [1.0, -e, e]);
+    assert_eq!(s.berr, 0.0);
+    assert_eq!(s.ferr, 8.0 * dlamch::EPS);
+}
+
+#[test]
+fn dgbtrs_transposed_l_step_accumulates_the_dgemv_sum_before_subtracting() {
+    // A = L = [[1,0,0],[1/2,1,0],[1/2,0,1]] (kl = 2, ku = 0, no pivoting
+    // since |l| < 1). L^T x = [1, 2, 2^-59]: x3 = 2^-59, x2 = 2, and DGEMV
+    // (dgemv.f:304-308) forms TEMP = (0 + 2*(1/2)) + 2^-59*(1/2) = 1 (the
+    // 2^-60 is below half an ulp), x1 = 1 + (-1)*1 = 0. Subtracting term
+    // by term would give (1 - 1) - 2^-60 = -2^-60.
+    let a = [1.0, 0.0, 0.0, 0.5, 1.0, 0.0, 0.5, 0.0, 1.0];
+    let ldab = 5;
+    let mut lu = vec![0.0_f64; ldab * 3];
+    dense_to_band(3, 3, &a, 2, 0, &mut lu, ldab).unwrap();
+    let mut ipiv = [0usize; 3];
+    dgbtrf(3, 2, 0, &mut lu, ldab, &mut ipiv).unwrap();
+    assert_eq!(ipiv, [0, 1, 2]);
+    let mut x = [1.0, 2.0, P2M59];
+    dgbtrs_trans(true, 3, 2, 0, &lu, ldab, &ipiv, &mut x).unwrap();
+    assert_eq!(x, [0.0, 2.0, P2M59]);
+
+    // DGBSVX: the computed residual b - A^T x is also 0 (DGBMV rounds the
+    // same sum to 1), so DGBRFS keeps x1 = 0 with BERR = 0, and FERR still
+    // bounds the true relative error 2^-60 / ||x||_inf = 2^-61.
+    let abc = band(
+        3,
+        3,
+        0.0,
+        &[
+            (1, 1, 1.0),
+            (2, 1, 0.5),
+            (3, 1, 0.5),
+            (1, 2, 1.0),
+            (1, 3, 1.0),
+        ],
+    );
+    let s = dgbsvx_fact_n(b'T', 3, 2, 0, &abc, 3, &[1.0, 2.0, P2M59]).unwrap();
+    assert_eq!(s.x, [0.0, 2.0, P2M59]);
+    assert_eq!(s.berr, 0.0);
+    assert!(s.ferr >= P2M61 && s.ferr < 64.0 * dlamch::EPS, "{}", s.ferr);
 }

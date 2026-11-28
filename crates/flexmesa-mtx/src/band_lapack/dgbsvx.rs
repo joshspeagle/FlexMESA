@@ -46,7 +46,7 @@ pub struct DgbsvxSolution {
 ///
 /// `ab` is `AB(LDAB,*)` with `A(i,j)` at `AB(ku+1+i-j,j)`, `ldab = kl+ku+1`
 /// (`LDAB` may be larger). `FACT = 'N'` forces `EQUED = 'N'`
-/// (`dgbsvx.f:405-408`), so no scaling is applied. The factorisation,
+/// (`dgbsvx.f:417-418`), so no scaling is applied. The factorisation,
 /// `DGBTRS` and the solves inside [`dgbrfs`] are the crate's row-major
 /// [`dgbtrf`]/[`dgbtrs`]/[`dgbtrs_trans`], reached through a transposed copy
 /// of `AFB` (same row of the band, `ab[row*n + j]` against
@@ -103,7 +103,8 @@ pub fn dgbsvx_fact_n(
                 ab[ix(ku + 1 + j1 - j + t, j, ldab)];
         }
     }
-    // dgbsvx.f:542: DGBTRF through the row-major factoriser.
+    // dgbsvx.f:542: DGBTRF through the row-major factoriser (blocked
+    // code for KU > 64 and KL >= 32, dgbtrf.f:218-225).
     let mut rm = vec![0.0_f64; ldafb * n];
     for r in 0..ldafb {
         for j in 0..n {
@@ -111,6 +112,10 @@ pub fn dgbsvx_fact_n(
         }
     }
     let mut ipiv0 = vec![0usize; n];
+    // A zero pivot (DGBTRF INFO > 0) is an explicit error here: upstream
+    // returns RCOND = 0 without X (dgbsvx.f:546-567) and
+    // DGBSVX_wrapper.f90:287 reads x_flat unset (Deferred bug #752,
+    // DECISIONS #43).
     dgbtrf(n, kl, ku, &mut rm, ldafb, &mut ipiv0)?;
     for r in 0..ldafb {
         for j in 0..n {

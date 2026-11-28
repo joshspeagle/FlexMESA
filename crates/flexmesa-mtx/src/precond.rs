@@ -240,7 +240,7 @@ pub fn compute_block_preconditioner(
             let row_off = blk_off + k * nvar;
             // `pre_conditioner(k,j) = pre_conditioner(k,j) + sum(abs(...))`
             // for `dblk`, then `ublk`, then `lblk`
-            // (`mtx/private/pre_conditioners.f90:36-44`): each `sum` is its
+            // (`mtx/private/pre_conditioners.f90:31-44`): each `sum` is its
             // own left-to-right reduction, added to the running value (#662).
             let row_sum = |blk: &[f64]| -> f64 {
                 let mut s = 0.0_f64;
@@ -527,7 +527,7 @@ pub fn dgbsvx_banded(
 /// `rcond < 1d-10` (`DGBSVX_wrapper.f90:252-276`), else `0`; `x` is computed in
 /// every such case, as upstream does. Upstream's side effects on that path
 /// (messages and the `lower.data`, `upper.data`, `diagonal.data` dumps,
-/// `:264-288`) are not reproduced.
+/// `DGBSVX_wrapper.f90:253-280`) are not reproduced.
 ///
 /// Zero or non-finite preconditioner sums are not rejected here: upstream
 /// divides by them and the resulting `Inf`/`NaN` band entries reach

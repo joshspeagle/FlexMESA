@@ -150,6 +150,14 @@ pub fn band_multiply_xa(
 /// pivoting (`dgbtrf`) for `ab` of shape `(ldab, n)` with
 /// `ldab >= 2 * kl + ku + 1` and diagonal at `row = ldab - 1 - kl`.
 ///
+/// As LAPACK `DGBTRF` (`SRC/dgbtrf.f:218-229`), the block size is
+/// `NB = ILAENV(1, 'DGBTRF', ...)` (`1` for `ku <= 64`, else `32`,
+/// `SRC/ilaenv.f:433-446`): for `NB <= 1` or `NB > kl` the unblocked
+/// `DGBTF2` loop below runs; otherwise (`ku > 64` and `kl >= 32`) the
+/// blocked code [`crate::band_lapack::dgbtrf::dgbtrf_blocked`]
+/// (`dgbtrf.f:230-506`) runs on a column-major copy of the band, and the
+/// factorisation is completed before a zero pivot is reported.
+///
 /// # Errors
 ///
 /// Returns [`MtxError::InvalidParameter`] if `ldab < 2 * kl + ku + 1`,
@@ -189,6 +197,12 @@ pub fn dgbtrf(
         }
     }
 
+    // dgbtrf.f:218-225: blocked code unless NB <= 1 or NB > KL.
+    if crate::band_lapack::dgbtrf::dgbtrf_uses_blocked_code(kl, ku) {
+        return dgbtrf_blocked_row_major(n, kl, ku, ab, ldab, ipiv);
+    }
+
+    // dgbtrf.f:229: DGBTF2 (SRC/dgbtf2.f).
     let mut ju = 0usize;
     for j in 0..n {
         let km = kl.min(n - 1 - j);
@@ -235,6 +249,45 @@ pub fn dgbtrf(
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// Runs the blocked `DGBTRF` code (`SRC/dgbtrf.f:230-506`) for
+/// [`dgbtrf`] on a column-major copy `AB(2*kl+ku+1, n)` of the bottom
+/// `2 * kl + ku + 1` rows of the row-major band, then copies the factors and
+/// the 0-based pivots back.
+fn dgbtrf_blocked_row_major(
+    n: usize,
+    kl: usize,
+    ku: usize,
+    ab: &mut [f64],
+    ldab: usize,
+    ipiv: &mut [usize],
+) -> Result<(), MtxError> {
+    let ldf = 2 * kl + ku + 1;
+    let off = ldab - ldf;
+    let mut cm = vec![0.0_f64; ldf * n];
+    for r in 0..ldf {
+        for j in 0..n {
+            cm[r + j * ldf] = ab[(off + r) * n + j];
+        }
+    }
+    let mut ipiv1 = vec![0usize; n];
+    let info = crate::band_lapack::dgbtrf::dgbtrf_blocked(
+        n, n, kl, ku, &mut cm, ldf, &mut ipiv1,
+    )?;
+    for r in 0..ldf {
+        for j in 0..n {
+            ab[(off + r) * n + j] = cm[r + j * ldf];
+        }
+    }
+    for (p0, &p1) in ipiv.iter_mut().zip(ipiv1.iter()) {
+        *p0 = p1 - 1;
+    }
+    if info > 0 {
+        // DGBTRF INFO = j > 0 (dgbtrf.f:344-345): U(j,j) is exactly zero.
+        return Err(MtxError::SingularMatrix(info - 1));
     }
     Ok(())
 }
@@ -308,32 +361,41 @@ pub fn dgbtrs_trans(
             }
         }
     } else {
-        // Solve U^T y = b, then apply M^T where M A = U (LAPACK `DGBTRS('T')`).
+        // dgbtrs.f:241-247: DTBSV('Upper', 'Transpose', 'Non-unit', N,
+        // KL+KU, AB, LDAB, B, 1), i.e. dtbsv.f:340-348 with K = KL+KU (the
+        // zero-diagonal error is this crate's, DTBSV divides by it).
+        let k = kl + ku;
         for j in 0..n {
+            let mut temp = b[j];
+            // DO 90 I = MAX(1,J-K), J-1 (ascending)
+            for i in j.saturating_sub(k)..j {
+                temp -= ab[(diag + i - j) * n + j] * b[i];
+            }
             let u_jj = ab[diag * n + j];
             if u_jj == 0.0 {
                 return Err(MtxError::SingularMatrix(j));
             }
-            let mut sum = b[j];
-            let lm = j.min(kl + ku);
-            for k in 1..=lm {
-                let row = diag - k;
-                sum = flexmesa_math::fma(-ab[row * n + j], b[j - k], sum);
-            }
-            b[j] = sum / u_jj;
+            temp /= u_jj;
+            b[j] = temp;
         }
 
-        for j in (0..n).rev() {
-            let lm = kl.min(n - 1 - j);
-            let mut sum = b[j];
-            for i in 1..=lm {
-                sum =
-                    flexmesa_math::fma(-ab[(diag + i) * n + j], b[j + i], sum);
-            }
-            b[j] = sum;
-            let l = ipiv[j];
-            if l != j {
-                b.swap(l, j);
+        // dgbtrs.f:251-260: solve L**T*X = B (LNOTI = KL > 0).
+        if kl > 0 {
+            // DO 40 J = N-1, 1, -1
+            for j in (0..n - 1).rev() {
+                let lm = kl.min(n - 1 - j);
+                // DGEMV('Transpose', LM, 1, -ONE, B(J+1), LDB, AB(KD+1,J),
+                // 1, ONE, B(J), LDB): dgemv.f:303-308 with ALPHA = -ONE.
+                let alpha = -1.0_f64;
+                let mut temp = 0.0_f64;
+                for i in 1..=lm {
+                    temp += b[j + i] * ab[(diag + i) * n + j];
+                }
+                b[j] += alpha * temp;
+                let l = ipiv[j];
+                if l != j {
+                    b.swap(l, j);
+                }
             }
         }
     }

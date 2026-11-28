@@ -76,6 +76,7 @@ from concurrent import futures
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import snapshot_patch  # noqa: E402
 import stepdump_patch  # noqa: E402
 import xtra_patch  # noqa: E402
 
@@ -122,6 +123,7 @@ def build_overlay(
     env: dict[str, str],
     xtra: tuple[str, ...] = (),
     zones: tuple[list[int], list[int] | None] = ([], None),
+    snapshots: bool = False,
 ) -> None:
     """Creates and compiles the instrumented overlay of ``mesa_dir``.
 
@@ -131,6 +133,8 @@ def build_overlay(
         env: SDK environment whose ``MESA_DIR`` is ``overlay``.
         xtra: Diagnostic patches to add (members of ``xtra_patch.KINDS``).
         zones: ``(zones, corr_zones)`` for the ``star`` diagnostics.
+        snapshots: Also patch ``star/job/run_star_support.f90`` with opt-in
+            window snapshot and per-step wall-clock instrumentation.
 
     Raises:
         SystemExit: If the pristine ``libstar.a`` carries the marker.
@@ -138,7 +142,7 @@ def build_overlay(
     overlay.mkdir(parents=True)
     for entry in mesa_dir.iterdir():
         target = overlay / entry.name
-        copied = ("star", "lib", "include")
+        copied: tuple[str, ...] = ("star", "lib", "include")
         if "binary-rlo" in xtra:
             copied += ("binary",)
         if entry.name in copied:
@@ -150,6 +154,12 @@ def build_overlay(
     if "star" in xtra:
         text = xtra_patch.patch_star(text, zones[0], zones[1])
     solver.write_text(stepdump_patch.patch_text(text), encoding="utf-8")
+    if snapshots:
+        rss = overlay / "star" / "job" / "run_star_support.f90"
+        rss.write_text(
+            snapshot_patch.patch_text(rss.read_text(encoding="utf-8")),
+            encoding="utf-8",
+        )
     modules = ["star"]
     if "binary-rlo" in xtra:
         mdot = overlay / xtra_patch.BINARY_FILE
@@ -164,6 +174,8 @@ def build_overlay(
     pristine = (mesa_dir / "lib" / "libstar.a").read_bytes()
     if stepdump_patch.MARKER.encode() in pristine:
         raise SystemExit("pristine libstar.a carries the step-dump marker")
+    if snapshots and snapshot_patch.MARKER.encode() in pristine:
+        raise SystemExit("pristine libstar.a carries the snapshot marker")
 
 
 def list_cases(mesa_dir: pathlib.Path) -> list[str]:
@@ -243,6 +255,71 @@ def _header(
     return lines
 
 
+def _run_snapshot_case(
+    ident: str,
+    env: dict[str, str],
+    work: pathlib.Path,
+    out: pathlib.Path,
+    timeout_sec: int,
+    meta: dict[str, str],
+) -> str:
+    """Runs one ``star/<case>`` uncapped with snapshot & clock logging."""
+    suite, case = ident.split("/", 1)
+    if suite != "star":
+        raise SystemExit(f"{ident}: snapshot mode supports star cases only")
+    clock_dest = out / suite / f"{case}.clock.tsv"
+    if clock_dest.exists() and not meta.get("overwrite_snapshots"):
+        old = clock_dest.read_text(encoding="utf-8", errors="replace")
+        if "STAGE_END\t" in old:
+            return f"{ident}: kept existing clock log"
+    snap_dir = pathlib.Path(meta["snapshot_dir"])
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    clock_dest.parent.mkdir(parents=True, exist_ok=True)
+    spec_path = ""
+    if meta.get("snapshot_spec_dir"):
+        candidate = pathlib.Path(meta["snapshot_spec_dir"]) / f"{case}.spec"
+        if not candidate.is_file():
+            raise SystemExit(f"{ident}: missing snapshot spec {candidate}")
+        spec_path = str(candidate)
+    elif meta.get("snapshot_spec"):
+        spec_path = meta["snapshot_spec"]
+    case_work = work / f"snap_{case}"
+    case_root = _case_root(env, suite, case, case_work)
+    if (case_root / case).exists() and meta.get("overwrite_snapshots"):
+        shutil.rmtree(case_root / case)
+    raw_clock = work / f"{suite}__{case}.clock.tsv"
+    raw_clock.unlink(missing_ok=True)
+    run_env = {
+        **env,
+        "OUT": str(case_root),
+        snapshot_patch.MARKER: str(raw_clock),
+        "FLEXMESA_SNAPSHOT_DIR": str(snap_dir),
+        "FLEXMESA_SNAPSHOT_CASE": case,
+        "FLEXMESA_SNAPSHOT_SPEC": spec_path,
+    }
+    status = _run(ident, run_env, timeout_sec)
+    if not raw_clock.exists():
+        return f"{ident}: {status}, no clock log"
+    lines = raw_clock.read_text(encoding="utf-8").splitlines()
+    hdr = [
+        f"# case: {ident}",
+        f"# mesa_version: {meta['mesa_version']}",
+        f"# compiler: {meta['compiler']}",
+        f"# mesa_sdk_version: {meta['mesa_sdk_version']}",
+        f"# omp_num_threads: {OMP_THREADS}",
+    ]
+    clock_dest.write_text("\n".join(hdr + lines) + "\n", encoding="utf-8")
+    n_steps = sum(1 for ln in lines if ln.startswith("STEP\t"))
+    n_snaps = sum(1 for ln in lines if ln.startswith("SNAP\t"))
+    n_stages = sum(1 for ln in lines if ln.startswith("STAGE_END\t"))
+    if meta.get("clean_case_work") and (case_root / case).exists():
+        shutil.rmtree(case_root / case)
+    return (
+        f"{ident}: {status}, stages={n_stages}, steps={n_steps}, "
+        f"snaps={n_snaps}"
+    )
+
+
 def run_case(
     ident: str,
     env: dict[str, str],
@@ -266,6 +343,8 @@ def run_case(
     Returns:
         A one-line status.
     """
+    if meta.get("snapshots_mode"):
+        return _run_snapshot_case(ident, env, work, out, timeout_sec, meta)
     suite, case = ident.split("/", 1)
     dest = out / suite / f"{case}.stepdump"
     window = [
@@ -541,6 +620,39 @@ def main() -> None:
         help="Binary models written by --xtra binary-rlo (the run stops "
         "after LAST).",
     )
+    parser.add_argument(
+        "--snapshots",
+        action="store_true",
+        help="Build/run opt-in W1 window snapshot and per-step clock logging.",
+    )
+    parser.add_argument(
+        "--snapshot-spec",
+        type=pathlib.Path,
+        default=None,
+        help="Single <stage> <model> spec file for --snapshots.",
+    )
+    parser.add_argument(
+        "--snapshot-spec-dir",
+        type=pathlib.Path,
+        default=None,
+        help="Directory holding <case>.spec files for --snapshots.",
+    )
+    parser.add_argument(
+        "--snapshot-dir",
+        type=pathlib.Path,
+        default=None,
+        help="Output directory for <case>_<stage>_<model>.mod snapshots.",
+    )
+    parser.add_argument(
+        "--overwrite-snapshots",
+        action="store_true",
+        help="Re-run even when <case>.clock.tsv already has STAGE_END.",
+    )
+    parser.add_argument(
+        "--clean-case-work",
+        action="store_true",
+        help="Remove scratch case directory after extracting clock/snapshots.",
+    )
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--timeout-sec", type=int, default=1800)
     parser.add_argument("--cases", nargs="*", default=None)
@@ -561,14 +673,38 @@ def main() -> None:
     )
     if "binary-rlo" in args.xtra and not args.xtra_binary_models:
         raise SystemExit("--xtra binary-rlo needs --xtra-binary-models")
+    snap_mode = bool(
+        args.snapshots or args.snapshot_spec or args.snapshot_spec_dir
+    )
+    if (args.snapshot_spec or args.snapshot_spec_dir) and not args.snapshot_dir:
+        raise SystemExit("--snapshot-spec* requires --snapshot-dir")
     env = sdk_env(args.mesasdk_root.resolve(), overlay)
     if not args.reuse_overlay:
         if scratch.exists() and any(scratch.iterdir()):
             raise SystemExit("--scratch must be empty or absent")
         build_overlay(
-            mesa_dir, overlay, env, tuple(args.xtra), (zones, corr_zones)
+            mesa_dir,
+            overlay,
+            env,
+            tuple(args.xtra),
+            (zones, corr_zones),
+            snapshots=args.snapshots,
         )
     meta = build_meta(mesa_dir, env)
+    if snap_mode:
+        meta["snapshots_mode"] = "1"
+        if args.snapshot_dir is not None:
+            meta["snapshot_dir"] = str(args.snapshot_dir.resolve())
+        else:
+            meta["snapshot_dir"] = str(args.out.resolve() / "snapshots")
+        if args.snapshot_spec is not None:
+            meta["snapshot_spec"] = str(args.snapshot_spec.resolve())
+        if args.snapshot_spec_dir is not None:
+            meta["snapshot_spec_dir"] = str(args.snapshot_spec_dir.resolve())
+        if args.overwrite_snapshots:
+            meta["overwrite_snapshots"] = "1"
+        if args.clean_case_work:
+            meta["clean_case_work"] = "1"
     if args.occurrence < 1 or (args.stage is not None and args.stage < 1):
         raise SystemExit("--occurrence and --stage are 1-based")
     if args.occurrence > 1 and args.first_model is None:

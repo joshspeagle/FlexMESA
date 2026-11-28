@@ -480,7 +480,7 @@ _KEEP = re.compile(
     r"|remove_fallback_speed_limit|set_to_xa_for_accretion"
     r"|set_cumulative_energy_error_at_step"
     r"|set_cumulative_energy_error_each_step_if_age_less_than|show_.*"
-    r"|adv_net|auto_extend_net|enable_adaptive_network|min_x_for_add"
+    r"|h_he_net|co_net|adv_net|auto_extend_net|enable_adaptive_network|min_x_for_add"
     r"|min_x_for_keep|min_x_for_n|electron_coulomb_corrections"
     r"|ion_coulomb_corrections|num_special_rate_factors"
     r"|reaction_for_special_factor|special_rate_factor"
@@ -568,6 +568,34 @@ def _last(assigns: Sequence[Assign], key: str) -> Assign | None:
     return None
 
 
+# Defaults of ``h_he_net``, ``co_net`` and ``adv_net`` in
+# star/defaults/star_job.defaults:2491-2494. ``extend_net``
+# (star/job/run_star_support.f90:1804-1848) only moves h_he -> co -> adv.
+# The same chain is in scripts/windows/plan_windows.py (``net_reachable``);
+# test_window_inlist.py checks the two agree.
+_NET_CHAIN_DEFAULTS = (
+    ("h_he_net", "basic.net"),
+    ("co_net", "co_burn.net"),
+    ("adv_net", "approx21.net"),
+)
+
+
+def _net_reachable_by_extension(
+    star: Sequence[Assign], start: str, target: str
+) -> bool:
+    """Whether ``auto_extend_net`` can grow ``start`` into ``target``."""
+    flag = _last(star, "auto_extend_net")
+    if flag is not None and flag.value is not True:
+        return False
+    chain = []
+    for key, default in _NET_CHAIN_DEFAULTS:
+        a = _last(star, key)
+        chain.append(default if a is None else str(a.value))
+    if start not in chain or target not in chain:
+        return False
+    return chain.index(target) > chain.index(start)
+
+
 def _close(a: float, b: float) -> bool:
     return math.isclose(a, b, rel_tol=CHECK_RTOL, abs_tol=0.0)
 
@@ -653,6 +681,7 @@ class _Plan:
 
     problems: list[str] = dataclasses.field(default_factory=list)
     off: list[str] = dataclasses.field(default_factory=list)
+    off43a: list[str] = dataclasses.field(default_factory=list)
     remove: list[str] = dataclasses.field(default_factory=list)
     flags: list[str] = dataclasses.field(default_factory=list)
 
@@ -681,12 +710,18 @@ def _plan_checks(star: Sequence[Assign], hdr: SnapshotHeader) -> _Plan:
         t = _last(star, "new_net_name")
         if t is None:
             plan.problems.append("change_net is on but new_net_name is absent")
-        elif str(t.value) != hdr.net_name:
+        elif str(t.value) == hdr.net_name:
+            plan.off += ["change_net", "change_initial_net"]
+        elif not on("change_net") and _net_reachable_by_extension(
+            star, str(t.value), hdr.net_name
+        ):
+            # Rule 4.3a: auto_extend_net grew the net after the one-time
+            # change; the window keeps the snapshot's net.
+            plan.off43a.append("change_initial_net")
+        else:
             plan.problems.append(
                 f"new_net_name {t.value!r} != header net_name {hdr.net_name!r}"
             )
-        else:
-            plan.off += ["change_net", "change_initial_net"]
     if on("change_initial_z", "relax_z", "relax_initial_z"):
         z = target("new_z", "a z action")
         if z is not None and not _close(z, hdr.initial_z):
@@ -779,6 +814,9 @@ def _apply_star_job(
     for key in plan.off:
         for a in [x for x in out if x.name == key]:
             ed.off("4.3", a)
+    for key in plan.off43a:
+        for a in [x for x in out if x.name == key]:
+            ed.off("4.3a", a)
     for key in dict.fromkeys(plan.remove):
         for a in [x for x in out if x.name == key]:
             ed.remove("4.3", a, "removed")

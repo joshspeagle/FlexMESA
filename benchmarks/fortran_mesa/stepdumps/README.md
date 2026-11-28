@@ -16,6 +16,7 @@ solver changes.
 | `regenerate_windows.py` | Runs every window of `windows.toml` through `run_stepdumps.py`, one at a time, resumably. |
 | `first_divergence_table.py` | First-divergence table over a directory of dumps. |
 | `xtra_patch.py` | Opt-in `XTRA` diagnostics (`--xtra star`, `--xtra binary-rlo`), see below. |
+| `snapshot_patch.py` | Opt-in `#684` W1 window `.mod` snapshots and per-step wall-clock logging on `star/job/run_star_support.f90`. |
 | `flexmesa.testing.stepdump_compare` | The comparison (reads any dump described here). |
 
 The bundle builder is `scripts/data/build_mesa_stepdump_windows.py`.
@@ -229,6 +230,25 @@ mesa-stepdump-windows-v1.tar.zst` packs the windows it finds under the given
 directories (matching each file's header to a manifest entry) into the
 opt-in bundle, with `PROVENANCE.json`, a copy of `windows.toml` and a per-file
 SHA-256 manifest.
+
+## Window snapshots and per-step clocks (`#684` W1)
+
+`snapshot_patch.py` adds opt-in timing and `star_write_model` hooks to
+`star/job/run_star_support.f90` when `run_stepdumps.py --snapshots` builds the
+overlay. Nothing executes unless `FLEXMESA_SNAPSHOT_LOG` is set:
+
+```bash
+python run_stepdumps.py --mesa-dir "$MESA_DIR" --mesasdk-root "$MESASDK_ROOT" \
+    --scratch <overlay-scratch> --out <clock-out> \
+    --snapshots --snapshot-spec-dir <spec-dir> \
+    --snapshot-dir <snapshot-dir> \
+    --jobs 4 --timeout-sec 14400 --cases star/<case> ...
+```
+
+Reusing an already-built `--snapshots` overlay passes `--reuse-overlay` alongside
+`--snapshot-spec-dir` / `--snapshot-dir`. Outputs are `<out>/star/<case>.clock.tsv`
+(`STAGE_START`, per-step `STEP` with wall time and `prev_flag`, `SNAP`, `STAGE_END`)
+and `<snapshot-dir>/<case>_<stage>_<model>.mod`. See `scripts/windows/README.md`.
 
 ## Causal checks with a private copy of a case
 

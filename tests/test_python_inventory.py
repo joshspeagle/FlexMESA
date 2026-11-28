@@ -305,4 +305,5 @@ def test_stale_detection_and_check_in_synthetic_git_repo(
 
 # The byte-for-byte regeneration (`build_python_inventory.py --check`) is not a
 # CI test: git timestamps and line numbers move with every engine PR, so it runs
-# on demand (nothing in CI calls it). The structural invariants above stay in CI.
+# on demand (nothing in CI calls it). The structural invariants above stay
+# in CI.

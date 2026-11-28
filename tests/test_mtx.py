@@ -126,11 +126,10 @@ def test_sparse_and_band_conversions_roundtrip_on_support_matrix() -> None:
     np.testing.assert_array_equal(mtx.row_sparse_to_dense(n, rp1, ci1, v1), a)
 
     rp0, ci0, v0 = mtx.dense_to_row_0_based(a)
-    np.testing.assert_array_equal(
-        mtx.row_sparse_0_based_to_dense(n, rp0, ci0, v0), a
-    )
+    with pytest.raises(ValueError, match="#674"):
+        mtx.row_sparse_0_based_to_dense(n, rp0, ci0, v0)
 
-    # 3. 1-based and 0-based CSC roundtrips + 0-based diagonal lookup
+    # 3. 1-based and 0-based CSC roundtrips + 0-based lookup (#673, #674)
     cp1, ri1, vc1 = mtx.dense_to_col_sparse(a)
     np.testing.assert_array_equal(
         mtx.column_sparse_to_dense(n, cp1, ri1, vc1), a
@@ -140,10 +139,37 @@ def test_sparse_and_band_conversions_roundtrip_on_support_matrix() -> None:
     np.testing.assert_array_equal(
         mtx.col_sparse_0_based_to_dense(n, cp0, ri0, vc0), a
     )
-    loc0 = mtx.find_loc_in_sparse(
-        mtx.SparseFormat.COMPRESSED_COL_SPARSE_0_BASED, n, cp0, ri0, 1, 1
+    fmt_csc0 = mtx.SparseFormat.COMPRESSED_COL_SPARSE_0_BASED
+    # Mirrors crates/flexmesa-mtx/tests/mtx_tests.rs:312-400:
+    # Column 1 has colptr=[2, 5]; k = colptr(1) - 1 = 1 finds col 0 row 1.
+    loc0 = mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, 1, 1)
+    assert loc0 == 1 and vc0[loc0] == a[1, 0]
+    loc0_hint = mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, 1, 1, hint=2)
+    assert loc0_hint == 3 and vc0[loc0_hint] == 0.0
+    assert mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, 4, 1) is None
+    assert mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, 3, n - 1) == 11
+    for bad_row, bad_col in ((0, 0), (0, n - 1), (0, n)):
+        with pytest.raises(ValueError, match="#674"):
+            mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, bad_row, bad_col)
+
+    diag_ptr = np.array([0, 1, 2, 3], dtype=np.int64)
+    diag_ind = np.array([0, 1, 2], dtype=np.int64)
+    assert mtx.find_loc_in_sparse(fmt_csc0, 3, diag_ptr, diag_ind, 0, 1) == 0
+    assert mtx.find_loc_in_sparse(fmt_csc0, 3, diag_ptr, diag_ind, 2, 1) == 2
+    assert mtx.find_loc_in_sparse(fmt_csc0, n, cp0, ri0, n, 1) is None
+
+    rev_gt_ptr = np.array([0, 3, 1, 3], dtype=np.int64)
+    assert (
+        mtx.find_loc_in_sparse(fmt_csc0, 3, rev_gt_ptr, diag_ind, 1, 1) is None
     )
-    assert loc0 is not None and vc0[loc0] == 0.0
+    rev_eq_ptr = np.array([0, 2, 1, 3], dtype=np.int64)
+    assert mtx.find_loc_in_sparse(fmt_csc0, 3, rev_eq_ptr, diag_ind, 1, 1) == 1
+    assert (
+        mtx.find_loc_in_sparse(fmt_csc0, 3, rev_eq_ptr, diag_ind, 0, 1) is None
+    )
+    oob_end_ptr = np.array([0, 1, 4, 4], dtype=np.int64)
+    with pytest.raises(ValueError):
+        mtx.find_loc_in_sparse(fmt_csc0, 3, oob_end_ptr, diag_ind, 1, 1)
 
 
 def test_banded_lu_and_multiply_xa_match_dense() -> None:

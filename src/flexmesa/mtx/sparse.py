@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Sparse matrix format conversions (CSR and CSC, 1-based and 0-based).
 
-Ports upstream `mtx_formats.dek` and `mtx_support.f90` while fixing the
-upstream 0-based index bounds bugs in `row_sparse_0_based_to_dense` and
-`find_loc_in_column_0_based`.
+Ports upstream ``mtx_formats.dek`` and ``mtx_support.f90``, raising explicit
+``ValueError`` where upstream's 0-based routines read out of bounds (``#674``).
 """
 
 from __future__ import annotations
@@ -173,7 +172,10 @@ def row_sparse_0_based_to_dense(
 ) -> npt.NDArray[np.float64]:
     """Converts a 0-based CSR matrix into a dense `(N, N)` `float64` array.
 
-    Fixes the upstream `mtx_support.f90` 0-based CSR indexing bug.
+    Upstream ``mtx/private/mtx_support.f90:428-447`` reads ``rowptr(n+1)``
+    outside ``rowptr(0:n)`` on every call with ``n >= 1`` and indexes
+    ``values(nz)`` and ``a(ndim, n)`` with 0-based ``k`` and ``colind(k)``
+    (deferred upstream bug ``#674``, ``DECISIONS #43``).
 
     Args:
         n: Matrix dimension $N \\ge 1$.
@@ -182,13 +184,20 @@ def row_sparse_0_based_to_dense(
         values: Non-zero values of shape `(nz,)` in `float64` (dimensionless).
 
     Returns:
-        Dense matrix of shape `(N, N)` in `float64`.
+        Dense matrix of shape `(N, N)` in `float64` (never returns cleanly).
 
     Raises:
-        ValueError: If pointer or index bounds are invalid.
+        ValueError: Always raised because upstream reads out of bounds on
+            every call (`#674`).
     """
-    return _compressed_to_dense(
-        n, rowptr, colind, values, is_row_major=True, base=0
+    _ = (n, rowptr, colind, values)
+    # Deferred upstream bug #674 (DECISIONS #43): upstream
+    # `mtx/private/mtx_support.f90:428-447` reads `rowptr(n+1)` outside
+    # `rowptr(0:n)` on every call with `n >= 1` and indexes `values(nz)` and
+    # `a(ndim, n)` with 0-based `k` and `colind(k)`.
+    raise ValueError(
+        "row_sparse_0_based_to_dense reads out of bounds upstream "
+        "(mtx/private/mtx_support.f90:428-447; deferred bug #674)"
     )
 
 
@@ -290,6 +299,67 @@ def col_sparse_0_based_to_dense(
     )
 
 
+def _find_loc_in_column_0_based(
+    n: int,
+    colptr: npt.NDArray[np.int64],
+    rowind: npt.NDArray[np.int64],
+    row_idx: int,
+    col_idx: int,
+    hint: int | None,
+) -> int | None:
+    """Reproduces ``find_loc_in_column_0_based`` (``mtx_formats.dek:261-280``).
+
+    Searches ``colptr(j) - 1 ..= colptr(j + 1)``, raising ``ValueError``
+    wherever that search leaves ``colptr(0:n)`` or ``rowind(0:nz-1)``
+    (deferred upstream bug ``#674``, ``DECISIONS #43``) and preserving
+    neighbouring-column matches when all reads stay in bounds.
+    """
+    if col_idx < 0 or col_idx >= n:
+        # Deferred upstream bug #674 (DECISIONS #43): `j = n` reads
+        # `colptr(n + 1)` outside `colptr(0:n)` (`mtx_formats.dek:263,273`).
+        raise ValueError(
+            "find_loc_in_column_0_based reads colptr out of bounds upstream "
+            "(mtx/public/mtx_formats.dek:263,273; deferred bug #674)"
+        )
+    start = int(colptr[col_idx])
+    end = int(colptr[col_idx + 1])
+    nz = int(rowind.shape[0])
+    if start < 0 or end < 0 or end > nz:
+        raise ValueError("Pointer array range out of bounds.")
+    if hint is not None and hint > 0:
+        next_0 = hint + 1
+        if start <= next_0 < end and int(rowind[next_0]) == row_idx:
+            return next_0
+    if start == 0:
+        # Deferred upstream bug #674 (DECISIONS #43): `colptr(j) = 0` makes
+        # `do k = colptr(j) - 1, colptr(j + 1)` read `rowind(-1)` outside
+        # `rowind(0:nz-1)` (`mtx/public/mtx_formats.dek:273`).
+        raise ValueError(
+            "find_loc_in_column_0_based reads rowind(-1) out of bounds "
+            "upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)"
+        )
+    lo = start - 1
+    if lo > end:
+        # Upstream `do k = colptr(j) - 1, colptr(j + 1)`
+        # (`mtx/public/mtx_formats.dek:273`) executes zero iterations when
+        # `start - 1 > end`, returning `ierr = -1`.
+        return None
+    for k in range(lo, end):
+        if int(rowind[k]) == row_idx:
+            return k
+    if end >= nz:
+        # Deferred upstream bug #674 (DECISIONS #43): reaching
+        # `k = colptr(j + 1) == nz` reads `rowind(nz)` outside
+        # `rowind(0:nz-1)` (`mtx/public/mtx_formats.dek:273`).
+        raise ValueError(
+            "find_loc_in_column_0_based reads rowind(nz) out of bounds "
+            "upstream (mtx/public/mtx_formats.dek:273; deferred bug #674)"
+        )
+    if int(rowind[end]) == row_idx:
+        return end
+    return None
+
+
 def find_loc_in_sparse(
     sparse_format: SparseFormat,
     n: int,
@@ -301,9 +371,12 @@ def find_loc_in_sparse(
 ) -> int | None:
     """Finds the position of entry `(i, j)` in a sparse matrix `(ia, ja)`.
 
-    Uses 1-based `(i, j)` and return index for 1-based formats, and 0-based
-    `(i, j)` and return index for 0-based formats (fixing upstream
-    `find_loc_in_column_0_based`).
+    Uses 1-based `(i, j)` and return index for 1-based formats. For
+    `COMPRESSED_COL_SPARSE_0_BASED`, reproduces upstream's
+    `colptr(j) - 1 ..= colptr(j + 1)` search range
+    (`mtx/public/mtx_formats.dek:261-280`) and raises `ValueError` wherever
+    that search leaves `colptr(0:n)` or `rowind(0:nz-1)` (`#674`,
+    `DECISIONS #43`).
 
     Args:
         sparse_format: Storage convention from [`SparseFormat`].
@@ -319,10 +392,16 @@ def find_loc_in_sparse(
         `None`.
 
     Raises:
-        ValueError: If `i` or `j` or pointer bounds are invalid.
+        ValueError: If `ia` is too short, indices or pointer bounds are
+            invalid, or `COMPRESSED_COL_SPARSE_0_BASED` reaches an upstream
+            out-of-bounds read (`#674`).
     """
     ia_arr = np.asarray(ia, dtype=np.int64)
     ja_arr = np.asarray(ja, dtype=np.int64)
+    if ia_arr.shape[0] < n + 1:
+        raise ValueError("Pointer array ia too short for find_loc_in_sparse.")
+    if sparse_format == SparseFormat.COMPRESSED_COL_SPARSE_0_BASED:
+        return _find_loc_in_column_0_based(n, ia_arr, ja_arr, i, j, hint)
     if sparse_format in (
         SparseFormat.COMPRESSED_COLUMN_SPARSE,
         SparseFormat.COMPRESSED_ROW_SPARSE,
@@ -330,10 +409,7 @@ def find_loc_in_sparse(
         base = 1
     else:
         base = 0
-    is_col = sparse_format in (
-        SparseFormat.COMPRESSED_COLUMN_SPARSE,
-        SparseFormat.COMPRESSED_COL_SPARSE_0_BASED,
-    )
+    is_col = sparse_format == SparseFormat.COMPRESSED_COLUMN_SPARSE
     outer, inner = (j, i) if is_col else (i, j)
     outer_0 = outer - base
     inner_0 = inner - base

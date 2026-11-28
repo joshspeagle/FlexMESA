@@ -458,11 +458,7 @@ pub use riemann_ad::{
     calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,
 };
 pub use rn_parser::{parse_rn_stages, RnStage};
-pub use rotation::{
-    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    sync_post_henyey_rotation, RotationalMixZone, RI_CRIT_DSI,
-};
+pub use rotation::sync_post_henyey_rotation;
 pub use rotation_mix::update_rotation_mixing_info;
 pub use rotation_mix_info::set_rotation_mixing_info;
 pub use rsp2::{

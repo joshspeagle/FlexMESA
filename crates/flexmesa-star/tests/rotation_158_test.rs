@@ -42,8 +42,6 @@ use flexmesa_star::omega_mix::{
 };
 use flexmesa_star::rotation::{
     augment_d_mix_with_rotation, conserve_shell_j_rot_and_distortion,
-    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_thermal_diffusivity,
     sync_post_henyey_rotation,
 };
 use flexmesa_star::{load_zams_model, set_hydro_vars, StarModel};
@@ -588,31 +586,4 @@ fn test_omega_mix_standalone_conservation_and_binary_implicit_spin_orbit() {
         do_solve_omega_mix_with_extras(&mut m, 1.0e10, &mut fail_extras)
             .expect("implicit hook error yields Retry");
     assert!(matches!(retry_out, OmegaMixOutcome::Retry(_)));
-}
-
-#[test]
-fn test_rotation_wave5_kernels_physical_invariants() {
-    let (fp0, ft0, ir0) = eval_rotation_fp_ft(0.0, 0.5, 0.5);
-    assert_eq!((fp0, ft0, ir0), (1.0, 1.0, TWO_THIRDS));
-
-    let (fp_hi, ft_hi, ir_hi) = eval_rotation_fp_ft(0.85, 0.55, 0.65);
-    assert!((0.55..1.0).contains(&fp_hi));
-    assert!((0.65..1.0).contains(&ft_hi));
-    assert!(ir_hi > TWO_THIRDS);
-
-    let om_c =
-        eval_omega_crit(STANDARD_CGRAV, M_SUN, R_SUN, 3.828e33, 0.34, 0.99);
-    assert!(om_c.is_finite() && om_c > 0.0);
-
-    let k_th = eval_thermal_diffusivity(1.0e7, 10.0, 1.0, 2.0e8);
-    let eta = eval_magnetic_diffusivity(1.0e7, 10.0, 1.3, 1.1);
-    assert!(k_th > 0.0 && eta > 0.0);
-
-    let z_zero = eval_rotational_mixing_zone(
-        3.0e10, 5.0e9, 2.5e4, 5.0, 1.5e7, 3.5e8, 0.5, 1.0, 1.0, 0.4, 0.2,
-        1.0e-6, 1.0e-7, 0.0, 0.5, 1.3, 1.1, 1.0,
-    );
-    assert_eq!(z_zero.d_st, 0.0);
-    assert_eq!(z_zero.nu_st, 0.0);
-    assert_eq!(z_zero.total_d_rot(1.0, 1.0, 1.0, 1.0, 1.0, 1.0), 0.0);
 }

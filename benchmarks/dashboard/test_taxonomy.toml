@@ -1679,6 +1679,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/rti_shock_mod_load_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/stage_handoff_reload_test.rs"
 language = "rust"
 module = "star"

@@ -442,14 +442,16 @@ fn test_timestep_dlog_eps_nuc_and_burn_lgl_safe_log10_limits() {
 }
 
 #[test]
-fn test_rti_dpdr_drhodr_defaults_to_unsmoothed_and_guards_nonpositive_cs() {
+fn test_rti_dpdr_drhodr_defaults_to_unsmoothed_and_zero_cs_is_not_skipped() {
     let mut model = make_rti_test_model(6, false, true);
     model.peos = vec![1.0e10, 2.0e10, 3.0e10, 4.0e10, 5.0e10, 6.0e10];
     model.rho = vec![1.0, 1.0, 2.0, 2.0, 1.0, 1.0];
     model.lnd = model.rho.iter().map(|&r| flexmesa_math::log(r)).collect();
     model.lnd_start.clone_from(&model.lnd);
 
-    // Zone 1: `csound <= 0` guard when `alpha_rti_start == 0`.
+    // Zone 1: `v / csound = +inf` is not below the minimum Mach number, so
+    // the cell is evaluated (`mix_info.f90:2167-2170`); the indicator is then
+    // clamped by `min(0, dPdr * drhodr)` and is 0 for this profile.
     model.csound[1] = 0.0;
     model.u[1] = 1.0e5;
     // Zone 3: supersonic/above-min-Mach baroclinic unstable cell.
@@ -502,7 +504,7 @@ fn test_rti_mixing_info_mass_boost_center_floor_shock_and_v_flag() {
     model.csound = vec![1.0e6; 6];
     model.aux.csound_start = vec![9.0e8; 6];
 
-    set_rti_mixing_info(&mut model);
+    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
     let eta1 = 0.2 * 0.4 * csound_face_at(&model, 1) * model.r[1];
     let eta2 = 0.2
         * flexmesa_math::exp10(1.5)
@@ -531,7 +533,7 @@ fn test_rti_mixing_info_mass_boost_center_floor_shock_and_v_flag() {
         core_m.dm_bar[k] = f64::midpoint(core_m.dm[k - 1], core_m.dm[k]);
     }
     core_m.aux.alpha_rti = vec![0.2, 0.2, 0.0, 0.0, 0.0, 0.0];
-    set_rti_mixing_info(&mut core_m);
+    set_rti_mixing_info(&mut core_m).expect("set_rti_mixing_info");
     assert!(core_m.aux.eta_rti[1] > 0.0);
     assert_eq!(core_m.aux.eta_rti[3], core_m.aux.eta_rti[1]);
     assert_eq!(core_m.aux.eta_rti[4], core_m.aux.eta_rti[1]);
@@ -546,19 +548,25 @@ fn test_rti_mixing_info_mass_boost_center_floor_shock_and_v_flag() {
     shock_m.rho = vec![10.0; 6];
     shock_m.lnd = shock_m.rho.iter().map(|&r| flexmesa_math::log(r)).collect();
     shock_m.controls.sig_term_limit = 1.0e-2;
+    // `RTI_min_dm_behind_shock_for_full_on = 0` (the default) makes the taper
+    // `C * (shock_mass_start - m) / 0` ahead of the shock, which upstream
+    // reports as a bad `eta_RTI`; a positive window keeps it finite
+    // (`mix_info.f90:2022-2023`). The shock cell itself has factor 0.
+    shock_m.controls.rti_min_dm_behind_shock_for_full_on = 1.0e-3;
     let s_info = eval_shock_info(&shock_m);
     assert!(s_info.q > shock_m.q[2] && shock_m.q[1] > s_info.q);
-    set_rti_mixing_info(&mut shock_m);
+    set_rti_mixing_info(&mut shock_m).expect("set_rti_mixing_info");
     assert_eq!(shock_m.aux.sig_rti[1], 0.0, "ahead of shock must gate sig");
-    assert!(shock_m.aux.sig_rti[2] > 0.0);
-    let sig_lim_2 =
-        shock_m.controls.sig_term_limit * shock_m.dm_bar[2] / shock_m.dt;
-    assert!(shock_m.aux.sig_rti[2] <= sig_lim_2 + 1.0e-12 * sig_lim_2);
+    assert_eq!(shock_m.aux.sig_rti[2], 0.0, "shock cell has taper factor 0");
+    assert!(shock_m.aux.sig_rti[3] > 0.0);
+    let sig_lim_3 =
+        shock_m.controls.sig_term_limit * shock_m.dm_bar[3] / shock_m.dt;
+    assert!(shock_m.aux.sig_rti[3] <= sig_lim_3 + 1.0e-12 * sig_lim_3);
     assert_eq!(shock_m.aux.sigmid_rti[0], 0.0);
-    assert!(shock_m.aux.sigmid_rti[2] > 0.0);
-    let mid_lim_2 =
-        shock_m.controls.sig_term_limit * shock_m.dm[2] / shock_m.dt;
-    assert!(shock_m.aux.sigmid_rti[2] <= mid_lim_2 + 1.0e-12 * mid_lim_2);
+    assert!(shock_m.aux.sigmid_rti[3] > 0.0);
+    let mid_lim_3 =
+        shock_m.controls.sig_term_limit * shock_m.dm[3] / shock_m.dt;
+    assert!(shock_m.aux.sigmid_rti[3] <= mid_lim_3 + 1.0e-12 * mid_lim_3);
 }
 
 #[test]
@@ -576,7 +584,7 @@ fn test_rti_eqn_active_without_do_mix_uses_i_equ_scale_and_matches_fd() {
     model.aux.alpha_rti = vec![0.2, 0.3, 0.8, 0.25, 0.4, 0.1];
 
     set_dpdr_drhodr_info(&mut model);
-    set_rti_mixing_info(&mut model);
+    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
     assert!(model.aux.dpdr_drhodr_info[2] < 0.0);
     assert!(model.aux.sig_rti[2] > 0.0);
     assert!(model.aux.sig_rti[3] > 0.0);
@@ -647,4 +655,218 @@ fn test_rti_eqn_active_without_do_mix_uses_i_equ_scale_and_matches_fd() {
 
     let (sp, _, sm, _) = eval_alpha_rti_sources(&model, k);
     assert!(sp > 0.0 && sm > 0.0);
+}
+
+/// Six-cell model with `alpha_RTI = 0.4`, velocity-free, evenly spaced in mass
+/// (`m_k = 2 M_sun (6 - k) / 6`) for closed-form `eta_RTI` checks.
+fn rti_eta_model() -> StarModel {
+    let mut model = make_rti_test_model(6, true, false);
+    model.aux.alpha_rti = vec![0.4; 6];
+    model.aux.alpha_rti_start = vec![0.0; 6];
+    for k in 1..6 {
+        model.dm_bar[k] = f64::midpoint(model.dm[k - 1], model.dm[k]);
+    }
+    model
+}
+
+#[test]
+fn test_rti_log_max_boost_zero_removes_the_mass_boost() {
+    let mut model = rti_eta_model();
+    model.controls.rti_log_max_boost = 0.0;
+    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
+    for k in 1..6 {
+        let expected = 0.2 * 0.4 * csound_face_at(&model, k) * model.r[k];
+        let got = model.aux.eta_rti[k];
+        assert!((got - expected).abs() <= 1.0e-12 * expected, "k={k}");
+    }
+}
+
+#[test]
+fn test_rti_boost_masses_read_from_controls() {
+    // `m_full_boost = 1.2`, `m_no_boost = 1.8` M_sun, `log_max_boost = 2`:
+    // face 1 (m = 1.667) is half-way in log, faces 2.. (m <= 1.333) get 1e2,
+    // face 0 (m = 2) none.
+    let mut model = rti_eta_model();
+    model.controls.rti_log_max_boost = 2.0;
+    model.controls.rti_m_full_boost = 1.2;
+    model.controls.rti_m_no_boost = 1.8;
+    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
+    let m_full = 1.2 * M_SUN;
+    let m_no = 1.8 * M_SUN;
+    let alfa = (m_no - model.m[1]) / (m_no - m_full);
+    let boost1 = flexmesa_math::exp10(alfa * 2.0);
+    let base = |k: usize| 0.2 * 0.4 * csound_face_at(&model, k) * model.r[k];
+    let want1 = boost1 * base(1);
+    assert!((model.aux.eta_rti[1] - want1).abs() <= 1.0e-12 * want1);
+    let want3 = 1.0e2 * base(3);
+    assert!((model.aux.eta_rti[3] - want3).abs() <= 1.0e-12 * want3);
+}
+
+#[test]
+fn test_rti_c_x_factor_nonzero_errors_until_surface_h1_is_report_state() {
+    // `RTI_C_X_factor != 0` needs `s% surface_h1` from the previous report
+    // (`mix_info.f90:2010-2011`, `report.f90:260`), which is not ported
+    // (#742).
+    let mut model = rti_eta_model();
+    model.controls.rti_c_x_factor = 2.0;
+    model.controls.rti_c_x0_frac = 0.0;
+    let err = set_rti_mixing_info(&mut model).expect_err("must error");
+    assert!(format!("{err}").contains("#742"), "{err}");
+
+    // With the factor 0 (the default and ccsn_IIp's value) the hydrogen term
+    // is exactly `RTI_C`, whatever `RTI_C_X0_frac` and `X` are.
+    let mut zero = rti_eta_model();
+    zero.controls.rti_log_max_boost = 0.0;
+    zero.controls.rti_c_x0_frac = 0.5;
+    zero.xh_mass = vec![0.9; 6];
+    set_rti_mixing_info(&mut zero).expect("factor 0");
+    for k in 1..6 {
+        let expected = 0.2 * 0.4 * csound_face_at(&zero, k) * zero.r[k];
+        let got = zero.aux.eta_rti[k];
+        assert!((got - expected).abs() <= 1.0e-12 * expected, "k={k}");
+    }
+}
+
+#[test]
+fn test_rti_min_dm_behind_shock_tapers_c_linearly() {
+    let mut model = rti_eta_model();
+    model.controls.rti_log_max_boost = 0.0;
+    model.controls.rti_min_dm_behind_shock_for_full_on = 1.0;
+    // Supersonic from cell 2 inward (cell 0 subsonic, so the shock is found
+    // at k = 2 and `shock_mass_start = m[2]`).
+    model.v = vec![0.5e6, 0.5e6, 2.0e6, 2.0e6, 2.0e6, 2.0e6];
+    set_rti_mixing_info(&mut model).expect("set_rti_mixing_info");
+    let shock_m = model.m[2];
+    for k in 3..5 {
+        let taper = (shock_m - model.m[k]) / M_SUN;
+        assert!(taper < 1.0);
+        let expected =
+            0.2 * taper * 0.4 * csound_face_at(&model, k) * model.r[k];
+        let got = model.aux.eta_rti[k];
+        assert!((got - expected).abs() <= 1.0e-12 * expected, "k={k}");
+    }
+}
+
+#[test]
+fn test_rti_smooth_fraction_applies_three_point_stencil() {
+    let mut raw = make_rti_test_model(6, false, true);
+    raw.peos = vec![1.0e10, 2.0e10, 3.0e10, 4.0e10, 5.0e10, 6.0e10];
+    raw.rho = vec![1.0, 1.0, 2.0, 2.0, 1.0, 1.0];
+    raw.lnd = raw.rho.iter().map(|&r| flexmesa_math::log(r)).collect();
+    raw.lnd_start.clone_from(&raw.lnd);
+    for k in 0..6 {
+        raw.u[k] = 0.5 * raw.csound[k];
+    }
+    let mut smooth = raw.clone();
+    smooth.controls.rti_smooth_fraction = 0.5;
+    set_dpdr_drhodr_info(&mut raw);
+    set_dpdr_drhodr_info(&mut smooth);
+
+    // Independent raw gradients (`p_face`, `rho_face`: alfa = 1/2 here).
+    let nz = 6;
+    let face = |v: &[f64], k: usize| 0.5 * v[k] + 0.5 * v[k - 1];
+    let mut dpdr = vec![0.0; nz];
+    let mut drhodr = vec![0.0; nz];
+    for k in 1..nz - 1 {
+        let rmid = f64::midpoint(raw.r[k], raw.r[k + 1]);
+        let dr = raw.dm[k] / (FOUR_PI * rmid * rmid * raw.rho[k]);
+        dpdr[k] = (face(&raw.peos, k) - face(&raw.peos, k + 1)) / dr;
+        drhodr[k] = (face(&raw.rho, k) - face(&raw.rho, k + 1)) / dr;
+    }
+    let (c, d) = (0.5, 0.25);
+    let mut sp = dpdr.clone();
+    let mut sr = drhodr.clone();
+    for k in 1..nz - 1 {
+        sp[k] = c * dpdr[k] + d * (dpdr[k - 1] + dpdr[k + 1]);
+        if !(drhodr[k - 1] == 0.0 && drhodr[k] == 0.0) {
+            sr[k] = c * drhodr[k] + d * (drhodr[k - 1] + drhodr[k + 1]);
+        }
+    }
+    sp[nz - 1] = c * dpdr[nz - 2] + 2.0 * d * dpdr[nz - 3];
+    sr[nz - 1] = c * drhodr[nz - 2] + 2.0 * d * drhodr[nz - 3];
+    for k in 0..nz {
+        let expected = (sp[k] * sr[k]).min(0.0);
+        let got = smooth.aux.dpdr_drhodr_info[k];
+        assert!(
+            (got - expected).abs() <= 1.0e-12 * expected.abs(),
+            "k={k} got={got} expected={expected}"
+        );
+    }
+    assert_ne!(
+        raw.aux.dpdr_drhodr_info, smooth.aux.dpdr_drhodr_info,
+        "smoothing must change the profile"
+    );
+}
+
+#[test]
+fn test_rti_mass_smoothing_is_inactive_for_zero_iterations() {
+    let mut a = make_rti_test_model(6, false, true);
+    a.peos = vec![1.0e10, 2.0e10, 3.0e10, 4.0e10, 5.0e10, 6.0e10];
+    a.rho = vec![1.0, 1.0, 2.0, 2.0, 1.0, 1.0];
+    a.lnd = a.rho.iter().map(|&r| flexmesa_math::log(r)).collect();
+    a.lnd_start.clone_from(&a.lnd);
+    for k in 0..6 {
+        a.u[k] = 0.5 * a.csound[k];
+    }
+    let mut b = a.clone();
+    let mut c = a.clone();
+    b.controls.rti_smooth_mass = 0.5;
+    b.controls.rti_smooth_iterations = 0;
+    c.controls.rti_smooth_mass = 0.5;
+    c.controls.rti_smooth_iterations = 2;
+    set_dpdr_drhodr_info(&mut a);
+    set_dpdr_drhodr_info(&mut b);
+    set_dpdr_drhodr_info(&mut c);
+    assert_eq!(a.aux.dpdr_drhodr_info, b.aux.dpdr_drhodr_info);
+    assert!(c
+        .aux
+        .dpdr_drhodr_info
+        .iter()
+        .all(|x| x.is_finite() && *x <= 0.0));
+}
+
+#[test]
+fn test_rti_controls_parse_from_inlist_with_defaults_elsewhere() {
+    let defaults = StarControls::default();
+    assert_eq!(defaults.rti_smooth_mass, 0.0);
+    assert_eq!(defaults.rti_smooth_iterations, 0);
+    assert_eq!(defaults.rti_smooth_fraction, 1.0);
+    assert_eq!(defaults.rti_min_dm_behind_shock_for_full_on, 0.0);
+    assert_eq!(defaults.rti_m_no_boost, 5.0);
+    assert_eq!(defaults.rti_m_full_boost, 4.0);
+    assert_eq!(defaults.rti_log_max_boost, 3.0);
+    assert_eq!(defaults.rti_dm_for_center_eta_nondecreasing, 0.02);
+    assert_eq!(defaults.rti_d_mix_floor, 0.0);
+    assert_eq!(defaults.rti_c_x_factor, 0.0);
+    assert_eq!(defaults.rti_c_x0_frac, 0.9);
+
+    let dir = std::env::temp_dir()
+        .join(format!("flexmesa_rti_controls_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    let path = dir.join("inlist");
+    std::fs::write(
+        &path,
+        "&star_job\n/\n&eos\n/\n&kap\n/\n&controls\n\
+         RTI_smooth_mass = 1d-2\nRTI_smooth_iterations = 1\n\
+         RTI_smooth_fraction = -1\nRTI_min_dm_behind_shock_for_full_on = 0.01\n\
+         RTI_m_no_boost = 3.5d0\nRTI_m_full_boost = 1.65d0\n\
+         RTI_log_max_boost = 0d0\nRTI_dm_for_center_eta_nondecreasing = 0.01\n\
+         RTI_D_mix_floor = 2d0\nRTI_C_X_factor = 1.5d0\nRTI_C_X0_frac = 0.5d0\n/\n",
+    )
+    .expect("write inlist");
+    let bundle = flexmesa_star::inlist::InlistBundle::from_file(&path)
+        .expect("parse bundle");
+    let _ = std::fs::remove_dir_all(&dir);
+    let c = &bundle.controls;
+    assert_eq!(c.rti_smooth_mass, 1.0e-2);
+    assert_eq!(c.rti_smooth_iterations, 1);
+    assert_eq!(c.rti_smooth_fraction, -1.0);
+    assert_eq!(c.rti_min_dm_behind_shock_for_full_on, 0.01);
+    assert_eq!(c.rti_m_no_boost, 3.5);
+    assert_eq!(c.rti_m_full_boost, 1.65);
+    assert_eq!(c.rti_log_max_boost, 0.0);
+    assert_eq!(c.rti_dm_for_center_eta_nondecreasing, 0.01);
+    assert_eq!(c.rti_d_mix_floor, 2.0);
+    assert_eq!(c.rti_c_x_factor, 1.5);
+    assert_eq!(c.rti_c_x0_frac, 0.5);
 }

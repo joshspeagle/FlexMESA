@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 98,
     "strict_fail_cases": 8,
-    "distinct_unsupported_controls": 34,
+    "distinct_unsupported_controls": 23,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 1245,
+      "supported_keys": 1256,
       "unused_keys": 16,
       "headless_gui_keys": 0,
       "terminal_output_keys": 19,
-      "unimplemented_upstream_keys": 168
+      "unimplemented_upstream_keys": 157
     },
     {
       "section": "binary_job",
@@ -175,105 +175,6 @@
       "case_count": 1,
       "cases": [
         "star/radiative_levitation"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_c_x0_frac",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_c_x_factor",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_d_mix_floor",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_dm_for_center_eta_nondecreasing",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_log_max_boost",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_m_full_boost",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_m_no_boost",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_min_dm_behind_shock_for_full_on",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_smooth_fraction",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_smooth_iterations",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "rti_smooth_mass",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ccsn_IIp"
       ]
     },
     {
@@ -5403,17 +5304,6 @@
         "inlist_shock_part5_header"
       ],
       "unsupported_controls": [
-        "controls::rti_c_x0_frac::unimplemented",
-        "controls::rti_c_x_factor::unimplemented",
-        "controls::rti_d_mix_floor::unimplemented",
-        "controls::rti_dm_for_center_eta_nondecreasing::unimplemented",
-        "controls::rti_log_max_boost::unimplemented",
-        "controls::rti_m_full_boost::unimplemented",
-        "controls::rti_m_no_boost::unimplemented",
-        "controls::rti_min_dm_behind_shock_for_full_on::unimplemented",
-        "controls::rti_smooth_fraction::unimplemented",
-        "controls::rti_smooth_iterations::unimplemented",
-        "controls::rti_smooth_mass::unimplemented",
         "star_job::fallback_check_total_energy::unimplemented",
         "star_job::remove_fallback_at_each_step::unimplemented",
         "star_job::remove_fallback_speed_limit::unimplemented"

@@ -1208,7 +1208,7 @@ fn test_edot_isotropic_eccentricity_enhancement_and_mdot_redo_boost() {
         &gam_prof,
         false,
         200,
-    );
+    ).expect("Kolb zone search in bounds");
     assert!(edot_enh.is_finite());
 
     let mut c1 = StarControls {
@@ -1293,7 +1293,8 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
         star.omega[k] = om_sync * (1.0 + 1.0e-6 * k_f / nz_f);
     }
     star.dt = 1.0e4 * SECYER;
-    flexmesa_star::update_rotation_distortion_factors(&mut star);
+    flexmesa_star::use_xh_to_update_i_rot_and_j_rot(&mut star);
+    flexmesa_star::set_rotation_info(&mut star, false);
     flexmesa_star::set_hydro_vars(&mut star, false, false)
         .expect("set_hydro_vars with CHE");
     assert!(

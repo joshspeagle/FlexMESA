@@ -9,10 +9,6 @@ use crate::controls::StarError;
 use crate::inlist::{InlistBundle, SectionControls, NUM_XA_LIMITS};
 use crate::inlist_populate::{map_bools, map_f64s, map_opt_f64s, map_strs};
 
-/// Maximum accretion species slots in MESA
-/// (`star_data/public/star_data_def.inc:365`).
-const MAX_NUM_ACCRETION_SPECIES: usize = 250;
-
 fn apply_fortran_1based<T, F>(
     ctrl: &SectionControls,
     key: &str,
@@ -369,17 +365,12 @@ impl InlistBundle {
             }
         }
         ctrl.try_usize_into("controls", &mut mw.num_accretion_species, "num_accretion_species", 0)?;
-        // `star_data/public/star_data_def.inc:365` sizes `accretion_species_id`
-        // and `accretion_species_xa` to `max_num_accretion_species = 250`, and
-        // `star/private/adjust_xyz.f90:921-935` loops `j = 1, s% num_accretion_species`
-        // without bounds checking. Exceeding 250 reads past those arrays and
-        // has no defined behaviour to reproduce (`DECISIONS #43`, deferred `#566`).
-        if mw.num_accretion_species > MAX_NUM_ACCRETION_SPECIES {
-            return Err(StarError::InvalidInput(format!(
-                "'&controls::num_accretion_species' ({}) exceeds max_num_accretion_species ({MAX_NUM_ACCRETION_SPECIES}) (DECISIONS #43, deferred #566)",
-                mw.num_accretion_species
-            )));
-        }
+        // Upstream reads `num_accretion_species` as a plain scalar
+        // (`star/private/ctrls_io.f90:1408`) with no bound check, so any count
+        // loads. Only `get_xa_for_accretion` indexes
+        // `accretion_species_id(j)`/`accretion_species_xa(j)` (sized
+        // `max_num_accretion_species = 250`, `star_data/public/star_data_def.inc:365`)
+        // and errors past 250 there (`accretion_xa.rs`, DECISIONS #43, deferred #566).
         if let Some(v) = ctrl.try_get_i64("controls", "accretion_zfracs")? {
             mw.accretion_zfracs = v as i32;
         }

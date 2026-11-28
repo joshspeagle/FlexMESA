@@ -541,11 +541,33 @@ pub fn eos_dt_get_from_weights(
     )
 }
 
-/// Evaluates `eosDT_get` for a single zone given `chem_id` and `xa`.
+/// Evaluates `eosDT_get` for a single zone given `chem_id` and `xa`,
+/// computing `log10(rho)` and `log10(T)` from the inputs.
 pub fn eos_dt_get(
     ht: &HelmTable,
     rho: f64,
     t: f64,
+    chem_id: &[usize],
+    xa: &[f64],
+    cfg: &EosConfig,
+) -> Result<EosEvalOutput, EosError> {
+    let log_rho = flexmesa_math::log10(rho);
+    let log_t = flexmesa_math::log10(t);
+    eos_dt_get_with_logs(ht, rho, log_rho, t, log_t, chem_id, xa, cfg)
+}
+
+/// Evaluates `eosDT_get` for a single zone with caller-supplied `logRho` and
+/// `logT`, as upstream's `eosDT_get(eos_handle, species, chem_id, net_iso, xa,
+/// Rho, logRho, T, logT, ...)` takes them (for example
+/// `star/private/struct_burn_mix.f90:1138-1170`, called from
+/// `net/private/net_burn_const_density.f90:398-401` with `lgT = y(nvar)/ln10`).
+#[allow(clippy::too_many_arguments)]
+pub fn eos_dt_get_with_logs(
+    ht: &HelmTable,
+    rho: f64,
+    log_rho: f64,
+    t: f64,
+    log_t: f64,
     chem_id: &[usize],
     xa: &[f64],
     cfg: &EosConfig,
@@ -560,8 +582,6 @@ pub fn eos_dt_get(
         })?;
     let (z_int, azion, acmi, a_baryon) =
         extract_species_weights(catalog, chem_id, "eos_dt_get")?;
-    let log_rho = flexmesa_math::log10(rho);
-    let log_t = flexmesa_math::log10(t);
     eos_dt_get_from_weights_with_tables(
         ht,
         EosDtTableSet::builtin(),

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Wave 5.1 verification tests for multi-species Burgers element diffusion,
-shellular rotation, Spruit-Tayler magnetic dynamo, convective premixing,
-predictive mixing, and white-dwarf crystallization phase separation.
+convective premixing, predictive mixing, and white-dwarf crystallization
+phase separation.
 """
 
 from __future__ import annotations
@@ -45,115 +45,6 @@ def _load_mesa_kernel_oracles() -> dict[tuple[str, str, int], float]:
             val = struct.unpack(">d", bits.to_bytes(8, "big"))[0]
             out[(cols[1], cols[2], int(cols[3]))] = val
     return out
-
-
-def test_rotation_fp_ft_and_omega_crit_rust_jax_consistency_and_autodiff() -> (
-    None
-):
-    """Verify Roche distortion polynomials and omega_crit Rust-JAX match.
-
-    Checks Fabry et al. (2022) and Paxton et al. (2019) expressions across
-    Safe Rust (`strict`) and frozen `star` JAX kernels to 1e-14.
-    """
-    with flexmesa.numerics_mode_context("strict"):
-        for w in [0.0, 0.2, 0.5, 0.85, 0.95]:
-            fp_r, ft_r, i_r = _rust.star_eval_rotation_fp_ft(w, 0.5, 0.5)
-            fp_j, ft_j, i_j = star.eval_rotation_fp_ft_jax(
-                jnp.asarray(w), 0.5, 0.5
-            )
-            assert abs(fp_r - float(fp_j)) <= 1.0e-14
-            assert abs(ft_r - float(ft_j)) <= 1.0e-14
-            assert abs(i_r - float(i_j)) <= 1.0e-14
-
-        dfp_dw = float(
-            jax.grad(lambda x: star.eval_rotation_fp_ft_jax(x, 0.5, 0.5)[0])(
-                0.5
-            )
-        )
-        assert dfp_dw < -0.5
-
-        om_r = _rust.star_eval_omega_crit(
-            6.6743e-8, 1.9884e33, 6.957e10, 3.828e33, 0.34, 0.99
-        )
-    om_j = float(
-        star.eval_omega_crit_jax(
-            jnp.asarray(6.6743e-8),
-            jnp.asarray(1.9884e33),
-            jnp.asarray(6.957e10),
-            jnp.asarray(3.828e33),
-            jnp.asarray(0.34),
-            0.99,
-        )
-    )
-    assert abs(om_r - om_j) / om_r <= 1.0e-14
-
-
-def test_rotational_instabilities_and_spruit_tayler_rust_jax_consistency() -> (
-    None
-):
-    """Verify five rotational instabilities and Spruit-Tayler consistency."""
-    args = (
-        3.0e10,
-        5.0e9,
-        2.5e4,
-        5.0,
-        1.5e7,
-        3.5e8,
-        0.5,
-        1.0,
-        1.0,
-        0.4,
-        0.2,
-        1.0e-6,
-        1.0e-7,
-        1.0e-4,
-        0.5,
-        1.3,
-        1.1,
-    )
-    with flexmesa.numerics_mode_context("strict"):
-        res_r = _rust.star_eval_rotational_mixing_zone(*args)
-        res_j = star.eval_rotational_mixing_zone_jax(
-            *(jnp.asarray(x) for x in args)
-        )
-        for k, (vr, vj) in enumerate(zip(res_r, res_j, strict=True)):
-            scale = max(abs(vr), 1.0)
-            assert abs(vr - float(vj)) / scale <= 1.0e-13, (
-                f"mismatch at slot {k}"
-            )
-
-        # Verify omega = 0 validity gate matches between Rust and JAX
-        args_zero_om = (*args[:11], -1.0e-5, 0.0, 0.0, 0.5, 1.3, 1.1)
-        res_r0 = _rust.star_eval_rotational_mixing_zone(*args_zero_om)
-    res_j0 = star.eval_rotational_mixing_zone_jax(
-        *(jnp.asarray(x) for x in args_zero_om)
-    )
-    for vr, vj in zip(res_r0, res_j0, strict=True):
-        assert vr == 0.0 and float(vj) == 0.0
-
-    # Verify NaN-free reverse-mode gradients across all 9 outputs (including
-    # inactive d_sh at slot 1 and active B_phi at slot 7) and at zero shear
-    for slot in range(9):
-        g_om = float(
-            jax.grad(
-                lambda om, s=slot: star.eval_rotational_mixing_zone_jax(
-                    *(jnp.asarray(x) for x in args[:13]),
-                    om,
-                    *(jnp.asarray(x) for x in args[14:]),
-                )[s]
-            )(jnp.asarray(1.0e-4))
-        )
-        assert np.isfinite(g_om)
-        g_q0 = float(
-            jax.grad(
-                lambda q, s=slot: star.eval_rotational_mixing_zone_jax(
-                    *(jnp.asarray(x) for x in args[:14]),
-                    q,
-                    *(jnp.asarray(x) for x in args[15:]),
-                )[s]
-            )(jnp.asarray(0.0))
-        )
-        assert np.isfinite(g_q0)
 
 
 def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:

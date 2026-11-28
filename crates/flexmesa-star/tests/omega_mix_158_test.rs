@@ -21,7 +21,7 @@ use flexmesa_star::{
     init_or_update_model_from_bundle, load_zams_model, remesh_split_merge,
     set_hydro_vars, set_rotation_info, solve_omega_mix, star_evolve_step,
     star_evolve_step_with_extras, total_angular_momentum,
-    update_rotation_distortion_factors, w_div_w_roche_jrot,
+    use_xh_to_update_i_rot_and_j_rot, w_div_w_roche_jrot,
     BinaryOtherTorqueHandle, BinaryOtherTorqueHook, DefaultStarExtras,
     InlistBundle, InlistLoadOptions, MeshFunctionConfig, OmegaMixOutcome,
     PrimaryStateBuffer, StarControls, StarError, StarExtras, StarJobControls,
@@ -63,7 +63,8 @@ fn build_rotating_4msun(omega_fn: impl Fn(usize, usize) -> f64) -> StarModel {
     for (k, om) in model.omega.iter_mut().enumerate().take(nz) {
         *om = omega_fn(k, nz);
     }
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     model
 }

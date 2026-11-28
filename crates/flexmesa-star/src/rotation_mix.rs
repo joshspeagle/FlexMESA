@@ -400,7 +400,8 @@ mod tests {
         let mut model =
             load_zams_model(ctrl, StarJobControls::default()).expect("1M ZAMS");
         model.omega.fill(2.0e-5);
-        crate::rotation::update_rotation_distortion_factors(&mut model);
+        crate::hydro_rotation::use_xh_to_update_i_rot_and_j_rot(&mut model);
+        crate::hydro_rotation::set_rotation_info(&mut model, false);
         crate::hydro_vars::set_hydro_vars(&mut model, false, false)
             .expect("set_hydro_vars");
         model

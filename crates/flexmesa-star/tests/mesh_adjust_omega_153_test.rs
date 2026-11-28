@@ -7,9 +7,10 @@
 #![allow(clippy::cast_precision_loss)]
 
 use flexmesa_star::{
-    do_adjust_mesh, load_zams_model, set_hydro_vars, total_angular_momentum,
-    try_plan_standard_mesh, update_rotation_distortion_factors, CellType,
-    MeshFunctionConfig, StarControls, StarJobControls, StarModel,
+    do_adjust_mesh, load_zams_model, set_hydro_vars, set_rotation_info,
+    total_angular_momentum, try_plan_standard_mesh,
+    use_xh_to_update_i_rot_and_j_rot, CellType, MeshFunctionConfig,
+    StarControls, StarJobControls, StarModel,
 };
 
 #[allow(clippy::manual_midpoint)]
@@ -138,7 +139,8 @@ fn build_rotating_4msun() -> StarModel {
         let frac = f64::from(u32::try_from(k).unwrap()) / denom;
         *om = 1.2e-4 * (1.0 + 1.5 * frac);
     }
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     model
 }

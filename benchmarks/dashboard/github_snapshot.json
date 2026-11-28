@@ -353,6 +353,31 @@
       "number": 762,
       "title": "star, mtx, binary: DECISIONS #43 errors where upstream is undefined (#566, #674, #717)",
       "draft": false
+    },
+    {
+      "number": 763,
+      "title": "net, eos: pass lgRho and lgT to the EOS in the const-density split burn (#580)",
+      "draft": false
+    },
+    {
+      "number": 765,
+      "title": "star: RTI_* mixing controls and RTI departures (P1.2, ccsn_IIp)",
+      "draft": false
+    },
+    {
+      "number": 767,
+      "title": "star: clear okay_to_set_mlt_vc after set_final_vars as MESA (make_planets, #587; ns_c, star_plus_point_mass, wd_nova_burst pass)",
+      "draft": false
+    },
+    {
+      "number": 768,
+      "title": "num: transcribe NEWUOA with an exact libnum oracle; astero calls it with upstream's arguments (stream G2, N1-1)",
+      "draft": false
+    },
+    {
+      "number": 769,
+      "title": "Engine batch 1: make_planets mlt_vc flag, #705 include slots, #633 rotation, #580 split burn, DECISIONS #43 fixes",
+      "draft": false
     }
   ],
   "deferred_169": [

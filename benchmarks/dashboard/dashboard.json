@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 9549,
+        "rust_lines": 10685,
         "python_jax_lines": 1851
       },
       {
@@ -1290,7 +1290,7 @@
   },
   "test_taxonomy": {
     "total_files": 335,
-    "total_tests": 2022,
+    "total_tests": 2047,
     "by_kind": {
       "oracle": {
         "files": 133
@@ -1305,7 +1305,7 @@
     "by_language": {
       "rust": {
         "files": 232,
-        "tests": 1170
+        "tests": 1195
       },
       "python": {
         "files": 103,
@@ -1571,7 +1571,7 @@
         "invariant_files": 2,
         "regression_files": 0,
         "total_files": 7,
-        "total_tests": 54,
+        "total_tests": 79,
         "mislabeled_files": 0,
         "mapped_routines": 0,
         "listed_oracle_routines": 0,
@@ -2053,6 +2053,31 @@
       {
         "number": 762,
         "title": "star, mtx, binary: DECISIONS #43 errors where upstream is undefined (#566, #674, #717)",
+        "draft": false
+      },
+      {
+        "number": 763,
+        "title": "net, eos: pass lgRho and lgT to the EOS in the const-density split burn (#580)",
+        "draft": false
+      },
+      {
+        "number": 765,
+        "title": "star: RTI_* mixing controls and RTI departures (P1.2, ccsn_IIp)",
+        "draft": false
+      },
+      {
+        "number": 767,
+        "title": "star: clear okay_to_set_mlt_vc after set_final_vars as MESA (make_planets, #587; ns_c, star_plus_point_mass, wd_nova_burst pass)",
+        "draft": false
+      },
+      {
+        "number": 768,
+        "title": "num: transcribe NEWUOA with an exact libnum oracle; astero calls it with upstream's arguments (stream G2, N1-1)",
+        "draft": false
+      },
+      {
+        "number": 769,
+        "title": "Engine batch 1: make_planets mlt_vc flag, #705 include slots, #633 rotation, #580 split burn, DECISIONS #43 fixes",
         "draft": false
       }
     ],
@@ -4629,6 +4654,19 @@
     {
       "date_utc": "2026-11-28",
       "commit": "7dc49a46",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "35",
+      "total_140": "56",
+      "deferred_169": "103"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "62fa7e02",
       "event": "main merge",
       "engine_ported_pct": "31.1",
       "all_verified_pct": "1.1",

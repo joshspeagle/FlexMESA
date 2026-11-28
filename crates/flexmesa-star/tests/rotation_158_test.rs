@@ -4,8 +4,7 @@
 //!   `w_div_w_roche_{omega,jrot}` sigmoid & hard-cap branches, `set_j_rot`,
 //!   `set_i_rot_from_omega_and_j_rot`, `get1_am_sig`, `get_rotation_sigmas`,
 //!   and `TidalDeformationHook` blending.
-//! - `rotation`: `update_rotation_distortion_factors`,
-//!   `conserve_shell_j_rot_and_distortion`, and Wave-5 invariant checks.
+//! - `rotation`: `conserve_shell_j_rot_and_distortion`, and Wave-5 invariant checks.
 //! - `rotation_mix`: `mix_info.f90:1561-1956` branches (`d_omega_flag = false`,
 //!   `am_nu_rot_flag = true`, `set_uniform_am_nu_non_rot`,
 //!   `set_min_am_nu_non_rot`, `augment_d_mix_with_rotation`,
@@ -43,9 +42,7 @@ use flexmesa_star::omega_mix::{
 };
 use flexmesa_star::rotation::{
     augment_d_mix_with_rotation, conserve_shell_j_rot_and_distortion,
-    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    sync_post_henyey_rotation, update_rotation_distortion_factors,
+    sync_post_henyey_rotation,
 };
 use flexmesa_star::{load_zams_model, set_hydro_vars, StarModel};
 
@@ -132,7 +129,8 @@ fn load_1m_zams_rotating(omega: f64) -> StarModel {
     let mut model =
         load_zams_model(ctrl, StarJobControls::default()).expect("1M ZAMS");
     model.omega.fill(omega);
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     model
 }
@@ -374,10 +372,11 @@ fn test_hydro_rotation_setters_tidal_blending_and_sigmas() {
     );
     assert!((model.aux.i_rot[0] - expected_i0).abs() <= 1.0e-12 * expected_i0);
 
-    // `TidalDeformationHook` blending across `set_rotation_info`,
-    // `update_rotation_distortion_factors`, and `conserve_shell_j_rot_and_distortion`.
+    // `TidalDeformationHook` blending across `set_rotation_info` and
+    // `conserve_shell_j_rot_and_distortion`.
     model.omega.fill(3.0e-5);
-    update_rotation_distortion_factors(&mut model);
+    use_xh_to_update_i_rot_and_j_rot(&mut model);
+    set_rotation_info(&mut model, false);
     let j_before_tide = total_angular_momentum(&model);
     model.aux.tidal_deformation =
         Some(TidalDeformationHandle(Arc::new(ConstTidalHook {
@@ -525,7 +524,8 @@ fn test_rotation_mix_am_nu_rot_convective_zeroing_and_sync_post_henyey() {
     for (k, w) in m.omega.iter_mut().enumerate().take(nz) {
         *w = if k < nz / 2 { 1.0e-5 } else { 4.0e-5 };
     }
-    update_rotation_distortion_factors(&mut m);
+    use_xh_to_update_i_rot_and_j_rot(&mut m);
+    set_rotation_info(&mut m, false);
     let j_before = total_angular_momentum(&m);
     m.aux.am_nu_omega.fill(0.0);
     m.aux.am_nu_j.fill(0.0);
@@ -548,7 +548,8 @@ fn test_omega_mix_standalone_conservation_and_binary_implicit_spin_orbit() {
     for k in 0..nz {
         m.omega[k] = 1.0e-5 + 3.0e-5 * (1.0 - m.q[k]);
     }
-    update_rotation_distortion_factors(&mut m);
+    use_xh_to_update_i_rot_and_j_rot(&mut m);
+    set_rotation_info(&mut m, false);
     let j0 = total_angular_momentum(&m);
     let nu = vec![1.0e14_f64; nz];
     solve_omega_mix(&mut m, 1.0e11, &nu, 4);
@@ -562,7 +563,8 @@ fn test_omega_mix_standalone_conservation_and_binary_implicit_spin_orbit() {
     // errors (`has_external_torque` preserved for binary hooks).
     let target = 5.0e-5_f64;
     m.omega.fill(1.0e-5);
-    update_rotation_distortion_factors(&mut m);
+    use_xh_to_update_i_rot_and_j_rot(&mut m);
+    set_rotation_info(&mut m, false);
     m.aux.am_nu_omega.fill(1.0e10);
     m.aux.am_nu_j.fill(0.0);
     m.aux.binary_other_torque_implicit =
@@ -584,31 +586,4 @@ fn test_omega_mix_standalone_conservation_and_binary_implicit_spin_orbit() {
         do_solve_omega_mix_with_extras(&mut m, 1.0e10, &mut fail_extras)
             .expect("implicit hook error yields Retry");
     assert!(matches!(retry_out, OmegaMixOutcome::Retry(_)));
-}
-
-#[test]
-fn test_rotation_wave5_kernels_physical_invariants() {
-    let (fp0, ft0, ir0) = eval_rotation_fp_ft(0.0, 0.5, 0.5);
-    assert_eq!((fp0, ft0, ir0), (1.0, 1.0, TWO_THIRDS));
-
-    let (fp_hi, ft_hi, ir_hi) = eval_rotation_fp_ft(0.85, 0.55, 0.65);
-    assert!((0.55..1.0).contains(&fp_hi));
-    assert!((0.65..1.0).contains(&ft_hi));
-    assert!(ir_hi > TWO_THIRDS);
-
-    let om_c =
-        eval_omega_crit(STANDARD_CGRAV, M_SUN, R_SUN, 3.828e33, 0.34, 0.99);
-    assert!(om_c.is_finite() && om_c > 0.0);
-
-    let k_th = eval_thermal_diffusivity(1.0e7, 10.0, 1.0, 2.0e8);
-    let eta = eval_magnetic_diffusivity(1.0e7, 10.0, 1.3, 1.1);
-    assert!(k_th > 0.0 && eta > 0.0);
-
-    let z_zero = eval_rotational_mixing_zone(
-        3.0e10, 5.0e9, 2.5e4, 5.0, 1.5e7, 3.5e8, 0.5, 1.0, 1.0, 0.4, 0.2,
-        1.0e-6, 1.0e-7, 0.0, 0.5, 1.3, 1.1, 1.0,
-    );
-    assert_eq!(z_zero.d_st, 0.0);
-    assert_eq!(z_zero.nu_st, 0.0);
-    assert_eq!(z_zero.total_d_rot(1.0, 1.0, 1.0, 1.0, 1.0, 1.0), 0.0);
 }

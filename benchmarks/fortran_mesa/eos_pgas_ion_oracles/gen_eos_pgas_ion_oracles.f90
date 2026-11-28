@@ -21,6 +21,7 @@ program gen_eos_pgas_ion_oracles
    use eospc_eval, only: Get_PC_alfa
    use ideal, only: get_ideal_for_eosdt
    use ion_offset, only: compute_ion_offset
+   use skye, only: Get_Skye_alfa_simple
    implicit none
 
    character(len=512) :: mesa_dir, out_path, sdk_ver, mesa_ver, fflags_str
@@ -65,6 +66,7 @@ program gen_eos_pgas_ion_oracles
    call emit_ideal_case(u, rc)
    call emit_helm_cases(u, rc)
    call emit_pc_alfa_cases(u, rc)
+   call emit_skye_alfa_simple_cases(u, rc)
    close(u)
    call eos_shutdown()
    call chem_shutdown()
@@ -418,5 +420,52 @@ contains
 
       call free_eos_handle(eh)
    end subroutine emit_pc_alfa_cases
+
+   subroutine emit_skye_alfa_simple_one(unit_no, rc, rq, label, lr, lt, z_in, ab_in, zb_in)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      character(len=*), intent(in) :: label
+      real(dp), intent(in) :: lr, lt, z_in, ab_in, zb_in
+      real(dp) :: alfa, dt_a, dr_a
+      integer :: ierr_loc
+
+      call Get_Skye_alfa_simple(rq, lr, lt, z_in, ab_in, zb_in, alfa, dt_a, dr_a, ierr_loc)
+      if (ierr_loc /= 0) stop 'Get_Skye_alfa_simple failed'
+
+      call emit(unit_no, rc, trim(label), 'in', 'logRho', 'val', lr)
+      call emit(unit_no, rc, trim(label), 'in', 'logT', 'val', lt)
+      call emit(unit_no, rc, trim(label), 'in', 'logRho_any', 'val', rq% logRho_min_for_any_Skye)
+      call emit(unit_no, rc, trim(label), 'in', 'logRho_all', 'val', rq% logRho_min_for_all_Skye)
+      call emit(unit_no, rc, trim(label), 'in', 'logT_any', 'val', rq% logT_min_for_any_Skye)
+      call emit(unit_no, rc, trim(label), 'in', 'logT_all', 'val', rq% logT_min_for_all_Skye)
+      call emit(unit_no, rc, trim(label), 'out', 'alfa', 'val', alfa)
+      call emit(unit_no, rc, trim(label), 'out', 'd_alfa_dlogT', 'val', dt_a)
+      call emit(unit_no, rc, trim(label), 'out', 'd_alfa_dlogRho', 'val', dr_a)
+   end subroutine emit_skye_alfa_simple_one
+
+   subroutine emit_skye_alfa_simple_cases(unit_no, rc)
+      integer, intent(in) :: unit_no
+      integer, intent(inout) :: rc
+      type (EoS_General_Info), pointer :: rq
+      integer :: eh, ierr_loc
+
+      eh = alloc_eos_handle(ierr_loc)
+      if (ierr_loc /= 0) stop 'skye_alfa alloc_eos_handle failed'
+      call eos_ptr(eh, rq, ierr_loc)
+      if (ierr_loc /= 0) stop 'skye_alfa eos_ptr failed'
+
+      call emit_skye_alfa_simple_one(unit_no, rc, rq, &
+         'skye_alfa_simple_2p35_7p3', 2.35_dp, 7.3_dp, 1.0_dp, 12.0_dp, 6.0_dp)
+
+      rq% logRho_min_for_any_Skye = 2.3_dp
+      rq% logRho_min_for_all_Skye = 2.4_dp
+      rq% logT_min_for_any_Skye = 7.2_dp
+      rq% logT_min_for_all_Skye = 7.4_dp
+      call emit_skye_alfa_simple_one(unit_no, rc, rq, &
+         'skye_alfa_simple_f64_2p35_7p3', 2.35_dp, 7.3_dp, 1.0_dp, 12.0_dp, 6.0_dp)
+
+      call free_eos_handle(eh)
+   end subroutine emit_skye_alfa_simple_cases
 
 end program gen_eos_pgas_ion_oracles

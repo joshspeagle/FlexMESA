@@ -19,6 +19,72 @@ use flexmesa_eos::{
     SkyeConfig, SkyeSolidMixingRule, I_DS_DRHO, I_DS_DT, I_ETA, I_LN_E,
     I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU,
 };
+use flexmesa_math::{with_numerics_mode, NumericsMode};
+
+const EOS_PGAS_ION_ORACLES: &str = include_str!(
+    "../../../benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+);
+
+fn mesa_skye_bits(case: &str, role: &str, field: &str) -> u64 {
+    for line in EOS_PGAS_ION_ORACLES.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 5
+            && cols[0] == case
+            && cols[1] == role
+            && cols[2] == field
+            && cols[3] == "val"
+        {
+            let hex = cols[4].trim_start_matches("0x");
+            return u64::from_str_radix(hex, 16).expect("hex column");
+        }
+    }
+    panic!("no MESA Get_Skye_alfa_simple oracle row for {case} {role} {field}");
+}
+
+fn check_skye_alfa_simple_bits(case_id: &str, cfg: &SkyeConfig) {
+    let mut bad = Vec::new();
+    for (fld, val) in [
+        ("logRho", 2.35),
+        ("logT", 7.3),
+        ("logRho_any", cfg.log_rho_min_for_any_skye),
+        ("logRho_all", cfg.log_rho_min_for_all_skye),
+        ("logT_any", cfg.log_t_min_for_any_skye),
+        ("logT_all", cfg.log_t_min_for_all_skye),
+    ] {
+        let exp = mesa_skye_bits(case_id, "in", fld);
+        if val.to_bits() != exp {
+            bad.push(format!(
+                "{case_id}.in.{fld}: MESA {e:.17e} (0x{exp:016X}) vs Flex {val:.17e} (0x{:016X}) ULP={}",
+                val.to_bits(),
+                val.to_bits().abs_diff(exp),
+                e = f64::from_bits(exp),
+            ));
+        }
+    }
+    let (a, dt, dr) = get_skye_alfa_simple(cfg, 2.35, 7.3);
+    for (fld, got) in
+        [("alfa", a), ("d_alfa_dlogT", dt), ("d_alfa_dlogRho", dr)]
+    {
+        let exp = mesa_skye_bits(case_id, "out", fld);
+        if got.to_bits() != exp {
+            bad.push(format!(
+                "{case_id}.{fld}: MESA {e:.17e} (0x{exp:016X}) vs Flex {got:.17e} (0x{:016X}) ULP={}",
+                got.to_bits(),
+                got.to_bits().abs_diff(exp),
+                e = f64::from_bits(exp),
+            ));
+        }
+    }
+    assert_eq!(
+        bad.len(),
+        0,
+        "Get_Skye_alfa_simple departures:\n{}",
+        bad.join("\n")
+    );
+}
 
 fn make_comp(
     y_in: f64,
@@ -206,13 +272,11 @@ fn test_skye_solid_and_phase_transition_regimes_match_mesa_26_4_1_oracle() {
 fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
 
-    let exp_in =
-        common::load_scalar_row::<3>("ALFA", "skye_alfa_c12_4p0_7p5");
+    let exp_in = common::load_scalar_row::<3>("ALFA", "skye_alfa_c12_4p0_7p5");
     let (a_in, dt_in, dr_in) = get_skye_alfa(ht, 4.0, 7.5, 12.0, 6.0);
     assert_eq!((a_in, dt_in, dr_in), (exp_in[0], exp_in[1], exp_in[2]));
 
-    let exp_ed =
-        common::load_scalar_row::<3>("ALFA", "skye_alfa_c12_3p45_7p0");
+    let exp_ed = common::load_scalar_row::<3>("ALFA", "skye_alfa_c12_3p45_7p0");
     let (a_ed, dt_ed, dr_ed) = get_skye_alfa(ht, 3.45, 7.0, 12.0, 6.0);
     assert!((a_ed - exp_ed[0]).abs() < 1.0e-13);
     assert!((dt_ed - exp_ed[1]).abs() < 1.0e-13);
@@ -232,6 +296,12 @@ fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     assert!((a_sm - exp_sm_f64[0]).abs() < 1.0e-13);
     assert!((dt_sm - exp_sm_f64[1]).abs() < 1.0e-13);
     assert!((dr_sm - exp_sm_f64[2]).abs() < 1.0e-13);
+    with_numerics_mode(NumericsMode::Strict, || {
+        check_skye_alfa_simple_bits(
+            "skye_alfa_simple_f64_2p35_7p3",
+            &skye_cfg_f64,
+        );
+    });
 
     // Inverse solvers on pure HELM (`use_skye = false, use_pc = false`)
     let (chem_id, xa, abar, zbar) = make_comp(0.0, 1.0, 0.0);
@@ -324,4 +394,7 @@ fn test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_unwidened() {
     assert!((a_sm - exp_def[0]).abs() < 1.0e-13);
     assert!((dt_sm - exp_def[1]).abs() < 1.0e-13);
     assert!((dr_sm - exp_def[2]).abs() < 1.0e-13);
+    with_numerics_mode(NumericsMode::Strict, || {
+        check_skye_alfa_simple_bits("skye_alfa_simple_2p35_7p3", &skye_cfg);
+    });
 }

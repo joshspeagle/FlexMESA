@@ -573,6 +573,12 @@ routines = [
   "eos/public/eos_lib.f90::eos_gamma_DE_get",
 ]
 
+[[tests.oracles]]
+reference = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/mesa_26_4_1_eos_pgas_ion_oracles.tsv"
+recipe = "benchmarks/fortran_mesa/eos_pgas_ion_oracles/gen_eos_pgas_ion_oracles.f90"
+precision = "exact"
+routines = ["eos/private/skye.f90::Get_Skye_alfa_simple"]
+
 [[tests]]
 path = "crates/flexmesa-eos/tests/wave3b1_full_tables_tests.rs"
 language = "rust"

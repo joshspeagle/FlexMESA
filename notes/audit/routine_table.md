@@ -49,7 +49,7 @@ The fractions answer different questions. The whole-file figure counts every lin
 | `star_data` | 12 | 5 | 0 | 0 | 3 | 2 | 0 / 0 | 4,870 | 0 | 0 | 23 | 26 | 4,821 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `binary` | 47 | 218 | 65 | 51 | 11 | 91 | 0 / 0 | 11,638 | 2,124 | 3,963 | 367 | 2,427 | 2,757 | 18.3% | 34.1% | 18.8% | 0.0% / 0.0% | 18.7% |
 | `astero` | 14 | 189 | 14 | 79 | 20 | 76 | 0 / 0 | 7,935 | 261 | 3,572 | 302 | 2,418 | 1,382 | 3.3% | 45.0% | 3.4% | 0.0% / 0.0% | 0.0% |
-| `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 18 / 12 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 3.4% / 2.8% | 0.0% |
+| `eos` | 57 | 326 | 108 | 0 | 0 | 218 | 19 / 11 | 28,666 | 6,791 | 0 | 0 | 14,724 | 7,151 | 23.7% | 0.0% | 23.7% | 3.5% / 2.6% | 0.0% |
 | `kap` | 38 | 311 | 0 | 0 | 0 | 311 | 0 / 0 | 22,430 | 0 | 0 | 0 | 19,985 | 2,445 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
 | `net` | 16 | 195 | 3 | 9 | 0 | 183 | 0 / 0 | 13,452 | 90 | 688 | 0 | 11,441 | 1,233 | 0.7% | 5.1% | 0.7% | 0.0% / 0.0% | 0.0% |
 | `rates` | 26 | 477 | 0 | 0 | 0 | 477 | 0 / 0 | 17,217 | 0 | 0 | 0 | 14,276 | 2,941 | 0.0% | 0.0% | 0.0% | 0.0% / 0.0% | 0.0% |
@@ -251,7 +251,7 @@ Candidates for a reviewed raise to `ported_unverified`. Largest ten:
 | `eos/private/ion_offset.f90` | `eos` | partial | kernel_reference_vectors | 84 | 1 | 1 | 0 | 0 | 1 / 0 | 43 | 0 | 0 | 0 | 41 |
 | `eos/private/pc_eos.f90` | `eos` | partial | partial | 3,028 | 26 | 22 | 0 | 0 | 0 / 0 | 2,679 | 0 | 0 | 111 | 238 |
 | `eos/private/pc_support.f90` | `eos` | partial | partial | 1,043 | 13 | 1 | 0 | 0 | 0 / 0 | 74 | 0 | 0 | 894 | 75 |
-| `eos/private/skye.f90` | `eos` | partial | partial | 402 | 5 | 3 | 0 | 0 | 0 / 3 | 167 | 0 | 0 | 170 | 65 |
+| `eos/private/skye.f90` | `eos` | partial | partial | 402 | 5 | 3 | 0 | 0 | 1 / 2 | 167 | 0 | 0 | 170 | 65 |
 | `eos/private/skye_coulomb.f90` | `eos` | partial | partial | 486 | 7 | 1 | 0 | 0 | 0 / 0 | 72 | 0 | 0 | 282 | 132 |
 | `eos/private/skye_coulomb_liquid.f90` | `eos` | partial | ported_unverified | 181 | 4 | 4 | 0 | 0 | 0 / 0 | 107 | 0 | 0 | 0 | 74 |
 | `eos/private/skye_coulomb_solid.f90` | `eos` | partial | ported_unverified | 348 | 8 | 8 | 0 | 0 | 0 / 0 | 236 | 0 | 0 | 0 | 112 |

@@ -732,6 +732,12 @@ routines = [
 ]
 
 [[tests]]
+path = "crates/flexmesa-interp2d/tests/interp2d_numerics_mode_test.rs"
+language = "rust"
+module = "interp_2d"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-interp2d/tests/interp2d_tests.rs"
 language = "rust"
 module = "interp_2d"

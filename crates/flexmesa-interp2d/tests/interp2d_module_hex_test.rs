@@ -12,8 +12,9 @@
 //! omit `real*8` declarations and fall under Fortran implicit `REAL` (`f32`),
 //! while accumulators remain `f64`. Production [`interp_evbicub_db`] reproduces
 //! this implicit-`f32` basis evaluation at `0 ULP` across all 18 `fvbicub_db`
-//! output rows `[4..34]` in `NumericsMode::Strict`, while preserving pure `f64`
-//! precision (`<= 3e-8` abs, `<= 2.5e8` ULP vs MESA) in `NumericsMode::Fast`.
+//! output rows `[4..34]` in `NumericsMode::Strict`. The `NumericsMode::Fast`
+//! pure-`f64` bound (`<= 3e-8` abs, `<= 2.5e8` ULP vs MESA) is checked in the
+//! separate `interp2d_numerics_mode_test.rs` binary (`issue #210`).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -272,44 +273,6 @@ fn test_interp2d_module_hex_zero_ulp() {
                 row.raw_bits
             );
         }
-    });
-
-    // Verify NumericsMode::Fast retains pure-f64 basis precision (bounded
-    // against MESA's implicit-f32 outputs while differing from Strict).
-    with_numerics_mode(NumericsMode::Fast, || {
-        let mut fast_differs = 0usize;
-        for j in 0..y_points {
-            let y = y_min + (j as f64) * dy;
-            for i in 0..x_points {
-                let x = x_min + (i as f64) * dx;
-                let ev = interp_evbicub_db(
-                    x, y, &xpts, &ypts, ilinx, iliny, &f_bicub,
-                )
-                .unwrap();
-                let base_idx = 4 + (j * x_points + i) * 5;
-                for (off, actual) in [(2, ev.f), (3, ev.df_dx), (4, ev.df_dy)] {
-                    let row = &rows[base_idx + off];
-                    let ulps = ulp_distance(actual, row.raw_bits);
-                    let exp_val = f64::from_bits(row.raw_bits);
-                    let abs_err = (actual - exp_val).abs();
-                    assert!(
-                        abs_err <= 3.0e-8 && ulps <= 250_000_000,
-                        "fvbicub fast-mode pure-f64 bound exceeded at row {} \
-                         ({}): got={actual:.17e} exp={exp_val:.17e} \
-                         abs_err={abs_err:.3e} ulps={ulps}",
-                        base_idx + off,
-                        row.label
-                    );
-                    if ulps > 0 {
-                        fast_differs += 1;
-                    }
-                }
-            }
-        }
-        assert!(
-            fast_differs > 0,
-            "NumericsMode::Fast must evaluate pure-f64 basis rather than Strict f32 rounding"
-        );
     });
 
     // Account for rows 56..104: unported f32 (`_sg`) single-precision block

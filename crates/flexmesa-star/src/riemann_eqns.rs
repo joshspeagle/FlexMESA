@@ -14,6 +14,20 @@ use crate::model::StarModel;
 use crate::riemann_ad::calc_ptot_cell_ad;
 use crate::star_ad::{StarAdExt, StarAdOrder1, I_V_00, I_V_M1, I_V_P1};
 
+/// Fraction of `v_drag_factor` in force at enclosed mass fraction `q`
+/// (`hydro_riemann.f90:142-150`): 0 below `q_for_v_drag_full_off`, 1 above
+/// `q_for_v_drag_full_on`, linear in between.
+fn riemann_drag_fraction(c: &crate::controls::StarControls, q: f64) -> f64 {
+    if q < c.q_for_v_drag_full_off {
+        0.0
+    } else if q > c.q_for_v_drag_full_on {
+        1.0
+    } else {
+        (q - c.q_for_v_drag_full_off)
+            / (c.q_for_v_drag_full_on - c.q_for_v_drag_full_off)
+    }
+}
+
 /// Evaluates the cell-centered Lagrangian momentum residual `do1_dudt_eqn`
 /// (`star/private/hydro_riemann.f90:72-290`) for zone `k` (`k == 0` uses
 /// `p_surf_opt`; interior zones `k >= 1` use `p_face_ad[k]`).
@@ -142,10 +156,32 @@ pub fn do1_riemann_momentum_eqn(
     {
         sum_ad = sum_ad + crate::tdc_hydro::compute_tdc_uq_dm_cell(model, k);
     }
-    let dudt_expected = sum_ad / dm_k;
+    let mut dudt_expected = sum_ad / dm_k;
+
+    // Quadratic velocity drag (`hydro_riemann.f90:139-158`), applied to
+    // `dudt_expected_ad` after the division by `dm`. `s% u(k)` and `s% r(k)`
+    // are plain reals there, so the added term carries no derivatives.
+    let drag_factor = model.controls.v_drag_factor
+        * riemann_drag_fraction(&model.controls, model.q[k]);
+    if drag_factor > 0.0 {
+        let v_drag = model.controls.v_drag;
+        if model.u[k] > v_drag {
+            dudt_expected = dudt_expected
+                - drag_factor * flexmesa_math::pow2(model.u[k] - v_drag)
+                    / model.r[k];
+        } else if model.u[k] < -v_drag {
+            dudt_expected = dudt_expected
+                + drag_factor * flexmesa_math::pow2(model.u[k] + v_drag)
+                    / model.r[k];
+        }
+    }
 
     let u_start_k = model.u_start.get(k).copied().unwrap_or(model.u[k]);
-    let dudt_actual = (u_00 - u_start_k) / dt;
+    // `dudt_actual_ad%val = s% dxh_u(k)/dt` with derivative `1/dt` in the
+    // `i_v_00` slot (`hydro_riemann.f90:166-168`).
+    let mut dudt_actual = StarAdOrder1::ZERO;
+    dudt_actual.val = model.aux.dxh_u[k] / dt;
+    dudt_actual.d1[I_V_00] = 1.0 / dt;
 
     let e_start_k = model
         .energy_start

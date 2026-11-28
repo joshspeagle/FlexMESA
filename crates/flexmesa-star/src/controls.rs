@@ -590,6 +590,17 @@ pub struct StarControls {
     pub drag_coefficient: f64,
     /// Minimum enclosed mass fraction $q$ for velocity drag (`min_q_for_drag`).
     pub min_q_for_drag: f64,
+    /// Quadratic velocity drag factor of the Riemann $du/dt$ equation
+    /// (`v_drag_factor`, `star_defaults/controls.defaults:8531`).
+    pub v_drag_factor: f64,
+    /// Velocity above which the quadratic drag acts, $\mathrm{cm\,s^{-1}}$ (`v_drag`).
+    pub v_drag: f64,
+    /// Enclosed mass fraction $q$ below which `v_drag_factor` is off
+    /// (`q_for_v_drag_full_off`).
+    pub q_for_v_drag_full_off: f64,
+    /// Enclosed mass fraction $q$ above which `v_drag_factor` is fully on
+    /// (`q_for_v_drag_full_on`).
+    pub q_for_v_drag_full_on: f64,
     /// MLT turbulent pressure factor $\alpha_{P,\mathrm{turb}}$ (`mlt_Pturb_factor`).
     pub mlt_pturb_factor: f64,
     /// Enable artificial viscosity $P_{\mathrm{vsc}}$ (`use_Pvsc_art_visc`).

@@ -268,6 +268,29 @@ fn test_skye_solid_and_phase_transition_regimes_match_mesa_26_4_1_oracle() {
     );
 }
 
+fn check_skye_gamma_de(abar: f64, zbar: f64, e_val: f64) {
+    let exp_gam = common::load_scalar_row::<6>("INV", "gamma_de_c12_1e4");
+    let exp_gam_res =
+        common::load_scalar_row::<6>("INV", "gamma_de_c12_1e4_res");
+    let gam = eos_gamma_de_get(abar, zbar, 1.0e4, e_val, 5.0 / 3.0);
+    assert!((gam.t - exp_gam[0]).abs() / exp_gam[0] < 1.0e-13);
+    assert!((gam.log10_t - exp_gam[1]).abs() < 1.0e-13);
+    let d_gam = (
+        gam.dln_t_dln_e_c_rho,
+        gam.dln_t_dlnd_c_e,
+        gam.dln_pgas_dln_e_c_rho,
+        gam.dln_pgas_dlnd_c_e,
+    );
+    assert_eq!(d_gam, (exp_gam[2], exp_gam[3], exp_gam[4], exp_gam[5]));
+    assert!((gam.res[I_MU] - exp_gam_res[0]).abs() < 1.0e-15);
+    assert_eq!(gam.res[I_LN_FREE_E], exp_gam_res[1]);
+    assert_eq!(gam.res[I_ETA], exp_gam_res[2]);
+    assert_eq!(gam.res[I_DS_DT], 0.0);
+    assert_eq!(gam.res[I_DS_DRHO], 0.0);
+    assert_eq!(gam.d_dlnd[I_LN_S], 0.0);
+    assert_eq!(gam.d_dln_t[I_LN_S], 0.0);
+}
+
 #[test]
 fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
@@ -363,26 +386,7 @@ fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     assert!((inv_rho.eos.res[I_LN_E] - fwd.res[I_LN_E]).abs() < 1.0e-11);
     assert!((inv_rho.eos.res[I_LN_E] - exp_inv_rho[1]).abs() < 1.0e-8);
 
-    let exp_gam = common::load_scalar_row::<6>("INV", "gamma_de_c12_1e4");
-    let exp_gam_res =
-        common::load_scalar_row::<6>("INV", "gamma_de_c12_1e4_res");
-    let gam = eos_gamma_de_get(abar, zbar, 1.0e4, e_val, 5.0 / 3.0);
-    assert!((gam.t - exp_gam[0]).abs() / exp_gam[0] < 1.0e-13);
-    assert!((gam.log10_t - exp_gam[1]).abs() < 1.0e-13);
-    let d_gam = (
-        gam.dln_t_dln_e_c_rho,
-        gam.dln_t_dlnd_c_e,
-        gam.dln_pgas_dln_e_c_rho,
-        gam.dln_pgas_dlnd_c_e,
-    );
-    assert_eq!(d_gam, (exp_gam[2], exp_gam[3], exp_gam[4], exp_gam[5]));
-    assert!((gam.res[I_MU] - exp_gam_res[0]).abs() < 1.0e-15);
-    assert_eq!(gam.res[I_LN_FREE_E], exp_gam_res[1]);
-    assert_eq!(gam.res[I_ETA], exp_gam_res[2]);
-    assert_eq!(gam.res[I_DS_DT], 0.0);
-    assert_eq!(gam.res[I_DS_DRHO], 0.0);
-    assert_eq!(gam.d_dlnd[I_LN_S], 0.0);
-    assert_eq!(gam.d_dln_t[I_LN_S], 0.0);
+    check_skye_gamma_de(abar, zbar, e_val);
 }
 
 #[test]

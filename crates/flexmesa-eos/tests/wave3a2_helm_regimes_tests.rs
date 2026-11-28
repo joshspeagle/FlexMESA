@@ -144,6 +144,78 @@ fn test_helm_eos_degenerate_and_pair_regimes_match_mesa_26_4_1_oracle() {
     });
 }
 
+fn check_helm_zones_and_helmeos2_strict(table: &HelmTable, cfg: &HelmConfig) {
+    with_numerics_mode(NumericsMode::Strict, || {
+        for (cid, t, r, a, z) in [
+            ("helm_pure_he_2e8_100", 2.0e8, 100.0, 4.0, 2.0),
+            ("helm_pure_h_2e8_100", 2.0e8, 100.0, 1.0, 1.0),
+        ] {
+            check_helm_case_strict(cid, t, r, a, z);
+        }
+        let batch_strict = eval_helm_eos_zones(
+            &[2.0e8, 2.0e8, 1.0e9],
+            &[100.0, 100.0, 1.0e4],
+            &[4.0, 1.0, 12.0],
+            &[2.0, 1.0, 6.0],
+        );
+        for (i, cid) in [
+            "helm_pure_he_2e8_100",
+            "helm_pure_h_2e8_100",
+            "helm_sample_eos_c12",
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert_helm_bits(
+                &format!("{cid}.zones.lnPgas"),
+                batch_strict[i].res[I_LN_PGAS],
+                mesa_helm_bits(cid, "out", "res_0", "val"),
+            );
+        }
+
+        let (hres, off_table) = helmeos2(
+            table,
+            2.0e8,
+            flexmesa_math::log10(2.0e8_f64),
+            100.0,
+            2.0,
+            4.0,
+            2.0,
+            cfg,
+        )
+        .expect("helmeos2 pure_he_2e8_100");
+        assert!(!off_table);
+        let h_slots = [
+            H_PTOT, H_DPT, H_DPD, H_DPA, H_DPZ, H_ETOT, H_DET, H_DED, H_DEA,
+            H_DEZ, H_DEDD, H_DEDT, H_DEDA, H_DEDZ, H_STOT, H_DST, H_DSD, H_DSA,
+            H_DSZ, H_DSDD, H_DSDT, H_DSDA, H_DSDZ, H_DSTT, H_DSTA, H_DSTZ,
+            H_PRAD, H_DPRADT, H_DPRADD, H_ERAD, H_SRAD, H_PGAS, H_DPGAST,
+            H_DPGASD, H_DPGASA, H_DPGASZ, H_DPGASDD, H_DPGASDT, H_EGAS, H_SGAS,
+            H_XNI, H_ETAELE, H_DETAT, H_DETAD, H_DETAA, H_DETAZ, H_XNE,
+            H_DXNET, H_DXNED, H_DXNEA, H_DXNEZ, H_PLASG, H_CP, H_DCPDD,
+            H_DCPDT, H_DCPDA, H_DCPDZ, H_CV, H_DCVDD, H_DCVDT, H_DCVDA,
+            H_DCVDZ, H_GAM1, H_DGAM1DD, H_DGAM1DT, H_DGAM1DA, H_DGAM1DZ,
+            H_GAM2, H_DGAM2DD, H_DGAM2DT, H_DGAM2DA, H_DGAM2DZ, H_GAM3,
+            H_DGAM3DD, H_DGAM3DT, H_DGAM3DA, H_DGAM3DZ, H_NABAD, H_DNABDD,
+            H_DNABDT, H_DNABDA, H_DNABDZ, H_CS, H_CHIT, H_DCHITDD, H_DCHITDT,
+            H_DCHITDA, H_DCHITDZ, H_CHID, H_DCHIDDD, H_DCHIDDT, H_DCHIDDA,
+            H_DCHIDDZ,
+        ];
+        for &slot in &h_slots {
+            assert_helm_bits(
+                &format!("helmeos2.helm_{slot}"),
+                hres[slot - 1],
+                mesa_helm_bits(
+                    "helm_pure_he_2e8_100",
+                    "out",
+                    &format!("helm_{slot}"),
+                    "val",
+                ),
+            );
+        }
+    });
+}
+
 #[test]
 fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
     let q0 = QuinticBasis1D::eval(0.0, 1.0, 1.0, 1.0, 1.0, 1.0);
@@ -201,73 +273,5 @@ fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
     let res_low_t = helmeos2(table, 100.0, 2.0, 100.0, 2.0, 4.0, 2.0, &cfg);
     assert_eq!(res_low_t, Err(exp_low_t_ierr));
 
-    with_numerics_mode(NumericsMode::Strict, || {
-        for (cid, t, r, a, z) in [
-            ("helm_pure_he_2e8_100", 2.0e8, 100.0, 4.0, 2.0),
-            ("helm_pure_h_2e8_100", 2.0e8, 100.0, 1.0, 1.0),
-        ] {
-            check_helm_case_strict(cid, t, r, a, z);
-        }
-        let batch_strict = eval_helm_eos_zones(
-            &[2.0e8, 2.0e8, 1.0e9],
-            &[100.0, 100.0, 1.0e4],
-            &[4.0, 1.0, 12.0],
-            &[2.0, 1.0, 6.0],
-        );
-        for (i, cid) in [
-            "helm_pure_he_2e8_100",
-            "helm_pure_h_2e8_100",
-            "helm_sample_eos_c12",
-        ]
-        .iter()
-        .enumerate()
-        {
-            assert_helm_bits(
-                &format!("{cid}.zones.lnPgas"),
-                batch_strict[i].res[I_LN_PGAS],
-                mesa_helm_bits(cid, "out", "res_0", "val"),
-            );
-        }
-
-        let (hres, off_table) = helmeos2(
-            table,
-            2.0e8,
-            flexmesa_math::log10(2.0e8_f64),
-            100.0,
-            2.0,
-            4.0,
-            2.0,
-            &cfg,
-        )
-        .expect("helmeos2 pure_he_2e8_100");
-        assert!(!off_table);
-        let h_slots = [
-            H_PTOT, H_DPT, H_DPD, H_DPA, H_DPZ, H_ETOT, H_DET, H_DED, H_DEA,
-            H_DEZ, H_DEDD, H_DEDT, H_DEDA, H_DEDZ, H_STOT, H_DST, H_DSD, H_DSA,
-            H_DSZ, H_DSDD, H_DSDT, H_DSDA, H_DSDZ, H_DSTT, H_DSTA, H_DSTZ,
-            H_PRAD, H_DPRADT, H_DPRADD, H_ERAD, H_SRAD, H_PGAS, H_DPGAST,
-            H_DPGASD, H_DPGASA, H_DPGASZ, H_DPGASDD, H_DPGASDT, H_EGAS, H_SGAS,
-            H_XNI, H_ETAELE, H_DETAT, H_DETAD, H_DETAA, H_DETAZ, H_XNE,
-            H_DXNET, H_DXNED, H_DXNEA, H_DXNEZ, H_PLASG, H_CP, H_DCPDD,
-            H_DCPDT, H_DCPDA, H_DCPDZ, H_CV, H_DCVDD, H_DCVDT, H_DCVDA,
-            H_DCVDZ, H_GAM1, H_DGAM1DD, H_DGAM1DT, H_DGAM1DA, H_DGAM1DZ,
-            H_GAM2, H_DGAM2DD, H_DGAM2DT, H_DGAM2DA, H_DGAM2DZ, H_GAM3,
-            H_DGAM3DD, H_DGAM3DT, H_DGAM3DA, H_DGAM3DZ, H_NABAD, H_DNABDD,
-            H_DNABDT, H_DNABDA, H_DNABDZ, H_CS, H_CHIT, H_DCHITDD, H_DCHITDT,
-            H_DCHITDA, H_DCHITDZ, H_CHID, H_DCHIDDD, H_DCHIDDT, H_DCHIDDA,
-            H_DCHIDDZ,
-        ];
-        for &slot in &h_slots {
-            assert_helm_bits(
-                &format!("helmeos2.helm_{slot}"),
-                hres[slot - 1],
-                mesa_helm_bits(
-                    "helm_pure_he_2e8_100",
-                    "out",
-                    &format!("helm_{slot}"),
-                    "val",
-                ),
-            );
-        }
-    });
+    check_helm_zones_and_helmeos2_strict(table, &cfg);
 }

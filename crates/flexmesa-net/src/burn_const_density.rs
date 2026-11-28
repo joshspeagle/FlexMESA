@@ -7,7 +7,7 @@
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog, NUM_CATEGORIES};
 use flexmesa_const::{LN10, QCONV};
-use flexmesa_eos::{eos_dt_get, EosConfig, HelmTable, I_CV, I_ETA};
+use flexmesa_eos::{eos_dt_get_with_logs, EosConfig, HelmTable, I_CV, I_ETA};
 use flexmesa_math::exp10;
 use flexmesa_rates::ScreeningMode;
 use flexmesa_utils::is_bad;
@@ -146,8 +146,20 @@ pub fn burn_1_zone_const_density(
             get_composition_info(nuclides, &g.chem_id, &buf.x_buf, false)
                 .map_err(|e| NetError::IntegrationError(e.to_string()))?;
 
-        let eos = eos_dt_get(ht, rho, temp, &g.chem_id, &buf.x_buf, eos_cfg)
-            .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+        // `get_eos_info_for_burn_at_const_density(..., Rho, lgRho, T, lgT, ...)`
+        // (`net_burn_const_density.f90:398-401`): `lgRho` is the input and
+        // `lgT = y(nvar)/ln10`, so `eosDT_get` gets them as given.
+        let eos = eos_dt_get_with_logs(
+            ht,
+            rho,
+            lg_rho,
+            temp,
+            lg_t,
+            &g.chem_id,
+            &buf.x_buf,
+            eos_cfg,
+        )
+        .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         let cv = eos.res[I_CV];
         if cv <= 0.0 || is_bad(cv) {
             return Err(NetError::IntegrationError(format!(
@@ -382,7 +394,64 @@ mod tests {
         assert!(f_differs && dfdy_differs);
     }
 
-    use flexmesa_eos::I_LN_E;
+    #[test]
+    fn test_eos_dt_get_with_logs_takes_the_supplied_logs() {
+        // `eosDT_get(..., Rho, logRho, T, logT, ...)` is handed `lgRho` and
+        // `lgT = y(nvar)/ln10` (`net_burn_const_density.f90:398-401`).
+        let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
+        let ht = HelmTable::builtin().expect("builtin HELM table");
+        let eos_cfg = EosConfig::default();
+        let species = g.num_isos;
+        let xa = vec![1.0 / f64::from(u32::try_from(species).unwrap()); species];
+        let mut any_log_dependence = false;
+        for (lg_rho, lg_t) in [(4.0, 8.5), (2.0, 6.0), (0.5, 5.0), (7.0, 9.0)]
+        {
+            let rho = exp10(lg_rho);
+            let t = exp10(lg_t);
+            let base = eos_dt_get(ht, rho, t, &g.chem_id, &xa, &eos_cfg)
+                .expect("eos_dt_get");
+            let same = eos_dt_get_with_logs(
+                ht,
+                rho,
+                flexmesa_math::log10(rho),
+                t,
+                flexmesa_math::log10(t),
+                &g.chem_id,
+                &xa,
+                &eos_cfg,
+            )
+            .expect("with logs");
+            for (a, b) in base.res.iter().zip(same.res.iter()) {
+                assert_eq!(a.to_bits(), b.to_bits());
+            }
+            // The logs only enter through the blend weights, so a small shift
+            // is invisible inside a single-EOS region; move far across one.
+            for shift in [-3.0, 3.0] {
+                let shifted = eos_dt_get_with_logs(
+                    ht,
+                    rho,
+                    lg_rho + shift,
+                    t,
+                    lg_t + shift,
+                    &g.chem_id,
+                    &xa,
+                    &eos_cfg,
+                );
+                any_log_dependence |= shifted.map_or(true, |o| {
+                    base.res
+                        .iter()
+                        .zip(o.res.iter())
+                        .any(|(a, b)| a.to_bits() != b.to_bits())
+                });
+            }
+        }
+        assert!(
+            any_log_dependence,
+            "eosDT_get must depend on the supplied logRho/logT"
+        );
+    }
+
+    use flexmesa_eos::{eos_dt_get, I_LN_E};
 
     use super::*;
     use crate::{Quad, NUM_RVS};
@@ -499,8 +568,17 @@ mod tests {
             let comp =
                 get_composition_info(nuclides, &g.chem_id, &x_cur, false)
                     .unwrap();
-            let eos = eos_dt_get(ht, rho, temp, &g.chem_id, &x_cur, &eos_cfg)
-                .unwrap();
+            let eos = eos_dt_get_with_logs(
+                ht,
+                rho,
+                lg_rho,
+                temp,
+                lg_t,
+                &g.chem_id,
+                &x_cur,
+                &eos_cfg,
+            )
+            .unwrap();
             let (abar, zbar, z2bar, ye, cv, eta, d_eta_dlnt) = freeze_comp
                 .unwrap_or((
                     comp.abar,

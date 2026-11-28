@@ -1,6 +1,6 @@
 # Coming from Fortran MESA
 
-If you have an existing workflow built around upstream Fortran MESA (release `26.4.1`), `FlexMESA` aims for `v0.1.0` compatibility with MESA's physical equations, control names, ASCII `.mod` files, and pulsation structure exports (`GYRE`, `FGONG`, `OSC`), replacing Fortran namelist executables and X11 `PGSTAR` windows with a Safe Rust and Python/JAX library. At baseline (`13.9%` of core `star`/`binary`/`astero` lines ported unverified and `0 / 106` test-suite cases passing against MESA `26.4.1`; see [Port Coverage Map](../benchmarks/coverage-map.md) and [Declared Known Gaps](../benchmarks/known-gaps.md)), full trajectory parity and control completeness remain under active development (`#140`). This guide maps upstream concepts onto the current library surface.
+If you have an existing workflow built around upstream Fortran MESA (release `26.4.1`), `FlexMESA` aims for `v0.1.0` compatibility with MESA's physical equations, control names, ASCII `.mod` files, and pulsation structure exports (`GYRE`, `FGONG`, `OSC`), replacing Fortran namelist executables and X11 `PGSTAR` windows with a Safe Rust and Python/JAX library. Current port status is generated in the [Port Coverage Map](../benchmarks/coverage-map.md), [Declared Known Gaps](../benchmarks/known-gaps.md), `notes/audit/case_table.md` (acceptance cases) and `notes/audit/routine_table.md` (routine-level mapping); trajectory agreement with MESA `26.4.1` and control coverage remain under active development (`#140`). This guide maps upstream concepts onto the current library surface.
 
 ---
 
@@ -63,10 +63,10 @@ print(validated)
 | `mesh_delta_coeff`, `varcontrol_target` | `model.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)` |
 | `overshoot_scheme`, `overshoot_f`, `overshoot_f0` | `model.update_mixing(dt, overshoot_f=..., overshoot_f0=..., scheme="exponential")` |
 | `cool_wind_RGB_scheme`, `hot_wind_scheme`, `Dutch_scaling_factor` | `model.apply_wind_and_adjust_mass(scheme="Dutch", eta=1.0, dt=dt)` |
-| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(kernel-verified against MESA `26.4.1` in `#156`; `op_mono` radlev fails loudly pending C10)* |
+| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(ported from MESA `26.4.1` in `#156`, with routine-level evidence in `notes/audit/routine_table.md`; `op_mono` radlev fails loudly pending C10)* |
 | `do_conv_premix = .true.` | `model.do_conv_premix(max_iters=10, avoid_fuel_increase=True)` *(partial/unverified; `#155`)* |
 | `predictive_mix = .true.` | `model.add_predictive_mixing(ingested_mass_limit_coeff=0.1, superad_thresh=0.005)` *(partial/unverified; `#155`)* |
-| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` *(kernel-verified against MESA `26.4.1` Blouin `'CO'`/`'ONe'` in `#156`)* |
+| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` *(ported from MESA `26.4.1` Blouin `'CO'`/`'ONe'` in `#156`, with routine-level evidence in `notes/audit/routine_table.md`)* |
 | **`&binary_controls`** | |
 | `m1`, `m2`, `initial_period_in_days`, `initial_eccentricity` | `BinarySystem.from_point_mass(donor, companion_mass_msun=..., initial_period_days=..., eccentricity=...)` or `BinarySystem.from_two_stars(donor, accretor, initial_period_days=...)` |
 | `mdot_scheme = 'Ritter'` / `'Kolb'` | `binary.eval_ritter_mdot_thin`, `binary.eval_kolb_mdot_thick`, `binary.solve_roche_lobe_mdot_jax` |

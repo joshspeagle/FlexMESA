@@ -1252,11 +1252,10 @@ fn extract_burn_eps(
 /// `conv_vel`, and `mixing_type` (`add_RTI_turbulence` in
 /// `star/private/mix_info.f90:2373-2436`).
 ///
-/// Uses the upstream `controls.defaults:3127-3128, 8596-8597` defaults for the
-/// mass taper and floor (`max_M_RTI_factors_full_on = 1e99`,
-/// `min_M_RTI_factors_full_off = 1e99`, `RTI_D_mix_floor = 0`,
-/// `RTI_min_m_for_D_mix_floor = 0`); inlists setting non-default values for
-/// those controls fail loudly during strict validation.
+/// Reads `RTI_D_mix_floor` from the controls. The mass taper and the floor's
+/// lower mass use the upstream `controls.defaults:3127-3128, 8597` defaults
+/// (`max_M_RTI_factors_full_on = 1e99`, `min_M_RTI_factors_full_off = 1e99`,
+/// `RTI_min_m_for_D_mix_floor = 0`); those three are not yet controls.
 fn add_rti_turbulence(model: &mut StarModel) -> Result<(), StarError> {
     if !model.controls.rti_flag {
         return Ok(());
@@ -1278,6 +1277,11 @@ fn add_rti_turbulence(model: &mut StarModel) -> Result<(), StarError> {
             return Err(StarError::MicrophysicsError(format!(
                 "add_rti_turbulence: non-finite eta_RTI at face {k}: {d}"
             )));
+        }
+        // `if (D < s% RTI_D_mix_floor .and. s% m(k) >= min_m)`
+        // (`mix_info.f90:2412-2413`) with `min_m = 0`.
+        if d < model.controls.rti_d_mix_floor && model.m[k] >= 0.0 {
+            d = model.controls.rti_d_mix_floor;
         }
         if d > model.d_mix[k] {
             model.mixing_type[k] = MixingType::RayleighTaylorMixing;

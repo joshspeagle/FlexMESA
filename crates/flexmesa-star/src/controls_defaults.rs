@@ -210,6 +210,7 @@ impl Default for StarControls {
             use_other_kap: false,
             use_other_surface_pt: false,
             use_other_overshooting_scheme: false,
+            use_other_momentum: false,
             use_other_momentum_implicit: false,
             x_ctrl: vec![0.0; 100],
             x_integer_ctrl: vec![0; 100],

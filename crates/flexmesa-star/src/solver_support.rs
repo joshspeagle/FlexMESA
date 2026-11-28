@@ -277,6 +277,7 @@ pub fn set_vars_for_solver(
     model.aux.dxh_lnr.resize(nz, 0.0);
     model.aux.dxh_lnd.resize(nz, 0.0);
     model.aux.dxh_lnt.resize(nz, 0.0);
+    model.aux.dxh_v.resize(nz, 0.0);
     let i_lnd = model.layout.i_lnd;
     let i_lnt = model.layout.i_lnt;
     let i_lnr = model.layout.i_lnr;
@@ -386,6 +387,9 @@ pub fn set_vars_for_solver(
                 )));
             }
             model.v[k] = v_k;
+            // `s% dxh_v(k) = s% solver_dx(i_v,k)`
+            // (`star/private/solver_support.f90:1232`).
+            model.aux.dxh_v[k] = solver_dx[s_base + iv];
         }
         if let Some(iu) = i_u {
             let u_k = model.xh[h_base + iu];

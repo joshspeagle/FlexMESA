@@ -48,14 +48,19 @@ fn build_solar_test_model(v_flag: bool) -> StarModel {
     model
 }
 
-/// Sets `dxh_lnd` and `dxh_lnT` to `lnd - lnd_start` and `lnT - lnT_start`,
-/// standing in for the accumulated Newton corrections that
-/// `set_vars_for_solver` stores (`star/private/solver_support.f90:1142,
-/// 1328`) when a test moves `lnd` or `lnT` directly.
+/// Sets `dxh_lnd`, `dxh_lnT`, and `dxh_v` to `lnd - lnd_start`,
+/// `lnT - lnT_start`, and `v - v_start`, standing in for the accumulated
+/// Newton corrections that `set_vars_for_solver` stores
+/// (`star/private/solver_support.f90:1142, 1232, 1328`) when a test moves
+/// state vectors directly.
 fn sync_dxh_with_start(model: &mut StarModel) {
+    model.aux.dxh_v.resize(model.nz, 0.0);
     for k in 0..model.nz {
         model.aux.dxh_lnd[k] = model.lnd[k] - model.lnd_start[k];
         model.aux.dxh_lnt[k] = model.ln_t[k] - model.ln_t_start[k];
+        if k < model.v.len() && k < model.v_start.len() {
+            model.aux.dxh_v[k] = model.v[k] - model.v_start[k];
+        }
     }
 }
 
@@ -330,6 +335,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     model.controls.use_mass_corrections = true;
     model.aux.mass_correction[k] = 1.002;
     model.aux.mass_correction[k - 1] = 1.001;
+    model.controls.use_other_momentum = true;
     model.aux.extra_grav[k] = StarAdOrder1::constant(-1.0e2);
     model.aux.uq_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(25.0, 2.0, -1.0);
     model.controls.drag_coefficient = 0.15;
@@ -358,13 +364,17 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
 
     let eps = 1.0e-3;
     let v_orig = model.v[k];
+    let dxh_v_orig = model.aux.dxh_v[k];
     model.v[k] = v_orig + eps;
+    model.aux.dxh_v[k] = dxh_v_orig + eps;
     let mut sys_p = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys_p);
     model.v[k] = v_orig - eps;
+    model.aux.dxh_v[k] = dxh_v_orig - eps;
     let mut sys_m = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys_m);
     model.v[k] = v_orig;
+    model.aux.dxh_v[k] = dxh_v_orig;
     let fd_dv =
         (sys_p.equ[k * nvar + i_dv] - sys_m.equ[k * nvar + i_dv]) / (2.0 * eps);
     assert!((analytic_dv - fd_dv).abs() / fd_dv.abs().max(1.0e-12) < 1.0e-6);

@@ -478,6 +478,8 @@ pub struct StarControls {
     pub use_other_surface_pt: bool,
     /// Enable custom `other_overshooting` hook (`use_other_overshooting`).
     pub use_other_overshooting_scheme: bool,
+    /// Enable custom `other_momentum` hook (`use_other_momentum`).
+    pub use_other_momentum: bool,
     /// Enable custom `other_momentum_implicit` hook (`use_other_momentum_implicit`).
     pub use_other_momentum_implicit: bool,
     /// User floating-point control vector `x_ctrl(1..=100)` (0-based `0..100`).

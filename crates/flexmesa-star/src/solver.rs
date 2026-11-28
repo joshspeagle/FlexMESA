@@ -560,14 +560,16 @@ pub fn solve_henyey_step(
 
     model.pack_xh();
     // The variables were set from `xh` before the solve (`unpack_xh`), which
-    // zeroes `dxh_lnd`, `dxh_lnT` and `dxh_lnR`
-    // (`star/private/hydro_vars.f90:296-313`).
+    // zeroes `dxh_lnd`, `dxh_lnT`, `dxh_lnR`, and `dxh_v`
+    // (`star/private/hydro_vars.f90:296-334`).
     model.aux.dxh_lnr.clear();
     model.aux.dxh_lnr.resize(nz, 0.0);
     model.aux.dxh_lnd.clear();
     model.aux.dxh_lnd.resize(nz, 0.0);
     model.aux.dxh_lnt.clear();
     model.aux.dxh_lnt.resize(nz, 0.0);
+    model.aux.dxh_v.clear();
+    model.aux.dxh_v.resize(nz, 0.0);
     let xh_start_buf = build_xh_start_buffer(model);
     let mut solver_dx = vec![0.0_f64; nz * nvar];
     for k in 0..nz {

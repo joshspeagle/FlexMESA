@@ -258,10 +258,18 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
     model
 }
 
+fn sync_rsp2_dxh_v(model: &mut StarModel) {
+    model.aux.dxh_v.resize(model.nz, 0.0);
+    for k in 0..model.nz {
+        model.aux.dxh_v[k] = model.v[k] - model.v_start[k];
+    }
+}
+
 #[test]
 fn test_rsp2_24slot_analytical_jacobian_matches_finite_differences() {
     let mut model = build_rsp2_jacobian_test_model();
     let nz = model.nz;
+    sync_rsp2_dxh_v(&mut model);
     let base_sys = eval_henyey_equations(&mut model, false).expect("base_sys");
     let nvar = base_sys.nvar;
     assert_eq!(nvar, 7);
@@ -293,12 +301,14 @@ fn test_rsp2_24slot_analytical_jacobian_matches_finite_differences() {
                 model.xh.clone_from(&xh_0);
                 model.xh[flat_idx] += dx;
                 model.unpack_xh();
+                sync_rsp2_dxh_v(&mut model);
                 let sys_hi =
                     eval_henyey_equations(&mut model, false).expect("sys_hi");
 
                 model.xh.clone_from(&xh_0);
                 model.xh[flat_idx] -= dx;
                 model.unpack_xh();
+                sync_rsp2_dxh_v(&mut model);
                 let sys_lo =
                     eval_henyey_equations(&mut model, false).expect("sys_lo");
 

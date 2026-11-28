@@ -681,6 +681,12 @@ pub struct HydroAuxState {
     /// `star/private/solver_support.f90:1142`); zero after `unpack_xh`
     /// (`star/private/hydro_vars.f90:307`). Length `nz`.
     pub dxh_lnt: Vec<f64>,
+    /// Newton change of face velocity `v` this step, `solver_dx(i_v, k)` as
+    /// `set_vars_for_solver` stores it (`dxh_v`,
+    /// `star/private/solver_support.f90:1232`); zero after `unpack_xh`
+    /// (`star/private/hydro_vars.f90:334`). Length `nz`.
+    #[serde(default)]
+    pub dxh_v: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
@@ -950,6 +956,7 @@ impl HydroAuxState {
             dxh_lnr: vec![0.0; nz],
             dxh_lnd: vec![0.0; nz],
             dxh_lnt: vec![0.0; nz],
+            dxh_v: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
             have_j_rot: false,
@@ -1069,6 +1076,7 @@ impl HydroAuxState {
             &mut self.et_rsp_old,
             &mut self.hp_face_old,
             &mut self.csound_start,
+            &mut self.dxh_v,
             &mut self.mlt_vc_old,
             &mut self.eta_rti,
             &mut self.etamid_rti,

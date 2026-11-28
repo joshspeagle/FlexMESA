@@ -424,6 +424,9 @@ impl StarModel {
     pub fn unpack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         let w_fix = self.controls.rsp2.w_fix_if_neg;
+        if self.layout.i_v.is_some() && self.aux.dxh_v.len() != self.nz {
+            self.aux.dxh_v.resize(self.nz, 0.0);
+        }
         for k in 0..self.nz {
             let base = k * nvar;
             self.lnd[k] = self.xh[base + self.layout.i_lnd];
@@ -432,6 +435,7 @@ impl StarModel {
             self.lum[k] = self.xh[base + self.layout.i_lum];
             if let Some(iv) = self.layout.i_v {
                 self.v[k] = self.xh[base + iv];
+                self.aux.dxh_v[k] = 0.0;
             }
             if let Some(iu) = self.layout.i_u {
                 self.u[k] = self.xh[base + iu];

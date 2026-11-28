@@ -1877,6 +1877,7 @@ pub const CONTROLS_UNUSED: &[&str] = &[
     "use_other_energy",
     "use_other_eps_grav",
     "use_other_kap",
+    "use_other_momentum",
     "use_other_momentum_implicit",
     "use_other_neu",
     "use_other_surface_pt",

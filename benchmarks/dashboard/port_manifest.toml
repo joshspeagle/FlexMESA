@@ -6183,7 +6183,41 @@ upstream_lines = 2300
 upstream_sha256 = "a1bd6eca9e9a9ee38a308250a08c3e152ab3b30d426876ad26474fa80fcc2d1f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["alloc_net_general_info", "do_read_net_file", "do_read_net_file::error", "do_read_net_file::do_isos", "do_read_net_file::do_reactions", "do_read_net_file::do_basic_reactions_for_isos", "do_read_net_file::do1_iso", "do_read_net_file::do_basic_reactions_for_iso", "do_read_net_file::add_this_reaction", "do_read_net_file::add_reaction_for_this_handle", "do_read_net_file::add_this_reaclib_forward_reaction", "do_read_net_file::add_this_reaclib_reverse_reaction", "do_read_net_file::add_basic_reaction", "add_net_iso", "remove_net_iso", "remove_reactions_for_iso", "add_net_reaction", "remove_net_reaction", "finish_net_def", "finish_net_def::do_set_approx21", "setup_iso_info", "setup_reaction_info", "check_for_hardwired_pairs", "check_pair", "set_reaction_kinds"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"alloc_net_general_info" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: builds the rate tables only (init_screening_tables is called from from_parsed_with_rate_overrides); no cache_suffix or on-disk cache, a process-wide Arc cache instead; rates make_rate_tables not compared
+"set_reaction_max_Z" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides"
+"set_reaction_max_Z::update_max_Z" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides"
+"do_read_net_file" = "crates/flexmesa-net/src/parser.rs::read_net_file_with_depth" # partial: al26 checks run once after the top-level file, not after each include; adds a 32-level include depth guard; search order is search_dir, search_dir/nets, then the embedded bundle (#734)
+"do_read_net_file::error" = "crates/flexmesa-net/src/parser.rs::read_net_file_with_depth" # partial: errors come back as NetError::ParseError without the message text or file close
+"do_read_net_file::do_approx21" = "crates/flexmesa-net/src/parser.rs::do_approx21"
+"do_read_net_file::do_isos" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: range branch always applies the add/remove instead of only when net_iso(id) == 0 (#734)
+"do_read_net_file::do_reactions" = "crates/flexmesa-net/src/parser.rs::do_reactions" # partial: removing an unknown or absent reaction is ignored where upstream sets ierr = -1; an unknown add errors immediately rather than after the loop (#734)
+"do_read_net_file::do_basic_reactions_for_isos" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: merged into do_isos with add_rxns = true; same element-range and single-iso paths
+"do_read_net_file::do1_iso" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: inlined: apply_iso then do_basic_reactions_for_iso
+"do_read_net_file::do_basic_reactions_for_iso" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso" # partial: pair conditions and order match and the 51-row special-case table is identical; reverse pairs are recorded only when both reactions are added and add failures are swallowed (#734)
+"do_read_net_file::get_iso_id" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
+"do_read_net_file::add_this_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: one synthesize_reaction_info lookup replaces the forward/reverse/handle three-stage search; failure returns Err where upstream stops; rates reaclib lookups not compared
+"do_read_net_file::add_reaction_for_this_handle" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates add_reaction_for_handle not compared
+"do_read_net_file::add_this_reaclib_forward_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates reaclib_lookup not compared
+"do_read_net_file::add_this_reaclib_reverse_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates reverse_dict not compared
+"do_read_net_file::add_basic_reaction" = "crates/flexmesa-net/src/parser.rs::try_pair" # partial: forward and reverse names are added independently with errors swallowed; no skip_warnings_dict; reaclib reverse lookup is inside synthesize_reaction_info
+"add_net_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: no net_has_been_defined or range checks
+"remove_net_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: no net_has_been_defined or range checks; removes reactions that use the isotope as remove_reactions_for_iso does
+"remove_reactions_for_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: inlined retain over active_reactions on input and output isotopes
+"add_net_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: no net_has_been_defined or id-range checks; id comes from synthesize_reaction_info
+"remove_net_reaction" = "crates/flexmesa-net/src/parser.rs::do_reactions" # partial: inlined as active_reactions.remove inside do_reactions
+"finish_net_def" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: ordering, kinds and per-isotope tables built in one function; mark_approx21 runs at parse end and set_approx21 is Approx21Indices::from_net at use time; no reaction_names_dict hash (#734)
+"finish_net_def::do_mark_approx21" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"finish_net_def::do_set_approx21" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: index setup is lazy at each evaluation and never errors (#734)
+"setup_iso_info" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: no error for an empty isotope set (#734)
+"setup_reaction_info" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: name-sorted order, kind grouping and forward/reverse adjacency match; no mesa_error for a missing reverse id; reverse lookup is net-local (#734)
+"check_for_hardwired_pairs" = "crates/flexmesa-net/src/initialize.rs::build_reverse_id_map" # partial: pairs are the same 29 distinct pairs but kept only if both are in the net and are exact stoichiometric reverses; upstream sets a global reverse_reaction_id unconditionally (#734)
+"check_pair" = "crates/flexmesa-net/src/initialize.rs::build_reverse_id_map" # partial: try_insert adds the net-membership and stoichiometry tests (#734)
+"set_reaction_kinds" = "crates/flexmesa-net/src/initialize.rs::classify_reaclib_kinds" # partial: branch-for-branch match; the reverse partner comes from the net-local map and reverse_id stays 0 when it is not in the net (#734)
+"init_special_case_reaction_info" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
+"init_special_case_reaction_info::set" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
 
 [[files]]
 upstream_path = "net/private/net_screen.f90"

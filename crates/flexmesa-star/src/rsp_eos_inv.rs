@@ -301,7 +301,7 @@ pub fn set_t_for_new_energy(
 /// # Errors
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is set without an
 /// `other_kap` hook (`rsp_eval_eos_and_kap.f90:818`, `atm_support.f90:138,1263`,
-/// `kap_support.f90:481-487`), or [`StarError::MicrophysicsError`] if the
+/// `star/private/kap_support.f90:481-487`), or [`StarError::MicrophysicsError`] if the
 /// boundary atmosphere solver fails.
 pub fn get_surf_p_t_kap(
     model: &StarModel,

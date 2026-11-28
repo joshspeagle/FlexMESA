@@ -1149,7 +1149,7 @@ mod tests {
         assert!(err_irr.to_string().contains("use_other_kap"), "{err_irr}");
 
         // `use_simple_es_for_kap` precedes `use_other_kap`
-        // (`kap_support.f90:302-307`).
+        // (`star/private/kap_support.f90:302-307`).
         model.controls.atm_option = AtmOption::TTau;
         model.controls.atm_t_tau_opacity = AtmTTauOpacity::Iterated;
         model.controls.use_simple_es_for_kap = true;

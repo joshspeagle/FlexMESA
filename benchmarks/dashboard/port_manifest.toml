@@ -5492,7 +5492,17 @@ upstream_lines = 608
 upstream_sha256 = "4704f516b5af1dfaa020a735e3596302c4fa0fb56b4ab44b2d777f676d36ff71"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kap_aesopus_init", "read_kap_aesopus_tables", "AESOPUS_interp_fixedZref::clipped_linear_weights", "AESOPUS_get"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kap_aesopus_init" = "crates/flexmesa-kap/src/aesopus_h5.rs::resolve_aesopus_data" # partial: resolves and caches the table per file name; there is no module-level kap_aesopus_is_initialized flag
+"read_kap_aesopus_tables" = "crates/flexmesa-kap/src/aesopus_h5.rs::resolve_aesopus_data+load_aesopus_hdf5_bytes" # partial: pure-Rust HDF5 reader with extra shape, finiteness and strictly-increasing-grid checks; bicubic splines are fitted lazily per sub-table (loader.rs AesopusSlice::spline_data) instead of eagerly at read; bundled-table fast path for the default file; no show_info output
+"AESOPUS_interp" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp"
+"outside_R_and_T_bounds" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp"
+"AESOPUS_interp_fixedZref" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp_fixed_zref"
+"AESOPUS_interp_fixedZref::clipped_linear_weights" = "crates/flexmesa-kap/src/low_t.rs::clipped_linear_weights" # partial: adds unwrap_or(0) and min(len - 2) guards on the binary_search result that upstream lacks (unreached for finite val)
+"AESOPUS_interp_RT" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp_rt+eval_evbicub_kap"
+"AESOPUS_get" = "crates/flexmesa-kap/src/low_t.rs::aesopus_get+aesopus_get_with_data" # partial: returns Err on ierr /= 0 instead of the kap = -1, zero-derivative sentinel with ierr
 
 [[files]]
 upstream_path = "kap/private/kap_ctrls_io.f90"

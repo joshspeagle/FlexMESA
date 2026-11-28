@@ -107,6 +107,7 @@ pub fn op_split_burn_zones(
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
     let max_abs_eps_nuc = model.controls.max_abs_eps_nuc;
+    let tau_gamma = crate::micro_net::nonlocal_nico_tau_gamma(model);
     let screening_mode = model.controls.screening_mode;
     let use_3a_fl87 = model.job.use_3a_fl87;
     let use_suzuki = model.job.use_suzuki_weak_rates;
@@ -306,6 +307,7 @@ pub fn op_split_burn_zones(
                 eps_nuc_factor,
                 dxdt_nuc_factor,
                 max_abs_eps_nuc,
+                tau_gamma.get(k).copied(),
             )?;
 
             Ok(SplitZoneOutcome {

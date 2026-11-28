@@ -90,6 +90,37 @@ pub(crate) fn scale_eps_nuc_categories(
     cats
 }
 
+/// `tau_gamma` of every zone for the non-local Ni/Co heating attenuation
+/// (`star/private/net.f90:301-309`), or empty when it is off
+/// (`nonlocal_NiCo_kap_gamma <= 0` or `nonlocal_NiCo_decay_heat`). Upstream
+/// sums `dm(kk)/(pi4*rmid(kk)*rmid(kk))` over `kk = 1..k` from zero for each
+/// zone and then multiplies by `nonlocal_NiCo_kap_gamma`; a running sum adds
+/// the same terms in the same order. Zones that do not burn (split burning,
+/// `max_abar_for_burning`) still contribute to the sum.
+#[must_use]
+pub(crate) fn nonlocal_nico_tau_gamma(model: &StarModel) -> Vec<f64> {
+    let kap_gamma = model.controls.nonlocal_nico_kap_gamma;
+    let active = kap_gamma > 0.0 && !model.controls.nonlocal_nico_decay_heat;
+    if !active {
+        return Vec::new();
+    }
+    let mut acc = 0.0_f64;
+    (0..model.nz)
+        .map(|kk| {
+            acc += model.dm[kk] / (FOUR_PI * model.rmid[kk] * model.rmid[kk]);
+            acc * kap_gamma
+        })
+        .collect()
+}
+
+/// `eps_nuc(k)*(1d0 - exp(-tau_gamma))` (`star/private/net.f90:308`),
+/// applied before the `max_abs_eps_nuc` clamp (`:311-316`).
+#[must_use]
+#[inline]
+fn attenuate_nonlocal_nico(eps_nuc: f64, tau_gamma: f64) -> f64 {
+    eps_nuc * (1.0 - flexmesa_math::exp(-tau_gamma))
+}
+
 /// Evaluates `do1_net(..., do_jac = .false.)` on a single zone to populate
 /// post-burn `eps_nuc_categories` (`star/private/struct_burn_mix.f90:1112` and
 /// `star/private/net.f90:180-372`).
@@ -119,6 +150,7 @@ pub(crate) fn eval_zone_eps_nuc_categories(
     eps_fac: f64,
     dxdt_fac: f64,
     max_abs_eps_nuc: f64,
+    tau_gamma: Option<f64>,
 ) -> Result<[f64; NUM_CATEGORIES], StarError> {
     if (eps_fac == 0.0 && dxdt_fac == 0.0) || abar > max_abar {
         return Ok([0.0; NUM_CATEGORIES]);
@@ -176,10 +208,16 @@ pub(crate) fn eval_zone_eps_nuc_categories(
                 "do1_net: non-finite eps_nuc ({raw_eps}) at zone {zone}"
             )));
         }
-        let eps_val = if raw_eps.abs() > max_abs_eps_nuc {
-            max_abs_eps_nuc.copysign(raw_eps)
+        // `star/private/net.f90:301-316`: non-local Ni/Co attenuation, then
+        // the `max_abs_eps_nuc` clamp.
+        let eps_att = match tau_gamma {
+            Some(tau) => attenuate_nonlocal_nico(raw_eps, tau),
+            None => raw_eps,
+        };
+        let eps_val = if eps_att.abs() > max_abs_eps_nuc {
+            max_abs_eps_nuc.copysign(eps_att)
         } else {
-            raw_eps
+            eps_att
         };
         let raw_cats = if net_info.doing_approx21 {
             &w.direct_eps_nuc_categories
@@ -340,25 +378,7 @@ fn do_net_inner(
         .map(|&cid| catalog.get_by_id(cid).map_or(1.0, |n| n.z_plus_n as f64))
         .collect();
 
-    // `star/private/net.f90:301-309`: with `nonlocal_NiCo_kap_gamma > 0` and
-    // no non-local decay heat, `eps_nuc(k)` is scaled by `1 - exp(-tau)`,
-    // where `tau` accumulates `dm/(4 pi rmid^2)` over zones `1..k` and is then
-    // multiplied by the gamma-ray opacity. Zones skipped by split burning or
-    // `max_abar_for_burning` still contribute to the running sum.
-    let kap_gamma = model.controls.nonlocal_nico_kap_gamma;
-    let tau_gamma: Vec<f64> =
-        if kap_gamma > 0.0 && !model.controls.nonlocal_nico_decay_heat {
-            let mut acc = 0.0_f64;
-            (0..nz)
-                .map(|kk| {
-                    acc += model.dm[kk]
-                        / (FOUR_PI * model.rmid[kk] * model.rmid[kk]);
-                    acc * kap_gamma
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+    let tau_gamma = nonlocal_nico_tau_gamma(model);
 
     let t_slice = &model.t;
     let lnt_slice = &model.ln_t;
@@ -508,7 +528,7 @@ fn do_net_inner(
                     // and renormalize `eps_nuc_categories` before `eps_nuc_factor`.
                     let mut eps_val = raw_eps;
                     if !tau_gamma.is_empty() {
-                        eps_val *= 1.0 - flexmesa_math::exp(-tau_gamma[k]);
+                        eps_val = attenuate_nonlocal_nico(eps_val, tau_gamma[k]);
                     }
                     let mut deps_drho = raw_deps_drho;
                     let mut deps_dt = if clipped_t { 0.0 } else { raw_deps_dt };
@@ -688,6 +708,7 @@ mod tests {
             model.controls.eps_nuc_factor,
             model.controls.dxdt_nuc_factor,
             model.controls.max_abs_eps_nuc,
+            None,
         )
         .expect("eval_zone_eps_nuc_categories");
         for c in 0..NUM_CATEGORIES {
@@ -774,6 +795,7 @@ mod tests {
             model.controls.eps_nuc_factor,
             model.controls.dxdt_nuc_factor,
             model.controls.max_abs_eps_nuc,
+            None,
         )
         .expect("eval_zone_eps_nuc_categories");
         let total: f64 = zone_cats.iter().map(|c| c.abs()).sum();
@@ -798,11 +820,10 @@ mod tests {
         }
     }
 
-    /// `nonlocal_NiCo_kap_gamma > 0` scales `eps_nuc` by `1 - exp(-tau)` with
-    /// `tau = kap * dm / (4 pi rmid^2)` for a single zone
-    /// (`star/private/net.f90:301-309`).
-    #[test]
-    fn test_nonlocal_nico_kap_gamma_attenuates_eps_nuc() {
+    /// Three `basic.net` zones for the non-local Ni/Co tests: zones 0 and 2
+    /// burn hydrogen at the same `(rho, T)`, zone 1 is carbon/oxygen with
+    /// `abar > max_abar_for_burning = 5`, so `do1_net` skips it.
+    fn nonlocal_nico_three_zone_model() -> (StarModel, NetGeneralInfo) {
         let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
         let cat = NuclideCatalog::builtin_ref();
         let job = StarJobControls {
@@ -812,49 +833,197 @@ mod tests {
         let ctrls = StarControls {
             initial_z: 0.02,
             zbase: 0.02,
+            max_abar_for_burning: 5.0,
             ..Default::default()
         };
-        let mut model = StarModel::new(1, g.chem_id.clone(), job, ctrls);
+        let nz = 3;
+        let mut model = StarModel::new(nz, g.chem_id.clone(), job, ctrls);
         model.eos_config = EosConfig::default();
-        model.lnd[0] = 2.0 * LN10;
-        model.ln_t[0] = 7.4 * LN10;
-        model.ln_r[0] = 20.0;
-        model.dq[0] = 1.0;
         model.mstar = 1.988_409_870_698_051e33;
         model.xmstar = model.mstar;
-        model.dm[0] = model.mstar;
-        model.xa.fill(1.0e-20);
-        for (iso, val) in [("h1", 0.70), ("he4", 0.28), ("c12", 0.02)] {
-            let p = g
-                .chem_id
+        let sp = model.species;
+        let pos = |iso: &str| {
+            g.chem_id
                 .iter()
                 .position(|&c| cat.get_by_id(c).is_some_and(|n| n.name == iso))
-                .expect("iso in basic.net");
-            model.xa[p] = val;
+                .expect("iso in basic.net")
+        };
+        model.xa.fill(1.0e-20);
+        for k in 0..nz {
+            model.lnd[k] = 2.0 * LN10;
+            model.ln_t[k] = 7.4 * LN10;
+            model.ln_r[k] = 21.0 - 0.5 * (k as f64);
+            let mix: &[(&str, f64)] = if k == 1 {
+                &[("c12", 0.5), ("o16", 0.5)]
+            } else {
+                &[("h1", 0.70), ("he4", 0.28), ("c12", 0.02)]
+            };
+            for &(iso, val) in mix {
+                model.xa[k * sp + pos(iso)] = val;
+            }
+            let s: f64 = model.xa[k * sp..(k + 1) * sp].iter().sum();
+            for v in &mut model.xa[k * sp..(k + 1) * sp] {
+                *v /= s;
+            }
         }
-        let s: f64 = model.xa.iter().sum();
-        for v in &mut model.xa {
-            *v /= s;
-        }
+        model.dq.copy_from_slice(&[0.2, 0.3, 0.5]);
         set_basic_vars(&mut model).expect("set_basic_vars");
         do_eos(&mut model).expect("do_eos");
-        model.rmid[0] = 1.0e10;
-        let net_info = resolve_model_net(&model).expect("resolve_model_net");
-        do_net(&mut model, &net_info, false).expect("do_net");
-        let eps_plain = model.eps_nuc[0];
-        assert!(eps_plain != 0.0);
+        // Set the geometry `tau_gamma` reads after the setup routines.
+        model.dm.copy_from_slice(&[1.0e30, 2.0e30, 3.0e30]);
+        model.rmid.copy_from_slice(&[1.0e10, 8.0e9, 5.0e9]);
+        (model, g)
+    }
 
-        let kap = 1.0e-30;
+    /// `nonlocal_NiCo_kap_gamma > 0` without `nonlocal_NiCo_decay_heat`
+    /// scales `eps_nuc(k)` by `1 - exp(-tau_gamma)`, `tau_gamma` summing
+    /// `dm(kk)/(pi4*rmid(kk)*rmid(kk))` from the surface to zone `k`,
+    /// skipped zones included, times `nonlocal_NiCo_kap_gamma`
+    /// (`star/private/net.f90:301-309`). Order-unity `tau_gamma`.
+    #[test]
+    fn test_nonlocal_nico_kap_gamma_attenuates_eps_nuc() {
+        let (mut model, _) = nonlocal_nico_three_zone_model();
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        assert!(model.abar[1] > 5.0 && model.abar[0] < 5.0);
+        do_net(&mut model, &net_info, false).expect("do_net");
+        let plain = [model.eps_nuc[0], model.eps_nuc[1], model.eps_nuc[2]];
+        assert!(plain[0] != 0.0 && plain[2] != 0.0);
+        assert_eq!(plain[1], 0.0, "zone 1 is skipped (abar)");
+
+        let col = |kk: usize| {
+            model.dm[kk] / (FOUR_PI * model.rmid[kk] * model.rmid[kk])
+        };
+        let (c0, c1, c2) = (col(0), col(1), col(2));
+        // `tau_gamma(3) = 1.5` at the innermost zone.
+        let kap = 1.5 / (c0 + c1 + c2);
+        let tau = [c0 * kap, (c0 + c1) * kap, ((c0 + c1) + c2) * kap];
+        assert!(tau[0] > 0.05 && tau[2] > 1.0);
+
         model.controls.nonlocal_nico_kap_gamma = kap;
         do_net(&mut model, &net_info, false).expect("do_net kap_gamma");
-        let tau = model.dm[0] / (FOUR_PI * 1.0e10 * 1.0e10) * kap;
-        let want = eps_plain * (1.0 - flexmesa_math::exp(-tau));
-        assert!(tau > 0.0 && tau < 1.0, "tau = {tau}");
-        assert_eq!(model.eps_nuc[0].to_bits(), want.to_bits());
+        for k in [0, 2] {
+            let want = plain[k] * (1.0 - flexmesa_math::exp(-tau[k]));
+            assert_eq!(model.eps_nuc[k].to_bits(), want.to_bits(), "zone {k}");
+            assert!(
+                model.eps_nuc[k].abs() > 0.0
+                    && model.eps_nuc[k].abs() < plain[k].abs(),
+                "zone {k}: {} vs {}",
+                model.eps_nuc[k],
+                plain[k]
+            );
+            // Categories are renormalized to the attenuated `eps_nuc`
+            // (`net.f90:318-327`).
+            let cat_sum: f64 = model.aux.eps_nuc_categories[k].iter().sum();
+            assert!(
+                (cat_sum - model.eps_nuc[k]).abs()
+                    <= 1.0e-12 * model.eps_nuc[k].abs()
+            );
+        }
+        assert_eq!(model.eps_nuc[1], 0.0);
+        // The skipped zone's column enters zone 2's `tau_gamma`: leaving it
+        // out would give a different value.
+        let tau_without_skipped = (c0 + c2) * kap;
+        let wrong = plain[2] * (1.0 - flexmesa_math::exp(-tau_without_skipped));
+        assert_ne!(model.eps_nuc[2].to_bits(), wrong.to_bits());
 
         model.controls.nonlocal_nico_decay_heat = true;
         do_net(&mut model, &net_info, false).expect("do_net decay_heat");
-        assert_eq!(model.eps_nuc[0].to_bits(), eps_plain.to_bits());
+        for k in 0..3 {
+            assert_eq!(model.eps_nuc[k].to_bits(), plain[k].to_bits());
+        }
+    }
+
+    /// The attenuation comes before the `max_abs_eps_nuc` clamp
+    /// (`star/private/net.f90:301-316`): a limit between the attenuated and
+    /// the plain value leaves the attenuated value unclamped, and a limit
+    /// below it clamps to the limit.
+    #[test]
+    fn test_nonlocal_nico_attenuation_precedes_max_abs_eps_nuc_clamp() {
+        let (mut model, _) = nonlocal_nico_three_zone_model();
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        do_net(&mut model, &net_info, false).expect("do_net");
+        let plain = model.eps_nuc[2];
+        let col: f64 = (0..3)
+            .map(|kk| {
+                model.dm[kk] / (FOUR_PI * model.rmid[kk] * model.rmid[kk])
+            })
+            .sum();
+        model.controls.nonlocal_nico_kap_gamma = 1.0 / col;
+        do_net(&mut model, &net_info, false).expect("do_net kap_gamma");
+        let att = model.eps_nuc[2];
+        assert!(att.abs() < plain.abs());
+
+        let between = 0.5 * (att.abs() + plain.abs());
+        model.controls.max_abs_eps_nuc = between;
+        do_net(&mut model, &net_info, false).expect("do_net clamp between");
+        // Clamping first would give `between*(1 - exp(-tau))`.
+        assert_eq!(model.eps_nuc[2].to_bits(), att.to_bits());
+        assert!(
+            model.d_epsnuc_dlnt[2] != 0.0,
+            "partials kept when unclamped"
+        );
+
+        let below = 0.5 * att.abs();
+        model.controls.max_abs_eps_nuc = below;
+        do_net(&mut model, &net_info, false).expect("do_net clamp below");
+        assert_eq!(model.eps_nuc[2].to_bits(), below.copysign(att).to_bits());
+        assert_eq!(model.d_epsnuc_dlnt[2], 0.0);
+    }
+
+    /// The final `do1_net` of an op-split burn
+    /// (`star/private/struct_burn_mix.f90:1112`) applies the same
+    /// attenuation before the clamp when it rescales the categories.
+    #[test]
+    fn test_eval_zone_categories_apply_nonlocal_nico_attenuation() {
+        let (mut model, _) = nonlocal_nico_three_zone_model();
+        let net_info = resolve_model_net(&model).expect("resolve_model_net");
+        let col: f64 = (0..3)
+            .map(|kk| {
+                model.dm[kk] / (FOUR_PI * model.rmid[kk] * model.rmid[kk])
+            })
+            .sum();
+        model.controls.nonlocal_nico_kap_gamma = 1.0 / col;
+        do_net(&mut model, &net_info, false).expect("do_net kap_gamma");
+        let tau = nonlocal_nico_tau_gamma(&model);
+        let rf = crate::micro::build_rate_factors(&model.job, &net_info)
+            .expect("rate factors");
+        let k = 2;
+        let sp = model.species;
+        let zone_cats = eval_zone_eps_nuc_categories(
+            &net_info,
+            k,
+            &model.xa[k * sp..(k + 1) * sp],
+            model.t[k],
+            model.ln_t[k] / LN10,
+            model.rho[k],
+            model.lnd[k] / LN10,
+            model.abar[k],
+            model.zbar[k],
+            model.z2bar[k],
+            model.ye[k],
+            model.eta[k],
+            model.eos_d_dlnt[k][I_ETA],
+            model.eos_d_dlnd[k][I_ETA],
+            &rf,
+            model.controls.weak_rate_factor,
+            model.controls.screening_mode,
+            model.job.use_3a_fl87,
+            model.job.use_suzuki_weak_rates,
+            model.controls.max_logt_for_net,
+            model.controls.max_abar_for_burning,
+            model.controls.eps_nuc_factor,
+            model.controls.dxdt_nuc_factor,
+            model.controls.max_abs_eps_nuc,
+            tau.get(k).copied(),
+        )
+        .expect("eval_zone_eps_nuc_categories");
+        for c in 0..NUM_CATEGORIES {
+            assert_eq!(
+                zone_cats[c].to_bits(),
+                model.aux.eps_nuc_categories[k][c].to_bits(),
+                "cat {c}"
+            );
+        }
     }
 
     #[test]

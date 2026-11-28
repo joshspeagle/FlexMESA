@@ -71,6 +71,10 @@ struct CachedMicroKey {
     weak_rate_factor_bits: u64,
     reaction_neuqs_factor_bits: u64,
     max_abs_eps_nuc_bits: u64,
+    // `do1_net` scales `eps_nuc` by `1 - exp(-tau_gamma)` with these
+    // (`star/private/net.f90:301-309`).
+    nonlocal_nico_kap_gamma_bits: u64,
+    nonlocal_nico_decay_heat: bool,
     op_split_burn_min_t_bits: u64,
     fe56ec_fake_factor_bits: u64,
     min_t_for_fe56ec_fake_factor_bits: u64,
@@ -132,6 +136,8 @@ impl Default for CachedMicroKey {
             weak_rate_factor_bits: 0,
             reaction_neuqs_factor_bits: 0,
             max_abs_eps_nuc_bits: 0,
+            nonlocal_nico_kap_gamma_bits: 0,
+            nonlocal_nico_decay_heat: false,
             op_split_burn_min_t_bits: 0,
             fe56ec_fake_factor_bits: 0,
             min_t_for_fe56ec_fake_factor_bits: 0,
@@ -199,6 +205,9 @@ impl CachedMicroKey {
             || self.reaction_neuqs_factor_bits
                 != c.reaction_neuqs_factor.to_bits()
             || self.max_abs_eps_nuc_bits != c.max_abs_eps_nuc.to_bits()
+            || self.nonlocal_nico_kap_gamma_bits
+                != c.nonlocal_nico_kap_gamma.to_bits()
+            || self.nonlocal_nico_decay_heat != c.nonlocal_nico_decay_heat
             || self.op_split_burn_min_t_bits != c.op_split_burn_min_t.to_bits()
             || self.fe56ec_fake_factor_bits != c.fe56ec_fake_factor.to_bits()
             || self.min_t_for_fe56ec_fake_factor_bits
@@ -304,6 +313,8 @@ impl CachedMicroKey {
         self.weak_rate_factor_bits = c.weak_rate_factor.to_bits();
         self.reaction_neuqs_factor_bits = c.reaction_neuqs_factor.to_bits();
         self.max_abs_eps_nuc_bits = c.max_abs_eps_nuc.to_bits();
+        self.nonlocal_nico_kap_gamma_bits = c.nonlocal_nico_kap_gamma.to_bits();
+        self.nonlocal_nico_decay_heat = c.nonlocal_nico_decay_heat;
         self.op_split_burn_min_t_bits = c.op_split_burn_min_t.to_bits();
         self.fe56ec_fake_factor_bits = c.fe56ec_fake_factor.to_bits();
         self.min_t_for_fe56ec_fake_factor_bits =

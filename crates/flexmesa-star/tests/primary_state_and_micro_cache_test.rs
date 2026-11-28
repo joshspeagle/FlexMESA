@@ -433,3 +433,52 @@ fn test_microphysics_cache_invalidates_on_fe56ec_fake_factor_change() {
         "min_t_for_fe56ec_fake_factor change must recompute approx21 dxdt_nuc"
     );
 }
+
+/// `nonlocal_NiCo_kap_gamma` and `nonlocal_NiCo_decay_heat` change
+/// `eps_nuc` in `do1_net` (`star/private/net.f90:301-309`), so changing
+/// either must miss the microphysics cache instead of restoring the
+/// previous `eps_nuc` and categories.
+#[test]
+fn test_microphysics_cache_invalidates_on_nonlocal_nico_controls() {
+    let ctrl = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(ctrl, StarJobControls::default()).expect("1 Msun ZAMS");
+    let c = model.nz - 1;
+    model.aux.micro_cache.clear();
+    model.micro_cache_hits = 0;
+    model.micro_cache_misses = 0;
+
+    set_hydro_vars(&mut model, false, false).expect("cold eval");
+    let eps_plain = model.eps_nuc[c];
+    let cats_plain = model.aux.eps_nuc_categories[c];
+    assert!(eps_plain > 0.0);
+    set_hydro_vars(&mut model, false, false).expect("cached eval");
+    assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 1));
+
+    // Order-unity `tau_gamma` at the centre.
+    let col: f64 = (0..model.nz)
+        .map(|kk| {
+            model.dm[kk]
+                / (flexmesa_const::FOUR_PI * model.rmid[kk] * model.rmid[kk])
+        })
+        .sum();
+    model.controls.nonlocal_nico_kap_gamma = 1.0 / col;
+    set_hydro_vars(&mut model, false, false).expect("kap_gamma changed");
+    assert_eq!(model.micro_cache_misses, 2);
+    let eps_att = model.eps_nuc[c];
+    assert!(
+        eps_att > 0.0 && eps_att < eps_plain,
+        "{eps_att} vs {eps_plain}"
+    );
+    assert_ne!(model.aux.eps_nuc_categories[c], cats_plain);
+
+    model.controls.nonlocal_nico_decay_heat = true;
+    set_hydro_vars(&mut model, false, false).expect("decay_heat changed");
+    assert_eq!(model.micro_cache_misses, 3);
+    assert_eq!(model.eps_nuc[c].to_bits(), eps_plain.to_bits());
+    assert_eq!(model.aux.eps_nuc_categories[c], cats_plain);
+}

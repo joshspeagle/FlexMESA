@@ -222,7 +222,7 @@ fn test_do1_radius_eqn_force_zero_v_checks_u_flag_before_v_flag() {
     m.aux.csound_start = vec![1.0e6; m.nz];
 
     let mut sys = new_sys(&m);
-    do1_radius_eqn(&m, 0, &mut sys);
+    do1_radius_eqn(&m, 0, &mut sys).expect("do1_radius_eqn");
     let i_equ = m.layout.i_dlnr_dt.expect("i_dlnr_dt");
     assert_close(
         "force_zero_v checks u_flag before v_flag",

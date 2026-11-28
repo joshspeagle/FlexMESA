@@ -907,7 +907,9 @@ pub fn assemble_henyey_system(
         )?;
         model.aux.ergs_error[k] = ergs_k;
         tot_e_equ_err += ergs_k;
-        do1_radius_eqn(model, k, sys);
+        if model.layout.i_dlnr_dt.is_some() {
+            do1_radius_eqn(model, k, sys)?;
+        }
         if model.controls.rti_flag {
             crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);
         }

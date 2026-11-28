@@ -354,7 +354,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     let x_scale = compute_x_scale(&model, false);
     let mut sys = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_momentum_eqn(&model, k, &mut sys);
-    do1_radius_eqn(&model, k, &mut sys);
+    do1_radius_eqn(&model, k, &mut sys).expect("do1_radius_eqn");
 
     // Finite-difference check on `do1_momentum_eqn` w.r.t. `v[k]`
     let i_dv = model.layout.i_dv_dt;
@@ -382,7 +382,7 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     // Check `force_zero_v` bound in `do1_radius_eqn`
     model.controls.velocity_q_upper_bound = 0.5; // q[0] = 1.0 > 0.5 -> force_zero_v
     let mut sys_zero = HenyeySystem::new(model.nz, nvar, x_scale);
-    do1_radius_eqn(&model, 0, &mut sys_zero);
+    do1_radius_eqn(&model, 0, &mut sys_zero).expect("do1_radius_eqn");
     let i_dlnr = model.layout.i_dlnr_dt.unwrap();
     // `resid_ad = v00/s% csound_start(k)` (`star/private/hydro_momentum.f90:565-574`).
     let expected_zero = model.v[0] / model.aux.csound_start[0];

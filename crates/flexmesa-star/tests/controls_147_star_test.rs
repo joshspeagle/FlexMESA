@@ -967,7 +967,7 @@ fn test_147_max_dt_yrs_for_velocity_logt_lower_bound_behavior() {
     // 1. `dt = 0.05 yr < max_dt_yrs = 0.1 yr` -> `force_zero_v` enforces `v00 / csound_start`.
     model.dt = 0.05 * SECYER;
     let mut sys_small = HenyeySystem::new(model.nz, nvar, x_scale.clone());
-    do1_radius_eqn(&model, 0, &mut sys_small);
+    do1_radius_eqn(&model, 0, &mut sys_small).expect("do1_radius_eqn");
     let expected_zero = model.v[0] / model.aux.csound_start[0];
     assert!(
         (sys_small.equ[i_dlnr] - expected_zero).abs() < 1.0e-12,
@@ -978,7 +978,7 @@ fn test_147_max_dt_yrs_for_velocity_logt_lower_bound_behavior() {
     // 2. `dt = 0.20 yr >= max_dt_yrs = 0.1 yr` -> normal radius-velocity equation.
     model.dt = 0.20 * SECYER;
     let mut sys_large = HenyeySystem::new(model.nz, nvar, x_scale);
-    do1_radius_eqn(&model, 0, &mut sys_large);
+    do1_radius_eqn(&model, 0, &mut sys_large).expect("do1_radius_eqn");
     let r_start = flexmesa_math::exp(model.ln_r_start[0]);
     let expected_normal = model.v[0] * model.dt / r_start
         - flexmesa_math::expm1(model.aux.dxh_lnr[0]);

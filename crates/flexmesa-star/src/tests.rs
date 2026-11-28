@@ -657,6 +657,75 @@ fn test_verify_photo_restart_parity_succeeds_after_max_age_termination() {
     assert_eq!(s1, s2);
 }
 
+/// With `okay_to_remesh` and not the first model of the run, upstream calls
+/// `set_start_of_step_info(s, 'before do_mesh')` (`star/private/evolve.f90:
+/// 1882-1885`), whose `set_gradT_excess_alpha` (`evolve.f90:1790-1793`)
+/// smooths against the previous `gradT_excess_alpha_old`; `new_generation`
+/// then stores that result as `gradT_excess_alpha_old`
+/// (`evolve_support.f90:104`), and the try's `set_start_of_step_info`
+/// (`evolve.f90:409`) smooths once more.
+///
+/// The controls `gradT_excess_lambda1 = 0` and `gradT_excess_beta1 = 1d3`
+/// put every model in the `lambda >= lambda1`, `beta <= beta1` branch, so
+/// the unsmoothed alpha is 1 (`turb_info.f90:472-474`). With
+/// `gradT_excess_age_fraction = f = 0.5` and no `gradT_excess_max_change`,
+/// each call gives `alpha = (1 - f) + f*alpha_old` from the stored
+/// `alpha_old`, not from the current alpha (`turb_info.f90:501-504`).
+/// Starting from `alpha = 0`, `alpha_old = 0.5`: step A, before `do_mesh`
+/// `0.5 + 0.5*0.5 = 0.75`, stored as `alpha_old`, then
+/// `0.5 + 0.5*0.75 = 0.875`; step B, before `do_mesh`
+/// `0.5 + 0.5*0.75 = 0.875`, stored as `alpha_old`, then
+/// `0.5 + 0.5*0.875 = 0.9375`. All values are exact in binary. Without the
+/// `before do_mesh` call `new_generation` would store the alpha of the
+/// previous try, so step A would give `alpha_old = 0` and `alpha = 0.5`.
+#[test]
+fn test_gradt_excess_alpha_old_takes_before_do_mesh_alpha_over_two_steps() {
+    let controls = StarControls {
+        initial_mass: 4.0,
+        initial_z: 0.02,
+        zbase: 0.02,
+        okay_to_remesh: true,
+        ..StarControls::default()
+    };
+    let mut model = load_zams_model(controls, StarJobControls::default())
+        .expect("4 Msun ZAMS");
+    set_hydro_vars(&mut model, false, false).expect("init hydro");
+    star_evolve_step(&mut model, true, false, true).expect("first step");
+    assert_eq!(model.generations, 2);
+    assert!(!model.doing_first_model_of_run);
+
+    let mw = &mut model.controls.mix_wind;
+    mw.okay_to_reduce_gradt_excess = true;
+    mw.gradt_excess_max_center_h1 = 1.0;
+    mw.gradt_excess_min_center_he4 = 0.0;
+    mw.gradt_excess_lambda1 = 0.0;
+    mw.gradt_excess_beta1 = 1.0e3;
+    mw.gradt_excess_age_fraction = 0.5;
+    mw.gradt_excess_max_change = -1.0;
+    model.aux.mixing.gradt_excess_alpha = 0.0;
+    model.aux.mixing.gradt_excess_alpha_old = 0.5;
+
+    for (step, (want_old, want_alpha)) in
+        [(0.75_f64, 0.875_f64), (0.875, 0.9375)].into_iter().enumerate()
+    {
+        let rep = star_evolve_step(&mut model, true, false, true)
+            .unwrap_or_else(|e| panic!("step {step}: {e}"));
+        // A retry restarts the smoothing from a different `alpha_old`
+        // (`evolve_support.rs`, `apply_step_pre_physics_with_extras`).
+        assert_eq!(rep.retries, 0, "step {step} must not retry");
+        assert_eq!(
+            model.aux.mixing.gradt_excess_alpha_old.to_bits(),
+            want_old.to_bits(),
+            "step {step}: alpha_old"
+        );
+        assert_eq!(
+            model.aux.mixing.gradt_excess_alpha.to_bits(),
+            want_alpha.to_bits(),
+            "step {step}: alpha"
+        );
+    }
+}
+
 /// `set_vars_if_needed` at the end of `prepare_for_new_step`
 /// (`star/private/evolve.f90:1891`) recomputes `rho = exp(lnd)` after the
 /// `use_xh_to_set_rho_to_dm_div_dV` reset has changed `lnd` only, so

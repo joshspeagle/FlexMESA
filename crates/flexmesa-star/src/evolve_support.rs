@@ -833,7 +833,8 @@ pub fn set_vars_for_new_try(model: &mut StarModel) -> Result<(), StarError> {
     Ok(())
 }
 
-/// Executes pre-step adaptive remeshing (`do_mesh` in
+/// Executes pre-step adaptive remeshing (`set_start_of_step_info(s,
+/// 'before do_mesh')` and `do_mesh` in
 /// `star/private/evolve.f90:1882-1889, 1961-1989`), returning
 /// `(num_splits, num_merges, pre_remesh_snapshot)`.
 ///
@@ -856,23 +857,41 @@ pub fn remesh_star_before_step(
     let dt_remesh_ok = dt_prev <= 0.0 || dt_prev >= min_remesh_dt;
     let allow_first =
         model.controls.rsp_flag || !model.doing_first_model_of_run;
-    if model.controls.okay_to_remesh
-        && (!model.controls.rsp_flag || mw.use_split_merge_amr)
-        && allow_first
-        && !hold_after_retry
-        && dt_remesh_ok
-    {
-        // `set_start_of_step_info(s, 'before do_mesh')` sets the variables
-        // (`star/private/evolve.f90:1884`).
-        model.aux.mixing.okay_to_set_mixing_info = true;
-        crate::hydro_vars::set_vars(model)?;
+    let use_split_merge_amr = mw.use_split_merge_amr;
+    if !(model.controls.okay_to_remesh && allow_first) {
+        return Ok((0, 0, None));
+    }
+    // `set_start_of_step_info(s, 'before do_mesh')`, called before `do_mesh`
+    // checks its own conditions (`star/private/evolve.f90:1882-1885`).
+    // Without RSP it starts with `set_vars_if_needed`
+    // (`evolve.f90:1768-1769`), here with `have_new_generation = .false.`
+    // (`evolve.f90:377`), and ends with `set_gradT_excess_alpha`
+    // (`evolve.f90:1790-1793`), which smooths against the
+    // `gradT_excess_alpha_old` of the previous `new_generation`; the
+    // `new_generation` of this step then stores the result as
+    // `gradT_excess_alpha_old` (`evolve_support.f90:104`). Its other values
+    // (`edv`, `do_report`, the surface and centre start values and
+    // `prev_Ledd`, `evolve.f90:1771-1788`) are set again by the
+    // `set_start_of_step_info` of every try (`evolve.f90:409`) before they
+    // are read.
+    if !model.controls.rsp_flag {
+        set_vars_for_new_step(model)?;
+        crate::mix_info::set_gradt_excess_alpha(model);
+    }
+    // `do_mesh` returns without remeshing while the mesh is held after a
+    // retry, and otherwise sets `need_to_setvars = .true.` before remeshing
+    // (`evolve.f90:1971-1973`).
+    if hold_after_retry {
+        return Ok((0, 0, None));
+    }
+    model.aux.need_to_setvars = true;
+    if (!model.controls.rsp_flag || use_split_merge_amr) && dt_remesh_ok {
         let snap = PrimaryStateBuffer::from_model(model);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
-        // `do_mesh` sets `need_to_setvars = .true.` and remeshes
-        // (`evolve.f90:1973-1983`); the variables are set afterwards by
-        // `set_vars_if_needed` (`evolve.f90:1891`, `set_vars_for_new_step`),
-        // and the old and start values are stored later in the step.
-        model.aux.need_to_setvars = true;
+        // `do_mesh` remeshes (`evolve.f90:1975-1983`); the variables are set
+        // afterwards by `set_vars_if_needed` (`evolve.f90:1891`,
+        // `set_vars_for_new_step`), and the old and start values are stored
+        // later in the step.
         let (ns, nm) = do_adjust_mesh_for_step(model, &mesh_cfg)?;
         let pre_snap = (ns + nm > 0).then_some(snap);
         Ok((ns, nm, pre_snap))

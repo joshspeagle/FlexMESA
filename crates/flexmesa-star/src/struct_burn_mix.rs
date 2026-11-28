@@ -519,7 +519,7 @@ pub(crate) fn refresh_mixing_state(
         // `set_dpdr_drhodr_info`, and `add_rti_turbulence` (`mix_info.f90:79-84,
         // 230-231`), so `d_mix` and `sig` already include RTI diffusivity; only
         // refresh `sig_rti`/`sigmid_rti` for the active step `dt`.
-        crate::hydro_rti::set_rti_mixing_info(model);
+        crate::hydro_rti::set_rti_mixing_info(model)?;
     }
     Ok(())
 }

@@ -114,11 +114,6 @@ issue = "#154"
 reason = "Case requires custom other_wind hook alongside unported massive-star relaxation, rotation, retry, and net controls (#154, #152, #158, #161, #231)."
 [[gaps]]
 suite = "star"
-case = "relax_composition_j_entropy"
-issue = "#154"
-reason = "Strict run reaches xa_central_lower_limit in [260] steps (MESA [260]); every compared column is within tolerance; held because the case's run_star_extras handler is not ported (Train 14 campaign; #154)."
-[[gaps]]
-suite = "star"
 case = "rsp_Delta_Scuti"
 issue = "#162"
 reason = "Strict run reaches extras_finish_step in [7973] steps (MESA [7973]); final values out of tolerance: rel_star_age; MESA writes models 5820 to 7973 to map_history.data, which the reference does not include, so the comparison ends at model 5810 (Train 14 campaign; #162)."
@@ -127,6 +122,11 @@ suite = "star"
 case = "rsp_Type_II_Cepheid"
 issue = "#162"
 reason = "Strict run reaches extras_finish_step in [14680] steps (MESA [14683]); final values out of tolerance: log_L, log_Teff; track columns out of tolerance: log_Teff, log_L (first at step 4392) (Train 14 campaign; #162)."
+[[gaps]]
+suite = "star"
+case = "rsp_check_2nd_crossing"
+issue = "#162"
+reason = "Zero-step instability-strip scan judged against committed MESA 26.4.1 artifact 7B_2nd_crossing.data and models_stdout.txt (DECISIONS #76); hook output and stdout blocks are wired on Train 16 (#606), awaiting campaign re-measurement and remaining RSP/LINA parity within print precision (#606; #162)."
 [[gaps]]
 suite = "star"
 case = "split_burn_big_net"

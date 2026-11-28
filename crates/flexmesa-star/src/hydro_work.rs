@@ -5,9 +5,11 @@
 //! `u_flag` hydrodynamics (`star/private/hydro_energy.f90:582-879` and
 //! `star/private/star_utils.f90:2197-2338`).
 
-use flexmesa_const::FOUR_PI;
+use flexmesa_const::{FOUR_PI, LN10};
 
-use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
+use crate::hydro_energy::{
+    eval_face_area_time_centered_ad, eval_pvsc_cell_ad, pvsc_start_after_get,
+};
 use crate::model::StarModel;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNR_P1, I_V_00,
@@ -72,11 +74,7 @@ pub fn eval1_a_times_v_face_v_flag_ad(
         );
     }
     let lnr_f = StarAdOrder1::variable(model.ln_r[f_idx], I_LNR_00);
-    let lnr_s_f = model
-        .ln_r_start
-        .get(f_idx)
-        .copied()
-        .unwrap_or(model.ln_r[f_idx]);
+    let lnr_s_f = model.ln_r_start[f_idx];
     let area_f = eval_face_area_time_centered_ad(lnr_f, lnr_s_f, vel_tc);
     let vc_f = if model.controls.v_flag {
         let v_f = StarAdOrder1::variable(model.v[f_idx], I_V_00);
@@ -204,13 +202,32 @@ pub fn eval1_work_v_flag_ad(
         pl_ad * alfa + pr_ad * beta
     };
 
+    // `set Pvsc_ad` (`star/private/hydro_energy.f90:709-728`): both sides are
+    // averaged with `Pvsc_start` when `include_P_in_velocity_time_centering`
+    // holds and the face cell's `lnT(k)/ln10` is at most
+    // `max_logT_for_include_P_and_L_in_velocity_time_centering`; upstream
+    // does not test `using_velocity_time_centering` here.
     let pvsc_ad = if model.controls.use_pvsc_art_visc {
-        let pvsc_l = eval_pvsc_cell_ad(model, f_idx);
+        let pvsc_tc = model.controls.include_p_in_velocity_time_centering
+            && model.ln_t[f_idx] / LN10
+                <= model
+                    .controls
+                    .max_logt_for_include_p_and_l_in_velocity_time_centering;
         let pvsc_r = if f_idx > 0 {
-            eval_pvsc_cell_ad(model, f_idx - 1).shift_m1()
+            let mut pvsc_r = eval_pvsc_cell_ad(model, f_idx - 1).shift_m1();
+            if pvsc_tc {
+                let start = pvsc_start_after_get(model, f_idx - 1, pvsc_r.val);
+                pvsc_r = 0.5 * (pvsc_r + start);
+            }
+            pvsc_r
         } else {
             StarAdOrder1::ZERO
         };
+        let mut pvsc_l = eval_pvsc_cell_ad(model, f_idx);
+        if pvsc_tc {
+            let start = pvsc_start_after_get(model, f_idx, pvsc_l.val);
+            pvsc_l = 0.5 * (pvsc_l + start);
+        }
         pvsc_l * alfa + pvsc_r * beta
     } else {
         StarAdOrder1::ZERO
@@ -231,7 +248,7 @@ pub fn eval1_work_v_flag_ad(
         };
 
     let mlt_pturb_ad = if model.controls.mlt_pturb_factor > 0.0 {
-        let vc_old = model.aux.mlt_vc_old.get(f_idx).copied().unwrap_or(0.0);
+        let vc_old = model.aux.mlt_vc_old[f_idx];
         if vc_old > 0.0 {
             let rho_00 =
                 StarAdOrder1::variable(model.lnd[f_idx], I_LND_00).exp();
@@ -336,10 +353,42 @@ pub(crate) fn eval_simple_pdv_p_tot_ad(
             p_tot_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
     }
     if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        p_tot_ad = p_tot_ad
-            + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
+        p_tot_ad = p_tot_ad + eval_simple_pdv_mlt_pturb_ad(model, k);
     }
     (p_tot_ad, p_theta)
+}
+
+/// `mlt_Pturb_ad` of `calc_Ptot_ad_tw` (`star/private/star_utils.f90:3424-3432`)
+/// at cell `k > 0`: `mlt_Pturb_factor*pow2(mlt_vc_old(k))*get_rho_face(s,k)/3`,
+/// with the face density `alfa*rho(k) + beta*rho(k-1)`; when time centering
+/// applies (`:3392-3394`) it is blended with the start-of-step value
+/// `mlt_Pturb_factor*pow2(mlt_vc_old(k))*(rho_start(k-1) + rho_start(k))/6`
+/// using `alfa = P_theta_for_velocity_time_centering`.
+fn eval_simple_pdv_mlt_pturb_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
+    let vc_old = model.aux.mlt_vc_old[k];
+    if vc_old <= 0.0 {
+        return StarAdOrder1::ZERO;
+    }
+    let (alfa_f, beta_f) = model.get_face_weights(k);
+    let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
+    let rho_m1 = StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
+    let rho_face = rho_00 * alfa_f + rho_m1 * beta_f;
+    let coef = model.controls.mlt_pturb_factor * flexmesa_math::pow2(vc_old);
+    let mlt_pturb = (rho_face * coef) / 3.0;
+    let alfa = crate::hydro_momentum::eval_p_theta(model, k);
+    let time_center = model.controls.using_velocity_time_centering
+        && model.controls.include_p_in_velocity_time_centering
+        && model.ln_t[k] / flexmesa_const::LN10
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering;
+    if !time_center {
+        return mlt_pturb;
+    }
+    let rho_start_m1 = flexmesa_math::exp(model.lnd_start[k - 1]);
+    let rho_start_00 = flexmesa_math::exp(model.lnd_start[k]);
+    let mlt_pturb_start = coef * (rho_start_m1 + rho_start_00) / 6.0;
+    mlt_pturb * alfa + mlt_pturb_start * (1.0 - alfa)
 }
 
 /// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$, `(P_tot * dV)/dm_k`

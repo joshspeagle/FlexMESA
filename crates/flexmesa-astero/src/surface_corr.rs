@@ -11,7 +11,7 @@
 //! Corresponds to `astero/private/astero_support.f90:702-1341`.
 
 use flexmesa_autodiff::DualOrder1;
-use flexmesa_math::pow;
+use flexmesa_math::{pow, pow3, powm1};
 
 use crate::scaling::{DELTA_NU_SUN, NU_MAX_SUN};
 
@@ -277,6 +277,9 @@ pub fn eval_cubic_corr(
 }
 
 /// Evaluates the Ball & Gizon (2014) 2-term inverse + cubic surface correction (`astero_support.f90:929-1007`).
+/// Fits the two-term combined Ball & Gizon (2014) surface correction
+/// ($a_{-1} \nu^{-1} + a_3 \nu^3$) matching `get_combined_all_freq_corr` in
+/// `astero/private/astero_support.f90:929-986`.
 #[must_use]
 pub fn eval_combined_corr(
     obs_freqs: &[f64],
@@ -290,35 +293,37 @@ pub fn eval_combined_corr(
         .min(obs_sigmas.len())
         .min(model_freqs.len())
         .min(model_inertias.len());
-    let (mut s11, mut s12, mut s22, mut r1, mut r2) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    let (mut xtx_11, mut xtx_12, mut xtx_22) = (0.0_f64, 0.0_f64, 0.0_f64);
+    let (mut xty_1, mut xty_2) = (0.0_f64, 0.0_f64);
     for i in 0..n {
         let f_m = model_freqs[i];
-        let sig = obs_sigmas[i].max(1.0e-30);
-        let ine = model_inertias[i].max(1.0e-30);
-        let x1 = 1.0 / (f_m * ine * sig);
-        let x2 = (f_m * f_m * f_m) / (ine * sig);
+        let ine = model_inertias[i];
+        let sig = obs_sigmas[i];
+        let x1 = powm1(f_m) / ine / sig;
+        let x2 = pow3(f_m) / ine / sig;
         let y = (obs_freqs[i] - f_m) / sig;
-        s11 += x1 * x1;
-        s12 += x1 * x2;
-        s22 += x2 * x2;
-        r1 += x1 * y;
-        r2 += x2 * y;
+        xtx_11 += x1 * x1;
+        xtx_12 += x1 * x2;
+        xtx_22 += x2 * x2;
+        xty_1 += x1 * y;
+        xty_2 += x2 * y;
     }
-    let det = s11 * s22 - s12 * s12;
-    let (a_minus1, a3) = if det.abs() > 1.0e-60 {
-        ((s22 * r1 - s12 * r2) / det, (s11 * r2 - s12 * r1) / det)
-    } else {
-        (0.0, 0.0)
-    };
+    let xtx_21 = xtx_12;
+    let det_xtx = xtx_11 * xtx_22 - xtx_12 * xtx_21;
+    let xtxi_11 = xtx_22 / det_xtx;
+    let xtxi_22 = xtx_11 / det_xtx;
+    let xtxi_12 = -xtx_12 / det_xtx;
+    let xtxi_21 = -xtx_21 / det_xtx;
+    let a1 = xtxi_11 * xty_1 + xtxi_12 * xty_2;
+    let a3 = xtxi_21 * xty_1 + xtxi_22 * xty_2;
     let corr = (0..n)
         .map(|i| {
             let f_m = model_freqs[i];
-            let df = (a_minus1 / f_m + a3 * (f_m * f_m * f_m))
-                / model_inertias[i].max(1.0e-30);
-            f_m + correction_factor * df
+            f_m + correction_factor * (a1 * powm1(f_m) + a3 * pow3(f_m))
+                / model_inertias[i]
         })
         .collect();
-    (corr, a3, a_minus1)
+    (corr, a3, a1)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -583,4 +588,77 @@ pub fn eval_sonoi_corr_radial_only(
         sonoi_term,
     );
     (corr, a, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eval_combined_corr_matches_mesa_oracle_bit_exact() {
+        // 4 radial modes with `correction_factor = 1.0`.
+        let obs4 = [1998.5, 2132.1, 2264.8, 2396.2];
+        let sig4 = [0.15, 0.20, 0.18, 0.25];
+        let mod4 = [2000.0, 2135.0, 2270.0, 2405.0];
+        let ine4 = [1.0e-7, 8.0e-8, 6.0e-8, 5.0e-8];
+        let (corr4, a3_4, a1_4) =
+            eval_combined_corr(&obs4, &sig4, &mod4, &ine4, 1.0);
+        assert_eq!(a3_4.to_bits(), 0xBC88_AD09_2FB9_7D10);
+        assert_eq!(a1_4.to_bits(), 0x3F3A_2A2B_4A86_4020);
+        let expected_corr4: [u64; 4] = [
+            0x409F_3A49_75AB_6799,
+            0x40A0_A842_AF9D_5F25,
+            0x40A1_B12C_2561_5F0D,
+            0x40A2_B8D2_6ECE_08A8,
+        ];
+        for (got, want) in corr4.iter().zip(expected_corr4) {
+            assert_eq!(got.to_bits(), want);
+        }
+
+        // 5 mixed-degree modes with `correction_factor = 0.75`.
+        let obs5 = [1911.10, 2045.80, 2179.95, 1976.55, 2111.73];
+        let sig5 = [0.17, 0.21, 0.19, 0.23, 0.26];
+        let mod5 = [1912.34, 2048.19, 2183.77, 1978.41, 2114.62];
+        let ine5 = [1.13e-7, 8.72e-8, 6.45e-8, 9.91e-8, 7.34e-8];
+        let (corr5, a3_5, a1_5) =
+            eval_combined_corr(&obs5, &sig5, &mod5, &ine5, 0.75);
+        assert_eq!(a3_5.to_bits(), 0xBC7E_E11A_9D24_5260);
+        assert_eq!(a1_5.to_bits(), 0x3F12_2337_7915_4380);
+        let expected_corr5: [u64; 5] = [
+            0x409D_DD59_01E8_240D,
+            0x409F_FA01_385A_E5D8,
+            0x40A1_09CA_492F_2448,
+            0x409E_E46B_89C9_BDED,
+            0x40A0_80BB_A9F5_54D5,
+        ];
+        for (got, want) in corr5.iter().zip(expected_corr5) {
+            assert_eq!(got.to_bits(), want);
+        }
+    }
+
+    #[test]
+    fn eval_combined_corr_preserves_unclamped_singular_ieee() {
+        // Empty input gives `0.0 / 0.0 -> NaN`.
+        let (empty_corr, empty_a3, empty_a1) =
+            eval_combined_corr(&[], &[], &[], &[], 1.0);
+        assert_eq!(empty_corr, [] as [f64; 0]);
+        assert!(empty_a3.is_nan() && empty_a1.is_nan());
+
+        // Single mode or identical columns yield exact zero determinant -> non-finite.
+        let (sing_corr, sing_a3, sing_a1) =
+            eval_combined_corr(&[1024.25], &[0.5], &[1024.0], &[0.5], 1.0);
+        assert!(!sing_a3.is_finite() && !sing_a1.is_finite());
+        assert!(!sing_corr[0].is_finite());
+
+        // Zero sigma / zero inertia is not clamped to 1e-30.
+        let (z_corr, z_a3, z_a1) = eval_combined_corr(
+            &[1999.0, 2134.0],
+            &[0.0, 0.2],
+            &[2000.0, 2135.0],
+            &[1.0e-7, 8.0e-8],
+            1.0,
+        );
+        assert!(!z_a3.is_finite() || !z_a1.is_finite());
+        assert!(z_corr.iter().any(|v| !v.is_finite()));
+    }
 }

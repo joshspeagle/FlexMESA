@@ -6,6 +6,10 @@
 
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+/// Unset marker for [`HydroAuxState::pvsc_start`]: `s% Pvsc_start(k) = -1d99`
+/// (`star/private/struct_burn_mix.f90:313`).
+pub const PVSC_START_UNSET: f64 = -1.0e99;
+
 /// Per-step scalar history, solver/substep counters, and retry-hold state
 /// consumed by [`crate::timestep_limits::timestep_controller`] and
 /// [`crate::evolve`] (`star_data_step_work.inc`).
@@ -17,6 +21,21 @@ pub struct StepHistoryScalars {
     pub l_surf_old: f64,
     /// Previous step mass-change rate $\dot{M}_{\mathrm{old}}$ in $\mathrm{g\,s^{-1}}$ (`mstar_dot_old`).
     pub mstar_dot_old: f64,
+    /// Current step H-burning luminosity in $L_\odot$ (`power_h_burn`).
+    #[serde(default = "default_neg_one")]
+    pub power_h_burn: f64,
+    /// Current step He-burning luminosity in $L_\odot$ (`power_he_burn`).
+    #[serde(default = "default_neg_one")]
+    pub power_he_burn: f64,
+    /// Current step Z-burning luminosity in $L_\odot$ (`power_z_burn`).
+    #[serde(default = "default_neg_one")]
+    pub power_z_burn: f64,
+    /// Current step photodisintegration luminosity in $L_\odot$ (`power_photo`).
+    #[serde(default = "default_neg_one")]
+    pub power_photo: f64,
+    /// Current step total nuclear luminosity in $L_\odot$ (`power_nuc_burn`).
+    #[serde(default = "default_neg_one")]
+    pub power_nuc_burn: f64,
     /// Previous step H-burning luminosity in $L_\odot$ (`power_h_burn_old`).
     pub power_h_burn_old: f64,
     /// Previous step He-burning luminosity in $L_\odot$ (`power_he_burn_old`).
@@ -27,13 +46,6 @@ pub struct StepHistoryScalars {
     pub power_photo_old: f64,
     /// Previous step total nuclear luminosity in $L_\odot$ (`power_nuc_burn_old`).
     pub power_nuc_burn_old: f64,
-    /// Burning powers `[h, he, z, photo, nuc]` in $L_\odot$ at entry to the
-    /// current step, before its remesh: what upstream carries in
-    /// `s% power_*` from the previous `set_power_info` call until
-    /// `new_generation` copies it into `power_*_old`
-    /// (`star/private/evolve.f90:715`, `evolve_support.f90:94-99`).
-    #[serde(default)]
-    pub prestep_powers: Option<[f64; 5]>,
     /// Previous step rotational mass-loss boost factor (`rotational_mdot_boost`).
     pub rotational_mdot_boost_old: f64,
     /// Whether the previous step invoked the critical-rotation implicit wind limit (`was_in_implicit_wind_limit`).
@@ -164,12 +176,16 @@ impl Default for StepHistoryScalars {
             teff_old: 0.0,
             l_surf_old: -1.0,
             mstar_dot_old: 0.0,
+            power_h_burn: -1.0,
+            power_he_burn: -1.0,
+            power_z_burn: -1.0,
+            power_photo: -1.0,
+            power_nuc_burn: -1.0,
             power_h_burn_old: -1.0,
             power_he_burn_old: -1.0,
             power_z_burn_old: -1.0,
             power_photo_old: -1.0,
             power_nuc_burn_old: -1.0,
-            prestep_powers: None,
             rotational_mdot_boost_old: 1.0,
             was_in_implicit_wind_limit: false,
             last_solver_iterations: 0,
@@ -708,6 +724,13 @@ pub struct HydroAuxState {
     pub u_face_start: Vec<f64>,
     /// Start-of-step HLLC contact pressure $P_{\mathrm{face,start},k}$ (`P_face_start`, `-1` sentinel).
     pub p_face_start: Vec<f64>,
+    /// Start-of-step artificial viscosity pressure $P_{\mathrm{vsc,start},k}$
+    /// in $\mathrm{dyn\,cm^{-2}}$ (`Pvsc_start`). `save_start_values` sets
+    /// the `-1d99` sentinel (`star/private/struct_burn_mix.f90:313`) and the
+    /// first `get_Pvsc_ad` of the step replaces it with `Pvsc`
+    /// (`star/private/star_utils.f90:3452-3468`).
+    #[serde(default)]
+    pub pvsc_start: Vec<f64>,
     /// Rotational velocity to critical velocity ratio $\omega_k / \omega_{\mathrm{crit},k}$ (`w_div_wc`).
     pub w_div_wc: Vec<f64>,
     /// Rotational pressure distortion correction factor $f_{P,\mathrm{rot},k}$ (`fp_rot`).
@@ -805,6 +828,10 @@ pub struct HydroAuxState {
     pub opacity_start_surf: f64,
     /// Per-face sticky radiative latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:56-61`).
     pub fixed_gradr_sticky: Vec<bool>,
+    /// Mass-weighted composition of mass removed on the active `delta_m < 0`
+    /// step (`xa_removed`, `star/private/adjust_mass.f90:292-314`).
+    #[serde(default)]
+    pub xa_removed: Vec<f64>,
     /// Auxiliary mixing, MLT, convective-boundary, and Brunt-smoothing state.
     pub mixing: crate::mixing_state::MixingAuxState,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
@@ -943,6 +970,7 @@ impl HydroAuxState {
             p_face_ad: vec![StarAdOrder1::ZERO; nz],
             u_face_start: vec![0.0; nz],
             p_face_start: vec![-1.0; nz],
+            pvsc_start: vec![PVSC_START_UNSET; nz],
             w_div_wc: vec![0.0; nz],
             fp_rot: vec![1.0; nz],
             d_fp_rot_dlnr: vec![0.0; nz],
@@ -984,6 +1012,7 @@ impl HydroAuxState {
             eps_mdot_old: vec![0.0; nz],
             opacity_start_surf: 0.0,
             fixed_gradr_sticky: vec![false; nz],
+            xa_removed: vec![0.0; species],
             mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),
             crystal_core_boundary_mass: -1.0,
@@ -1082,6 +1111,7 @@ impl HydroAuxState {
             v.resize(nz, 0.0);
         }
         self.p_face_start.resize(nz, -1.0);
+        self.pvsc_start.resize(nz, PVSC_START_UNSET);
         for v in [
             &mut self.fp_rot,
             &mut self.ft_rot,
@@ -1114,6 +1144,7 @@ impl HydroAuxState {
         self.diffusion_dx.resize(n_sp, 0.0);
         self.burn_num_iters.resize(nz, 0);
         self.fixed_gradr_sticky.resize(nz, false);
+        self.xa_removed.resize(species, 0.0);
         self.mixing.resize(nz);
         self.rsp.resize(nz);
     }

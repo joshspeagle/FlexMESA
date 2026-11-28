@@ -80,7 +80,7 @@ pub use burn_const_p::{
 pub use derivs::{
     eval_net, eval_net_with_work, get_derivs, with_thread_local_work,
 };
-pub use derivs_support::NetWorkState;
+pub use derivs_support::{NetWorkOutputs, NetWorkState};
 pub use flexmesa_math::Quad;
 pub use initialize::{global_logttab, global_ttab};
 pub use parser::{builtin_net_files, ParsedNetDef};

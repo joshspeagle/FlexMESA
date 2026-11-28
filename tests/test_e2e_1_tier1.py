@@ -185,7 +185,7 @@ def test_synthetic_tier1_case_runners_pass_assertions_and_restart(
         case_dir.mkdir(parents=True, exist_ok=True)
         (case_dir / "inlist").write_text(inlist_body, encoding="utf-8")
         (case_dir / "rn").write_text(
-            "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+            "#!/usr/bin/env bash\ndo_one inlist\n",
             encoding="utf-8",
         )
         rep = e2e.run_test_suite_case(
@@ -248,6 +248,8 @@ def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
             "&star_job\n"
             "  load_saved_model = .true.\n"
             "  load_model_filename = 'zams.mod'\n"
+            "  save_model_when_terminate = .true.\n"
+            "  save_model_filename = 'final.mod'\n"
             "/\n"
             "&kap\n"
             "  zbase = 0.02\n"
@@ -284,7 +286,7 @@ def test_unrelaxed_non_solar_zams_z_and_y_fail_loudly(
     z_dir = tmp_path / "bad_z"
     z_dir.mkdir(parents=True, exist_ok=True)
     (z_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+        "#!/usr/bin/env bash\ndo_one inlist\n", encoding="utf-8"
     )
     (z_dir / "inlist").write_text(
         "&controls\n  initial_mass = 1.0\n  initial_z = 0.001\n/\n",
@@ -296,7 +298,7 @@ def test_unrelaxed_non_solar_zams_z_and_y_fail_loudly(
     y_dir = tmp_path / "bad_y"
     y_dir.mkdir(parents=True, exist_ok=True)
     (y_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+        "#!/usr/bin/env bash\ndo_one inlist\n", encoding="utf-8"
     )
     (y_dir / "inlist").write_text(
         "&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n"

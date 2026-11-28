@@ -32,7 +32,7 @@ def _write_minimal_case(case_dir: pathlib.Path) -> None:
     """Write a fast 2-step 1 Msun ZAMS case emitting start/end profiles."""
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "rn").write_text(
-        "#!/bin/bash\ndo_one inlist_test final.mod\n",
+        "#!/bin/bash\ndo_one inlist_test\n",
         encoding="utf-8",
     )
     (case_dir / "inlist_test").write_text(

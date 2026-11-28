@@ -66,8 +66,21 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
         cdir = star_ts / cname
         assert cdir.is_dir(), f"Missing upstream case directory: {cdir}"
         if cname == "1M_pre_ms_to_wd":
-            # Without its run_star_extras hooks the raw case fails loudly
-            # (`use_other_mesh_delta_coeff_factor` needs its hook).
+            # Without its run_star_extras hooks, Stage 5 (`inlist_to_end_agb`)
+            # fails loudly because `use_other_mesh_delta_coeff_factor` needs its
+            # hook; run Stage 5 directly rather than relying on `#641`'s removed
+            # cross-stage `.mod` synthesis after a 2-step Stage 1 cap.
+            agb_dir = tmp_path / "agb_no_hook" / cname
+            shutil.copytree(cdir, agb_dir)
+            shutil.copy2(
+                agb_dir / "standard_start_he_core_flash.mod",
+                agb_dir / "end_core_he_burn.mod",
+            )
+            (agb_dir / "rn").write_text(
+                "#!/usr/bin/env bash\n"
+                "do_one inlist_to_end_agb_header end_agb.mod\n",
+                encoding="utf-8",
+            )
             with pytest.raises(
                 ValueError,
                 match=(
@@ -76,7 +89,7 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
                 ),
             ):
                 star.run_test_suite_case(
-                    cdir, max_steps_per_stage=2, verify_restart=True
+                    agb_dir, max_steps_per_stage=2, verify_restart=False
                 )
         run_dir = tmp_path / "raw" / cname
         shutil.copytree(cdir, run_dir)

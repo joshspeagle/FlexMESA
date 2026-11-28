@@ -664,6 +664,30 @@ pub fn change_model_network_with_adjust(
     Ok(())
 }
 
+/// Clamps each mass fraction of one zone to `[0, 1]`, then divides all by
+/// their sequential sum when `|sum - 1| > 1e-12`
+/// (`star/private/hydro_vars.f90:746-754`). Values already in range that sum
+/// to 1 within the tolerance are left untouched.
+pub(crate) fn clamp_and_renormalize_xa(xa: &mut [f64]) {
+    for x in xa.iter_mut() {
+        // `max(0d0, min(1d0, x))`: `min`/`max` (not `clamp`) so a NaN is
+        // handled as the Fortran intrinsics do.
+        #[allow(clippy::manual_clamp)]
+        {
+            *x = (*x).min(1.0).max(0.0);
+        }
+    }
+    let mut sum_xa = 0.0;
+    for &x in xa.iter() {
+        sum_xa += x;
+    }
+    if (sum_xa - 1.0).abs() > 1.0e-12 {
+        for x in xa.iter_mut() {
+            *x /= sum_xa;
+        }
+    }
+}
+
 /// Evaluates `rho`, `t`, `r`, `rmid`, `grav`, and composition moments (`abar`,
 /// `zbar`, `z2bar`, `z53bar`, `ye`, `xh_mass`, `yhe_mass`, `z_mass`) across all
 /// `nz` zones (`set_basic_vars` in `star/private/hydro_vars.f90:696-760`).
@@ -693,6 +717,7 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.rho[k] = flexmesa_math::exp(lnd_k);
         model.t[k] = flexmesa_math::exp(lnt_k);
 
+        clamp_and_renormalize_xa(&mut model.xa[k * species..(k + 1) * species]);
         let xa_k = &model.xa[k * species..(k + 1) * species];
         let comp = get_composition_info(catalog, &model.chem_id, xa_k, true)
             .map_err(|e| {
@@ -1031,11 +1056,25 @@ pub(crate) fn do_eos_fix_pgas_range(
     Ok(())
 }
 
-/// Evaluates `eosDT_get` across all `nz` zones in parallel and populates
-/// cell-centered thermodynamic quantities, composition partial derivatives
-/// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
-/// variables (`do_eos_for_cell` and `store_eos_for_cell` in
-/// `star/private/micro.f90:292-545` and `star/private/eos_support.f90:44-101`).
+/// Latches negative `csound_start[k]` entries to the post-EOS `csound[k]`
+/// (`star/private/micro.f90:84-88`, called from `set_hydro_vars`).
+pub(crate) fn latch_csound_start(model: &mut StarModel) {
+    let nz = model.nz;
+    if model.aux.csound_start.len() != nz {
+        model.aux.csound_start.resize(nz, -1.0e99);
+    }
+    for k in 0..nz {
+        if model.aux.csound_start[k] < 0.0 {
+            model.aux.csound_start[k] = model.csound[k];
+        }
+    }
+}
+
+/// Evaluates the equation of state (`do_eos`, `do_eos_for_cell`, and
+/// `store_eos_for_cell` in `star/private/micro.f90:292-545`) across all zones.
+///
+/// Matches `star/private/micro.f90:292-545` and
+/// `star/private/eos_support.f90:44-101`.
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields
@@ -1374,7 +1413,11 @@ fn do_neu_inner(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.nonnucneu_channels.len() != nz {
         model.aux.nonnucneu_channels.resize(nz, [0.0; 5]);
     }
-    let min_t = model.controls.min_t_for_neu;
+    // `do1_neu_kap` tests `s% T(k) >= Tmin_neu` with the fixed
+    // `Tmin_neu = 1d7` (`star/private/micro.f90:221`, `neu/public/neu_def.f90:24`);
+    // upstream has no `min_t_for_neu` control.
+    const T_MIN_NEU: f64 = 1.0e7;
+    let min_t = T_MIN_NEU;
     let factor = model.controls.non_nuc_neu_factor;
     if factor <= 0.0 {
         model.non_nuc_neu.fill(0.0);
@@ -1465,6 +1508,39 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
         get_tau(model);
         check_tau_with_report_ierr(model)
     })();
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+/// Opacity for every zone without touching `tau` (the `do_kap_for_cell` part
+/// of `do1_neu_kap`, `star/private/micro.f90:219-237`).
+///
+/// # Errors
+/// As [`do_kap`].
+pub(crate) fn eval_kap_all_cells(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    let res = if model.nz > 0 {
+        eval_kap_for_range(model, 0, model.nz - 1)
+    } else if model.controls.use_other_kap {
+        Err(StarError::InvalidInput(String::from(
+            "use_other_kap = .true. requires an other_kap hook",
+        )))
+    } else {
+        Ok(())
+    };
+    crate::controls_output::report_result_ierr(report, res)
+}
+
+/// `get_tau` followed by its non-finite check, as `set_hydro_vars` calls it
+/// after `set_micro_vars` (`star/private/hydro_vars.f90:527`).
+///
+/// # Errors
+/// [`StarError::MicrophysicsError`] on a non-finite `dtau`.
+pub(crate) fn do_get_tau(model: &mut StarModel) -> Result<(), StarError> {
+    let report = model.controls.output.report_ierr;
+    get_tau(model);
+    let res = check_tau_with_report_ierr(model);
     crate::controls_output::report_result_ierr(report, res)
 }
 
@@ -1747,5 +1823,34 @@ pub fn get_tau(model: &mut StarModel) {
         let dtau = model.dm[k - 1] * model.opacity[k - 1]
             / (FOUR_PI * model.rmid[k - 1] * model.rmid[k - 1]);
         model.tau[k] = model.tau[k - 1] + dtau;
+    }
+}
+
+#[cfg(test)]
+mod clamp_xa_tests {
+    use super::clamp_and_renormalize_xa;
+
+    #[test]
+    fn in_range_sum_within_tolerance_is_untouched() {
+        let mut xa = [0.7, 0.3 + 5.0e-13, 0.0];
+        let before = xa;
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa.map(f64::to_bits), before.map(f64::to_bits));
+    }
+
+    #[test]
+    fn negative_fraction_is_clamped_and_sum_renormalized() {
+        let mut xa = [1.0000004, -4.1e-7, 0.0];
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa[1], 0.0);
+        assert_eq!(xa[0], 1.0);
+        assert_eq!(xa.iter().sum::<f64>(), 1.0);
+    }
+
+    #[test]
+    fn fraction_above_one_is_clamped_then_sum_divides() {
+        let mut xa = [1.5, 0.5];
+        clamp_and_renormalize_xa(&mut xa);
+        assert_eq!(xa, [1.0 / 1.5, 0.5 / 1.5]);
     }
 }

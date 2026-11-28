@@ -516,7 +516,7 @@ fn test_extras_empty_termination_code_passes_and_saves_models() {
     let tmp_named = TempCaseGuard::new("named_extras_term");
     fs::write(
         tmp_named.root.join("rn"),
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+        "#!/usr/bin/env bash\ndo_one inlist\n",
     )
     .expect("write rn");
     fs::write(

@@ -136,6 +136,16 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
         }
     }
     writeln!(out, "               Teff      {:26.16E}", model.teff).unwrap();
+    let sh = &model.aux.step_hist;
+    for (k_str, val) in [
+        ("power_nuc_burn", sh.power_nuc_burn),
+        ("power_h_burn", sh.power_h_burn),
+        ("power_he_burn", sh.power_he_burn),
+        ("power_z_burn", sh.power_z_burn),
+        ("power_photo", sh.power_photo),
+    ] {
+        writeln!(out, "{k_str:>19}      {val:26.16E}").unwrap();
+    }
     if model.num_retries > 0 || write_rsp {
         writeln!(out, "        num_retries      {:26}", model.num_retries)
             .unwrap();
@@ -294,6 +304,7 @@ pub fn read_mod_str_with_dir(
         (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
     let mut total_energy = 0.0_f64;
     let mut crystal_core_boundary_mass = -1.0_f64;
+    let mut mod_powers = [-1.0_f64; 5];
     let mut header_cols: Vec<String> = Vec::new();
     let mut file_type_opt: Option<u32> = None;
 
@@ -372,6 +383,23 @@ pub fn read_mod_str_with_dir(
                 header_species = Some(sp);
             }
             "Teff" => teff = parse_fortran_f64(v)?,
+            "power_h_burn" | "power_he_burn" | "power_z_burn"
+            | "power_photo" | "power_nuc_burn" => {
+                let idx = match key {
+                    "power_h_burn" => 0,
+                    "power_he_burn" => 1,
+                    "power_z_burn" => 2,
+                    "power_photo" => 3,
+                    _ => 4,
+                };
+                let val = parse_fortran_f64(v)?;
+                if !val.is_finite() {
+                    return Err(StarError::IoError(format!(
+                        "non-finite .mod {key} '{v}'"
+                    )));
+                }
+                mod_powers[idx] = val;
+            }
             "year_for_time_step" => dt_yrs = Some(parse_fortran_f64(v)?),
             "xmstar" => xmstar_opt = Some(parse_fortran_f64(v)?),
             "M_center" => m_center_opt = Some(parse_fortran_f64(v)?),
@@ -675,6 +703,12 @@ pub fn read_mod_str_with_dir(
     let saved_dq = model.dq.clone();
     let saved_vc = vc_idx.map(|_| model.mlt_vc.clone());
     let saved_hp = hp_idx.map(|_| model.aux.rsp.hp_face.clone());
+    let sh = &mut model.aux.step_hist;
+    sh.power_h_burn = mod_powers[0];
+    sh.power_he_burn = mod_powers[1];
+    sh.power_z_burn = mod_powers[2];
+    sh.power_photo = mod_powers[3];
+    sh.power_nuc_burn = mod_powers[4];
     if model.controls.rsp_flag {
         if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
             model.dq.clone_from(&saved_dq);

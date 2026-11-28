@@ -26,6 +26,7 @@ use flexmesa_interp2d::{
 };
 pub use flexmesa_math::safe_log10;
 
+use crate::controls::StarError;
 use crate::core_boundaries::{
     compute_core_masses, compute_power_categories, CoreMasses, PowerCategories,
 };
@@ -197,46 +198,53 @@ pub fn parse_quoted_include_arg(rest: &str) -> Option<&str> {
 /// Evaluates the central `dq`-weighted average of a zone closure `f(k)` over
 /// `0..n` within `center_avg_value_dq` (`center_value` in
 /// `star/private/star_utils.f90:1210-1229`).
-#[must_use]
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `n != model.nz` or
+/// `model.dq.len() != model.nz`.
 pub fn center_value_by(
     model: &StarModel,
     n: usize,
     mut f: impl FnMut(usize) -> f64,
-) -> f64 {
-    let n = n.min(model.nz);
-    if n == 0 {
-        return 0.0;
+) -> Result<f64, StarError> {
+    if n != model.nz {
+        return Err(StarError::InvalidInput(format!(
+            "center_value_by: input length {n} != model.nz ({})",
+            model.nz
+        )));
     }
-    let target = model.controls.output.center_avg_value_dq.max(0.0);
-    if target <= 0.0 {
-        return f(n - 1);
+    if model.dq.len() != model.nz {
+        return Err(StarError::InvalidInput(format!(
+            "center_value_by: dq length {} != model.nz ({})",
+            model.dq.len(),
+            model.nz
+        )));
     }
-    let mut sum_x = 0.0;
-    let mut sum_dq = 0.0;
-    for k in (0..n).rev() {
+    let target = model.controls.output.center_avg_value_dq;
+    let mut sum_x = 0.0_f64;
+    let mut sum_dq = 0.0_f64;
+    for k in (0..model.nz).rev() {
         let dq = model.dq[k];
         let dx = f(k) * dq;
         if sum_dq + dq >= target {
-            if dq > 0.0 {
-                sum_x += dx * (target - sum_dq) / dq;
-            }
+            sum_x += dx * (target - sum_dq) / dq;
             sum_dq = target;
             break;
         }
         sum_x += dx;
         sum_dq += dq;
     }
-    if sum_dq > 0.0 {
-        sum_x / sum_dq
-    } else {
-        f(n - 1)
-    }
+    Ok(sum_x / sum_dq)
 }
 
 /// Evaluates the central `dq`-weighted average of a zone array `p` over
-/// `center_avg_value_dq` (`center_value` in `star/private/star_utils.f90:1210-1229`).
-#[must_use]
-pub fn center_value(model: &StarModel, p: &[f64]) -> f64 {
+/// `center_avg_value_dq` (`center_value` in
+/// `star/private/star_utils.f90:1210-1229`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `p.len() != model.nz` or
+/// `model.dq.len() != model.nz`.
+pub fn center_value(model: &StarModel, p: &[f64]) -> Result<f64, StarError> {
     center_value_by(model, p.len(), |k| p[k])
 }
 
@@ -267,12 +275,35 @@ pub fn resolve_iso_slot(
 }
 
 /// Central `dq`-weighted mass fraction of active species slot `j` over
-/// `center_avg_value_dq` (`center_avg_x` in `star/private/star_utils.f90:3632-3655`).
-#[must_use]
-pub fn center_avg_x_slot(model: &StarModel, slot: Option<usize>) -> f64 {
-    let Some(j) = slot.filter(|&j| j < model.species) else {
-        return 0.0;
+/// `center_avg_value_dq` (`center_avg_x` in
+/// `star/private/star_utils.f90:3632-3655`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `slot` is out of range
+/// (`j >= model.species`), `model.xa.len() != model.nz * model.species`, or
+/// `model.dq.len() != model.nz`.
+pub fn center_avg_x_slot(
+    model: &StarModel,
+    slot: Option<usize>,
+) -> Result<f64, StarError> {
+    let Some(j) = slot else {
+        return Ok(0.0);
     };
+    if j >= model.species {
+        return Err(StarError::InvalidInput(format!(
+            "center_avg_x_slot: species slot {j} out of range (species = {})",
+            model.species
+        )));
+    }
+    let expected_xa = model.nz.saturating_mul(model.species);
+    if model.xa.len() != expected_xa {
+        return Err(StarError::InvalidInput(format!(
+            "center_avg_x_slot: xa length {} != nz ({}) * species ({})",
+            model.xa.len(),
+            model.nz,
+            model.species
+        )));
+    }
     center_value_by(model, model.nz, |k| model.cell_xa(k)[j])
 }
 
@@ -327,10 +358,19 @@ pub fn star_avg_x_slot(model: &StarModel, slot: Option<usize>) -> f64 {
     }
 }
 
-/// Central `dq`-weighted mass fraction by nuclide name (`"h1"`, `"he4"`, `"c12"`, ...).
-#[must_use]
-pub fn center_avg_x_by_name(model: &StarModel, iso_name: &str) -> f64 {
-    let slot = resolve_iso_slot(model, iso_name).ok().and_then(|(_, s)| s);
+/// Central `dq`-weighted mass fraction by nuclide name (`"h1"`, `"he4"`,
+/// `"c12"`, ...).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `iso_name` is unknown or
+/// [`center_avg_x_slot`] fails on invalid model array lengths.
+pub fn center_avg_x_by_name(
+    model: &StarModel,
+    iso_name: &str,
+) -> Result<f64, StarError> {
+    let (_, slot) = resolve_iso_slot(model, iso_name).map_err(|msg| {
+        StarError::InvalidInput(format!("center_avg_x_by_name: {msg}"))
+    })?;
     center_avg_x_slot(model, slot)
 }
 
@@ -1655,10 +1695,13 @@ impl StepReportContext {
 
         let cat_lum_lsun = powers.l_by_category_lsun;
         let mut center_eps_burn = [0.0; NUM_CATEGORIES];
-        for (c, dst) in center_eps_burn.iter_mut().enumerate() {
-            *dst = center_value_by(model, nz, |k| {
-                model.aux.eps_nuc_categories.get(k).map_or(0.0, |v| v[c])
-            });
+        if nz > 0 {
+            for (c, dst) in center_eps_burn.iter_mut().enumerate() {
+                *dst = center_value_by(model, nz, |k| {
+                    model.aux.eps_nuc_categories.get(k).map_or(0.0, |v| v[c])
+                })
+                .expect("StepReportContext::compute: dq length must equal nz");
+            }
         }
 
         let phot = eval_photosphere_info(model);
@@ -1744,12 +1787,16 @@ impl StepReportContext {
 
     /// Central specific entropy in $k_{\mathrm{B}}$ per baryon (`center_entropy`
     /// in `star/private/report.f90:189`).
-    #[must_use]
-    pub fn center_entropy(&self, model: &StarModel) -> f64 {
+    ///
+    /// # Errors
+    /// Returns [`StarError::InvalidInput`] if `ln_s` or `dq` length disagrees
+    /// with `model.nz`.
+    pub fn center_entropy(&self, model: &StarModel) -> Result<f64, StarError> {
         if model.nz == 0 {
-            0.0
+            Ok(0.0)
         } else {
-            flexmesa_math::exp(center_value(model, &model.ln_s)) * AMU / KERG
+            Ok(flexmesa_math::exp(center_value(model, &model.ln_s)?) * AMU
+                / KERG)
         }
     }
 }
@@ -2188,4 +2235,130 @@ pub fn eval_surface_w_div_w_kep(model: &StarModel) -> f64 {
     let (r_eq, _) = equatorial_and_polar_r_cm(model, 0);
     let r_eq3 = flexmesa_math::pow3(r_eq);
     model.omega[0] * (r_eq3 / (model.cgrav[0] * model.m[0])).max(0.0).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::{StarControls, StarJobControls};
+
+    fn make_center_test_model(dq: Vec<f64>, target: f64) -> StarModel {
+        let cat = NuclideCatalog::builtin_ref();
+        let cid_h1 = cat.get_nuclide_index("h1").expect("h1");
+        let cid_he4 = cat.get_nuclide_index("he4").expect("he4");
+        let nz = dq.len();
+        let mut model = StarModel::new(
+            nz,
+            vec![cid_h1, cid_he4],
+            StarJobControls::default(),
+            StarControls::default(),
+        );
+        model.dq = dq;
+        model.controls.output.center_avg_value_dq = target;
+        model
+    }
+
+    #[test]
+    fn test_center_value_by_exact_partial_and_full_star_interpolation() {
+        let model = make_center_test_model(vec![0.5, 0.3, 0.2], 0.35);
+        let p = [10.0_f64, 20.0, 30.0];
+        // Center cell k=2 adds 30*0.2 = 6; remaining 0.15 of k=1 adds
+        // 20*0.15 = 3.
+        let got =
+            center_value(&model, &p).expect("exact partial interpolation");
+        let expected: f64 =
+            (30.0 * 0.2 + (20.0 * 0.3) * (0.35 - 0.2) / 0.3) / 0.35;
+        assert_eq!(got.to_bits(), expected.to_bits());
+
+        // `target > sum(dq)` averages all zones divided by `sum_dq = 1.0`.
+        let full = make_center_test_model(vec![0.5, 0.3, 0.2], 2.0);
+        let got_full = center_value(&full, &p).expect("full star");
+        assert_eq!(
+            got_full.to_bits(),
+            (30.0_f64 * 0.2 + 20.0 * 0.3 + 10.0 * 0.5).to_bits()
+        );
+    }
+
+    #[test]
+    fn test_center_value_by_matches_upstream_degenerate_ieee754_cases() {
+        let p = [10.0_f64, 20.0];
+
+        // 1. `target == 0.0` with positive `dq` yields `0.0 / 0.0 = NaN`.
+        let m_zero_tgt = make_center_test_model(vec![0.5, 0.5], 0.0);
+        assert!(center_value(&m_zero_tgt, &p).unwrap().is_nan());
+
+        // 2. `target < 0.0` with positive center `dq` yields `p[nz - 1]`.
+        let m_neg_tgt = make_center_test_model(vec![0.5, 0.5], -1.0e-3);
+        let got_neg = center_value(&m_neg_tgt, &p).expect("negative target");
+        let expected_neg: f64 = ((20.0 * 0.5) * (-1.0e-3) / 0.5) / (-1.0e-3);
+        assert_eq!(got_neg.to_bits(), expected_neg.to_bits());
+
+        // 3. `target < 0.0` with `dq[nz - 1] == 0.0` yields `NaN`.
+        let m_neg_zero_dq = make_center_test_model(vec![0.5, 0.0], -1.0e-3);
+        assert!(center_value(&m_neg_zero_dq, &p).unwrap().is_nan());
+
+        // 4. All-zero `dq` with `target > 0.0` yields `0.0 / 0.0 = NaN`.
+        let m_all_zero = make_center_test_model(vec![0.0, 0.0], 1.0e-8);
+        assert!(center_value(&m_all_zero, &p).unwrap().is_nan());
+
+        // 5. `nz == 0` with empty `dq` and `p` yields `0.0 / 0.0 = NaN`.
+        let m_empty = make_center_test_model(Vec::new(), 1.0e-8);
+        assert!(center_value(&m_empty, &[]).unwrap().is_nan());
+    }
+
+    #[test]
+    fn test_center_value_and_avg_x_reject_mismatches_and_unknown_nuclide() {
+        let model = make_center_test_model(vec![0.5, 0.5], 1.0e-8);
+        assert!(matches!(
+            center_value_by(&model, 1, |k| k as f64),
+            Err(StarError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            center_value_by(&model, 3, |k| k as f64),
+            Err(StarError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            center_value(&model, &[1.0]),
+            Err(StarError::InvalidInput(_))
+        ));
+
+        let mut bad_dq = model.clone();
+        bad_dq.dq.pop();
+        assert!(matches!(
+            center_value(&bad_dq, &[1.0, 2.0]),
+            Err(StarError::InvalidInput(_))
+        ));
+
+        assert!(matches!(
+            center_avg_x_slot(&model, Some(model.species)),
+            Err(StarError::InvalidInput(_))
+        ));
+
+        let mut bad_xa = model.clone();
+        bad_xa.xa.pop();
+        assert!(matches!(
+            center_avg_x_slot(&bad_xa, Some(0)),
+            Err(StarError::InvalidInput(_))
+        ));
+
+        assert!(matches!(
+            center_avg_x_by_name(&model, "not_a_nuclide"),
+            Err(StarError::InvalidInput(_))
+        ));
+    }
+
+    #[test]
+    fn test_center_avg_x_returns_zero_only_when_valid_nuclide_absent() {
+        let mut model = make_center_test_model(vec![0.5, 0.3, 0.2], 0.35);
+        // Set `h1` = [0.7, 0.4, 0.1], `he4` = [0.28, 0.58, 0.88].
+        model.xa = vec![0.7, 0.28, 0.4, 0.58, 0.1, 0.88];
+
+        assert_eq!(center_avg_x_slot(&model, None).unwrap(), 0.0);
+        assert_eq!(center_avg_x_by_name(&model, "si28").unwrap(), 0.0);
+
+        let expected_h1: f64 =
+            (0.1 * 0.2 + (0.4 * 0.3) * (0.35 - 0.2) / 0.3) / 0.35;
+        let got_h1 = center_avg_x_by_name(&model, "h1").expect("h1");
+        assert_eq!(got_h1.to_bits(), expected_h1.to_bits());
+    }
 }

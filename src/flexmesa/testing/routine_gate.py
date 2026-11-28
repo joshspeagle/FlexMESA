@@ -11,7 +11,21 @@ Two checks run over every ``routine_map`` entry of ``port_manifest.toml``:
   violation, and the qualified form must be used;
 * ``fn_item``: every symbol of the mapped target ``<path>::<sym>[+<sym>...]``
   exists as a function item (``fn`` in Rust, ``def`` in Python) in that file.
-  A struct, constant, or enum with the right name does not satisfy it.
+  A struct, constant, or enum with the right name does not satisfy it. A
+  symbol is a bare name or a type-qualified method ``Type::name``. A
+  qualified symbol requires an ``impl`` block for ``Type`` in the file (an
+  inherent impl, a generic impl, or ``impl Trait for Type``) that holds
+  ``fn name``. A bare Rust name is a violation when the file defines more than
+  one ``fn`` of that name (free functions and methods together), because it
+  cannot say which one is meant; use ``Type::name``.
+
+Two structural checks run without an allow-list:
+
+* every name in a file's ``routine_map_partial`` is a key of that file's
+  ``routine_map``;
+* every routine declared not applicable in ``port_status_na.toml`` (read by
+  ``routine_na``, when that file exists) names exactly one routine of the
+  inventory and is not also a ``routine_map`` key naming the same routine.
 
 Violations present when the gate was introduced are listed in
 ``benchmarks/dashboard/routine_map_allowlist.toml`` with per-check counts. The
@@ -88,10 +102,84 @@ def match_routines(key: str, routines: list[list[Any]]) -> list[list[Any]]:
     ]
 
 
+def structural_errors(
+    manifest: port_manifest.PortManifest,
+    inventory: dict[str, Any],
+    na_entries: list[Any],
+) -> list[str]:
+    """Return errors for partial markers and N/A declarations.
+
+    Args:
+        manifest: Loaded port manifest.
+        inventory: Loaded routine inventory.
+        na_entries: ``routine_na.NotApplicable`` declarations.
+
+    Returns:
+        Error messages, empty when every marker and declaration is valid.
+    """
+    errors: list[str] = []
+    files = inventory.get("files", {})
+    for entry in manifest.entries:
+        keys = {k for k, _ in entry.routine_map}
+        errors.extend(
+            f"{entry.upstream_path}: routine_map_partial[{n!r}] is not a "
+            "routine_map key"
+            for n in entry.routine_map_partial
+            if n not in keys
+        )
+    by_path = {e.upstream_path: e for e in manifest.entries}
+    for na in na_entries:
+        rec = files.get(na.upstream_path)
+        if rec is None:
+            errors.append(f"{na.upstream_path}: N/A file not in inventory")
+            continue
+        rows = na_rows(na, rec["routines"])
+        if len(rows) != 1:
+            errors.append(
+                f"{na.upstream_path}: N/A routine {na.key()!r} matches "
+                f"{len(rows)} inventory routines"
+            )
+            continue
+        mapped_entry = by_path.get(na.upstream_path)
+        for key, _ in mapped_entry.routine_map if mapped_entry else ():
+            if any(r is rows[0] for r in match_routines(key, rec["routines"])):
+                errors.append(
+                    f"{na.upstream_path}: N/A routine {na.key()!r} is also "
+                    f"in routine_map as {key!r}"
+                )
+    return errors
+
+
+def na_rows(na: Any, routines: list[list[Any]]) -> list[Any]:
+    """Return inventory rows named by an N/A entry (name, parent, span)."""
+    rows = match_routines(na.key(), routines)
+    if na.first is not None:
+        rows = [r for r in rows if r[3] == na.first]
+    if na.last is not None:
+        rows = [r for r in rows if r[4] == na.last]
+    return rows
+
+
+@dataclasses.dataclass(frozen=True)
+class _FileFns:
+    """Function items of one target file.
+
+    Attributes:
+        counts: Occurrences of each function name (Rust: free functions and
+            methods together; Python: every ``def``).
+        methods: Rust impl self type to its method names (empty for Python).
+        is_rust: Whether the file is Rust (the ambiguity rule applies).
+    """
+
+    counts: dict[str, int]
+    methods: dict[str, set[str]]
+    is_rust: bool
+
+
 def _fn_names(
-    repo_root: pathlib.Path, rel: str, cache: dict[str, set[str]]
-) -> set[str] | None:
-    """Return function-item names defined in ``rel`` (``None`` if absent)."""
+    repo_root: pathlib.Path, rel: str, cache: dict[str, _FileFns]
+) -> _FileFns | None:
+    """Return function items defined in ``rel`` (``None`` if absent)."""
     if rel in cache:
         return cache[rel]
     path = repo_root / rel
@@ -100,12 +188,33 @@ def _fn_names(
     text = path.read_text(encoding="utf-8")
     if path.suffix == ".rs":
         text = _port_parsers.strip_rust_comments_and_strings(text)
-        pat = r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\b"
+        fns = _FileFns(
+            _port_parsers.rust_fn_counts(text),
+            _port_parsers.rust_impl_methods(text),
+            True,
+        )
     else:
         pat = r"^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\b"
-    names = set(re.findall(pat, text, flags=re.MULTILINE))
-    cache[rel] = names
-    return names
+        counts: dict[str, int] = {}
+        for name in re.findall(pat, text, flags=re.MULTILINE):
+            counts[name] = counts.get(name, 0) + 1
+        fns = _FileFns(counts, {}, False)
+    cache[rel] = fns
+    return fns
+
+
+def _symbol_problem(fns: _FileFns, owner: str | None, sym: str) -> str | None:
+    """Return the ``detail`` for a failing symbol, or ``None`` if it passes."""
+    if owner is not None:
+        if sym in fns.methods.get(owner, set()):
+            return None
+        return f"{owner}::{sym}"
+    n = fns.counts.get(sym, 0)
+    if n == 0:
+        return sym
+    if fns.is_rust and n > 1:
+        return f"{sym} (ambiguous, {n} fn items; use Type::{sym})"
+    return None
 
 
 def collect_violations(
@@ -115,7 +224,7 @@ def collect_violations(
 ) -> list[Violation]:
     """Return every ``routine_map`` entry failing a gate check, sorted."""
     out: list[Violation] = []
-    cache: dict[str, set[str]] = {}
+    cache: dict[str, _FileFns] = {}
     files = inventory.get("files", {})
     for entry in manifest.entries:
         if not entry.routine_map:
@@ -141,13 +250,14 @@ def collect_violations(
                         )
                     )
             rel, _, syms = target.partition("::")
-            names = _fn_names(repo_root, rel, cache)
-            for sym in (s.strip() for s in syms.split("+")):
-                if names is None:
+            fns = _fn_names(repo_root, rel, cache)
+            for owner, sym in _port_parsers.split_target_symbols(syms):
+                if fns is None:
                     out.append(Violation("fn_item", up, key, target, rel))
                     break
-                if sym not in names:
-                    out.append(Violation("fn_item", up, key, target, sym))
+                problem = _symbol_problem(fns, owner, sym)
+                if problem is not None:
+                    out.append(Violation("fn_item", up, key, target, problem))
     return sorted(out)
 
 
@@ -206,6 +316,13 @@ def render_allowlist(violations: list[Violation]) -> str:
     return "\n".join(lines)
 
 
+def _load_na_entries(repo_root: pathlib.Path) -> list[Any]:
+    """Load N/A declarations (imported late: ``routine_na`` imports this)."""
+    from flexmesa.testing import routine_na
+
+    return routine_na.load_na(repo_root / routine_na.NA_RELPATH)
+
+
 def verify_routine_map(
     repo_root: pathlib.Path,
     manifest: port_manifest.PortManifest | None = None,
@@ -247,6 +364,9 @@ def verify_routine_map(
         else:
             if fresh != inv_path.read_text(encoding="utf-8"):
                 errors.append("routine inventory differs from regeneration")
+    errors.extend(
+        structural_errors(manifest, inventory, _load_na_entries(repo_root))
+    )
     found = collect_violations(manifest, inventory, repo_root)
     counts, allowed = load_allowlist(repo_root / ALLOWLIST_RELPATH)
     allowed_ids = {a.ident() for a in allowed}

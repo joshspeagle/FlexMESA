@@ -11,6 +11,7 @@ description = "Convective and turbulent mixing (MLT, TDC, semiconvection, thermo
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-mtx = { path = "../flexmesa-mtx" }
 flexmesa-utils = { path = "../flexmesa-utils" }
 serde.workspace = true
 

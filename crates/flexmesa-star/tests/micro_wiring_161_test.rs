@@ -8,7 +8,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use flexmesa_const::{AVO, CRAD, FOUR_THIRDS_PI, KERG, LN10, ONE_THIRD, QE};
+use flexmesa_const::{
+    AVO, CRAD, FOUR_THIRDS_PI, KERG, LN10, ONE_THIRD, QE, SECYER,
+};
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::mesa_profile::{
     format_star_profile_text, parse_star_profile_columns,
@@ -18,8 +20,9 @@ use flexmesa_star::micro::{
     set_basic_vars,
 };
 use flexmesa_star::{
-    load_zams_model, op_split_burn_zones, StarControls, StarError,
-    StarJobControls,
+    do_struct_burn_mix, load_zams_model, op_split_burn_zones,
+    record_start_of_step_energy_integrals, set_hydro_vars, StarControls,
+    StarError, StarJobControls,
 };
 
 fn zams_controls() -> StarControls {
@@ -323,15 +326,22 @@ fn test_op_split_burn_zones_threads_rate_factors_weak_fl87_and_unscaled_neu() {
             m.job.special_rate_factor = vec![fac];
         }
         op_split_burn_zones(&mut m, 1.0).expect("op_split_burn_zones");
-        (m.eps_nuc[kc], m.eps_nuc_neu_total[kc], m.xa[kc * sp + 3])
+        assert_eq!(m.eps_nuc[kc].to_bits(), 0.0_f64.to_bits());
+        (
+            m.aux.burn_avg_epsnuc[kc],
+            m.eps_nuc_neu_total[kc],
+            m.xa[kc * sp + 3],
+        )
     };
 
     let (eps_base, neu_base, xc12_base) = setup(1.0, 1.0, false, None);
     assert!(eps_base > 0.0 && neu_base > 0.0 && xc12_base > 0.0);
 
-    // 1. `eps_nuc_factor` scales `eps_nuc` while `eps_nuc_neu_total` stays unscaled.
+    // 1. `burn_avg_epsnuc` is stored unscaled by `eps_nuc_factor`
+    //    (`struct_burn_mix.f90:910`; `eps_nuc` stays `0` until
+    //    `apply_burn_avg_epsnuc`) and `eps_nuc_neu_total` stays unscaled.
     let (eps_3x, neu_3x, _) = setup(3.0, 1.0, false, None);
-    assert!((eps_3x - 3.0 * eps_base).abs() <= 1.0e-12 * eps_3x);
+    assert!((eps_3x - eps_base).abs() <= 1.0e-12 * eps_3x);
     assert!((neu_3x - neu_base).abs() <= 1.0e-13 * neu_base);
 
     // 2. `special_rate_factor` suppresses 3-alpha `c12` synthesis when set to `0`.
@@ -446,4 +456,77 @@ fn test_profile_columns_and_star_micro_inlist_population() {
     assert!(txt.contains("kap_frac_Compton"));
     assert!(txt.contains("eos_frac_FreeEOS"));
     assert!(txt.lines().count() > 10);
+}
+
+/// Verifies that `do_eos` leaves `csound_start` untouched, `set_hydro_vars`
+/// latches negative `csound_start` entries without overwriting non-negative
+/// ones (`star/private/micro.f90:84-88`), and `op_split_burn` post-burn
+/// `set_vars` resets and re-latches `csound_start`.
+#[test]
+fn test_op_split_burn_csound_start_reset_and_latch() {
+    let mut eos_model =
+        load_zams_model(zams_controls(), StarJobControls::default())
+            .expect("load ZAMS");
+    let nz = eos_model.nz;
+    assert!(nz >= 2);
+    set_basic_vars(&mut eos_model).expect("set_basic_vars");
+    eos_model.aux.csound_start = vec![1.2345e8; nz];
+    eos_model.aux.csound_start[0] = -1.0e99;
+    do_eos(&mut eos_model).expect("do_eos leaves csound_start untouched");
+    assert_eq!(
+        eos_model.aux.csound_start[0].to_bits(),
+        (-1.0e99_f64).to_bits()
+    );
+    assert_eq!(
+        eos_model.aux.csound_start[1].to_bits(),
+        1.2345e8_f64.to_bits()
+    );
+    set_hydro_vars(&mut eos_model, true, true)
+        .expect("set_hydro_vars latches negative csound_start");
+    assert_eq!(
+        eos_model.aux.csound_start[0].to_bits(),
+        eos_model.csound[0].to_bits()
+    );
+    assert_eq!(
+        eos_model.aux.csound_start[1].to_bits(),
+        1.2345e8_f64.to_bits()
+    );
+
+    let mut model =
+        load_zams_model(zams_controls(), StarJobControls::default())
+            .expect("load ZAMS for split-burn");
+    change_model_network(&mut model, "approx21.net", None)
+        .expect("switch to approx21.net");
+    model.aux.need_to_setvars = true;
+    set_hydro_vars(&mut model, false, false).expect("init set_hydro_vars");
+    model.aux.need_to_setvars = false;
+    model.save_start_values().expect("save_start_values");
+    record_start_of_step_energy_integrals(&mut model);
+    model.save_old_values();
+
+    let kc = model.nz - 1;
+    model.controls.do_mix = false;
+    model.controls.op_split_burn = true;
+    model.controls.op_split_burn_min_t = 1.0e7;
+    model.controls.op_split_burn_min_t_for_variable_t_solver = 1.2e7;
+
+    let mut post_burn_ref = model.clone();
+    // Stale positive sentinel must be cleared by `set_vars` ->
+    // `reset_starting_vectors` (`csound_start = -1e99`) and re-latched to
+    // post-burn `csound` without being reverted by `pre_burn_start`.
+    model.aux.csound_start.fill(9.9999e7);
+
+    let dt = 10.0 * SECYER;
+    let rep = do_struct_burn_mix(&mut model, dt, true, true, &[])
+        .expect("op_split_burn do_struct_burn_mix");
+    assert!(rep.converged);
+
+    op_split_burn_zones(&mut post_burn_ref, dt).expect("op_split_burn_zones");
+    set_basic_vars(&mut post_burn_ref).expect("post_burn set_basic_vars");
+    do_eos(&mut post_burn_ref).expect("post_burn do_eos");
+    assert_ne!(model.aux.csound_start[kc].to_bits(), 9.9999e7_f64.to_bits());
+    assert_eq!(
+        model.aux.csound_start[kc].to_bits(),
+        post_burn_ref.csound[kc].to_bits()
+    );
 }

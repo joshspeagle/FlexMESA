@@ -166,6 +166,12 @@ module = "binary"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-binary/tests/binary_burn_powers_retry_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-binary/tests/binary_core_160_test.rs"
 language = "rust"
 module = "binary"
@@ -179,6 +185,12 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-binary/tests/binary_determinism_test.rs"
+language = "rust"
+module = "binary"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-binary/tests/binary_driver_619_test.rs"
 language = "rust"
 module = "binary"
 kind = "invariant"
@@ -457,6 +469,13 @@ language = "rust"
 module = "gyre"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/gyre_oracles/data/astero__* (MESA 26.4.1 GYRE radial adiabatic, #170)"
+
+[[tests]]
+path = "crates/flexmesa-gyre/tests/g3_fast_from_file.rs"
+language = "rust"
+module = "gyre"
+kind = "oracle"
+provenance = "benchmarks/fortran_mesa/gyre_oracles/data/astero__fast_from_file__e000216.* (MESA 26.4.1 GYRE adiabatic l=0,1,2 JCD, #170)"
 
 [[tests]]
 path = "crates/flexmesa-gyre/tests/g4_gyre_in_mesa_ms.rs"
@@ -889,6 +908,13 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/colors_solar_oracle_test.rs"
+language = "rust"
+module = "star"
+kind = "oracle"
+provenance = "MESA 26.4.1 colors/test/src/test_colors.f90:59-62,183-197 Solar Johnson IEEE-754 hex outputs (mesa-module-hex-v1 colors/exact_tested_values.tsv records 6..15; 9/10 bit-exact plus 1 pinned 1-ULP difference on J: 0x400d_3c59_0bb4_5389 vs MESA 0x400d_3c59_0bb4_538a tracked in #198)"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/controls_147_star_test.rs"
 language = "rust"
 module = "star"
@@ -984,6 +1010,12 @@ provenance = "MESA 26.4.1 star/private/net_eval.f90:274 & star/test_suite/1.3M_m
 routines = ["star/private/hydro_chem_eqns.f90::do1_chem_eqns"]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/evolve_driver_618_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/extras_231_hooks_test.rs"
 language = "rust"
 module = "star"
@@ -1077,6 +1109,12 @@ module = "star"
 kind = "invariant"
 
 [[tests]]
+path = "crates/flexmesa-star/tests/mesh_driver_624_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/mesh_planner_153_test.rs"
 language = "rust"
 module = "star"
@@ -1146,6 +1184,12 @@ module = "star"
 kind = "oracle"
 provenance = "MESA 26.4.1 star/private/hydro_vars.f90:225,541 & star/private/hydro_rotation.f90:501-543 MLT IEEE-754 hex oracles (#161)"
 routines = ["star/private/turb_info.f90::set_mlt_vars"]
+
+[[tests]]
+path = "crates/flexmesa-star/tests/model_load_burn_powers_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/newton_retry_semantics_152_test.rs"
@@ -1367,7 +1411,19 @@ routines = [
 ]
 
 [[tests]]
+path = "crates/flexmesa-star/tests/set_v_flag_579_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
 path = "crates/flexmesa-star/tests/solver_rti_152_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/stage_handoff_reload_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
@@ -1398,6 +1454,12 @@ kind = "invariant"
 
 [[tests]]
 path = "crates/flexmesa-star/tests/timestep_term_152_test.rs"
+language = "rust"
+module = "star"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-star/tests/timestep_slots_616_test.rs"
 language = "rust"
 module = "star"
 kind = "invariant"
@@ -1559,12 +1621,17 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_build_mesa_histories.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_binary_wave5_3.py"
 language = "python"
 module = "binary"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 binary/test/test_output (pick_next_timestep_rl & eval_L2_mass_loss_fraction)"
-routines = ["binary/private/binary_disk.f90::eval_L2_mass_loss_fraction", "binary/public/binary_lib.f90::binary_L2_mass_loss_fraction"]
 
 [[tests]]
 path = "tests/test_case_extras_batch1.py"
@@ -1622,6 +1689,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_case_budgets.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_case_run_inputs.py"
 language = "python"
 module = "tooling"
@@ -1646,10 +1719,6 @@ language = "python"
 module = "const"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 const/test/test_output & utils/test/test_output pinned outputs"
-routines = [
-  "const/public/const_def.f90::do_const_init",
-  "const/public/const_lib.f90::const_init",
-]
 
 [[tests]]
 path = "tests/test_dashboard.py"
@@ -1723,7 +1792,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (#161)"
-routines = ["eos/private/eos_blend.f90::is_contained", "eos/private/eos_blend.f90::min_distance_to_polygon", "eos/private/gauss_fermi.f90::dfermi", "eos/private/ideal.f90::get_ideal_eos_results", "eos/private/ideal.f90::get_ideal_for_eosdt", "eos/public/eos_lib.f90::eos_fermi_dirac_integral"]
 
 [[tests]]
 path = "tests/test_eos_wave3a2.py"
@@ -1731,7 +1799,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (HELM)"
-routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt"]
 
 [[tests]]
 path = "tests/test_eos_wave3a3.py"
@@ -1739,7 +1806,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv (PC/Skye/eosDT_get)"
-routines = ["eos/private/eosde_eval.f90::Get_eos_gamma_DE_Results", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospc_eval.f90::Get_PC_alfa", "eos/private/eospc_eval.f90::get_PC_for_eosdt", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/skye.f90::Get_Skye_alfa", "eos/private/skye.f90::Get_Skye_alfa_simple", "eos/private/skye.f90::get_Skye_for_eosdt", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eos_gamma_DE_get"]
 
 [[tests]]
 path = "tests/test_eos_wave3b1.py"
@@ -1747,7 +1813,6 @@ language = "python"
 module = "eos"
 kind = "oracle"
 provenance = "tests/fixtures/golden/eos/test_output.txt & benchmarks/fortran_mesa/eos_oracles/ (4D EOS)"
-routines = ["eos/private/eos_helm_eval.f90::get_helm_for_eosdt", "eos/private/eoscms_eval.f90::get_CMS_for_eosdt", "eos/private/eosdt_eval.f90::Get_eosDT_Results", "eos/private/eosdt_eval.f90::get1_for_eosdt", "eos/private/eosdt_eval.f90::get_Rho", "eos/private/eosdt_eval.f90::get_T", "eos/private/eospt_eval.f90::Get_PT_Results_using_DT", "eos/private/eospt_eval.f90::get_Pgas", "eos/private/eospt_eval.f90::get_T", "eos/public/eos_lib.f90::eosDT_get", "eos/public/eos_lib.f90::eosDT_get_Rho", "eos/public/eos_lib.f90::eosDT_get_T", "eos/public/eos_lib.f90::eosPT_get", "eos/public/eos_lib.f90::eosPT_get_T"]
 
 [[tests]]
 path = "tests/test_evolution_profile.py"
@@ -1786,6 +1851,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_harness_stage_guard.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_history_harness.py"
 language = "python"
 module = "tooling"
@@ -1810,10 +1881,6 @@ language = "python"
 module = "interp_2d"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 interp_2d/test/test_output pinned values"
-routines = [
-  "interp_2d/private/bipm_db.f90::do_evbipm_db",
-  "interp_2d/private/bipm_db.f90::do_mkbipm_db",
-]
 
 [[tests]]
 path = "tests/test_ionization.py"
@@ -1891,10 +1958,6 @@ language = "python"
 module = "neu"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 neu/test/test_output & benchmarks/fortran_mesa/neu_oracles/"
-routines = [
-  "neu/private/mod_neu.f90::neutrinos",
-  "neu/public/neu_lib.f90::neu_get",
-]
 
 [[tests]]
 path = "tests/test_num.py"
@@ -1940,7 +2003,19 @@ module = "plotting"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_port_parsers_rust_strip.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_py_bindings_161.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
+path = "tests/test_reviewed_map_raise.py"
 language = "python"
 module = "tooling"
 kind = "invariant"
@@ -2031,6 +2106,12 @@ module = "tooling"
 kind = "invariant"
 
 [[tests]]
+path = "tests/test_trace_stage_selector.py"
+language = "python"
+module = "tooling"
+kind = "invariant"
+
+[[tests]]
 path = "tests/test_stepdump_windows.py"
 language = "python"
 module = "tooling"
@@ -2054,7 +2135,6 @@ language = "python"
 module = "turb"
 kind = "oracle"
 provenance = "Upstream MESA 26.4.1 turb/test/test_output pinned MLT/TDC values"
-routines = ["turb/private/mlt.f90::calc_MLT", "turb/public/turb.f90::set_MLT", "turb/public/turb.f90::set_TDC"]
 
 [[tests]]
 path = "tests/test_turb_autodiff.py"
@@ -2106,4 +2186,10 @@ provenance = "tests/fixtures/golden/rates/test_output.txt & benchmarks/fortran_m
 path = "tests/test_pulse_live_compare.py"
 language = "python"
 module = "gyre"
+kind = "invariant"
+
+[[tests]]
+path = "crates/flexmesa-rates/tests/reaclib_handle_coverage_test.rs"
+language = "rust"
+module = "rates"
 kind = "invariant"

@@ -19,20 +19,7 @@ use crate::star_ad::{
 };
 
 #[inline]
-fn start_or(slice: &[f64], k: usize, fallback: f64) -> f64 {
-    slice.get(k).copied().unwrap_or(fallback)
-}
-
-#[inline]
-fn start_exp(slice: &[f64], k: usize, fallback_exp: f64) -> f64 {
-    slice
-        .get(k)
-        .copied()
-        .map_or(fallback_exp, flexmesa_math::exp)
-}
-
-#[inline]
-fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
+pub(crate) fn wrap_w(model: &StarModel, k: usize, slot: usize) -> StarAdOrder1 {
     let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
     if model.layout.i_w.is_some() {
         StarAdOrder1::variable(w, slot)
@@ -123,11 +110,14 @@ pub fn eval_rsp2_ptrb_cell_ad(
     let w_ad = wrap_w(model, k, w_slot);
     let ptrb_now = rho_ad * w_ad.pow2() * coeff;
 
+    // `s% using_velocity_time_centering` is the per-step state, which the
+    // control `steps_before_use_velocity_time_centering` switches on
+    // (`star/private/star_utils.f90:3344-3345`).
     let time_center = model.controls.using_velocity_time_centering
         && model.controls.include_p_in_velocity_time_centering;
     if time_center {
         let p_theta = model.controls.p_theta_for_velocity_time_centering;
-        let pt_s = start_or(&model.aux.rsp.ptrb_start, k, ptrb_now.val);
+        let pt_s = model.aux.rsp.ptrb_start[k];
         ptrb_now * p_theta + (1.0 - p_theta) * pt_s
     } else {
         ptrb_now
@@ -344,15 +334,13 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             };
         let dv_div_r_tc = if model.controls.using_velocity_time_centering
             && model.controls.v_flag
-            && !model.v_start.is_empty()
-            && !model.ln_r_start.is_empty()
         {
-            let v_tc_00 = (v_00 + start_or(&model.v_start, k, v_00.val)) * 0.5;
+            let v_tc_00 = (v_00 + model.v_start[k]) * 0.5;
             let r_tc_00 =
-                (r_00 + start_exp(&model.ln_r_start, k, r_00.val)) * 0.5;
+                (r_00 + flexmesa_math::exp(model.ln_r_start[k])) * 0.5;
             let (v_tc_p1, r_tc_p1) = if k + 1 < nz {
-                let v_s1 = start_or(&model.v_start, k + 1, v_p1.val);
-                let r_s1 = start_exp(&model.ln_r_start, k + 1, r_p1.val);
+                let v_s1 = model.v_start[k + 1];
+                let r_s1 = flexmesa_math::exp(model.ln_r_start[k + 1]);
                 ((v_p1 + v_s1) * 0.5, (r_p1 + r_s1) * 0.5)
             } else {
                 (
@@ -500,7 +488,7 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
                 StarAdOrder1::ZERO
             };
             let r_tc = if model.controls.using_velocity_time_centering {
-                (r_00 + start_exp(&model.ln_r_start, k, r_00.val)) * 0.5
+                (r_00 + flexmesa_math::exp(model.ln_r_start[k])) * 0.5
             } else {
                 r_00
             };
@@ -562,9 +550,9 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
         for k in 0..nz {
             let w_00 = wrap_w(model, k, I_W_00);
             let resid_w = if !model.controls.rsp2_flag {
-                w_00 - start_or(&model.aux.rsp.w_start, k, 0.0)
+                w_00 - model.aux.rsp.w_start[k]
             } else if is_nonturbulent_cell(model, k) {
-                let cs_s = start_or(&model.aux.rsp.csound_start_rsp, k, 0.0);
+                let cs_s = model.aux.rsp.csound_start_rsp[k];
                 let cs =
                     (if cs_s > 0.0 { cs_s } else { model.csound[k] }).max(1.0);
                 w_00 * (1.0 / cs)
@@ -573,12 +561,7 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                     w_00 * w_00 - flexmesa_math::pow2(model.aux.rsp.w_start[k]);
                 let ptrb_ad = eval_rsp2_ptrb_cell_ad(model, k, false);
                 let d_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-                let rho_s = flexmesa_math::exp(start_or(
-                    &model.lnd_start,
-                    k,
-                    model.lnd[k],
-                ))
-                .max(1.0e-99);
+                let rho_s = flexmesa_math::exp(model.lnd_start[k]).max(1.0e-99);
                 let ptrb_dv =
                     ptrb_ad * (StarAdOrder1::ONE / d_00 - 1.0 / rho_s);
 
@@ -589,10 +572,10 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                 } else {
                     1.0
                 };
-                let lt_s0 = start_or(&model.aux.rsp.lt_start, k, 0.0);
+                let lt_s0 = model.aux.rsp.lt_start[k];
                 let lt_00 = work.lt[k] * l_theta + (1.0 - l_theta) * lt_s0;
                 let lt_p1 = if k + 1 < nz {
-                    let lt_s1 = start_or(&model.aux.rsp.lt_start, k + 1, 0.0);
+                    let lt_s1 = model.aux.rsp.lt_start[k + 1];
                     work.lt[k + 1].shift_p1() * l_theta
                         + (1.0 - l_theta) * lt_s1
                 } else {
@@ -610,7 +593,7 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                         .unwrap_or(0.0)
                         / model.dt
                 } else {
-                    let e_s = start_or(&model.energy_start, k, 0.0);
+                    let e_s = model.energy_start[k];
                     let e_start =
                         (if e_s > 0.0 { e_s } else { model.energy[k] })
                             .max(1.0);

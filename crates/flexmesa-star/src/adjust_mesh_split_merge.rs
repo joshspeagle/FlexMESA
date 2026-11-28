@@ -204,7 +204,11 @@ fn update_xh_eos(model: &mut StarModel, k0: usize) -> Result<(), StarError> {
         model.energy[k0],
         model.ln_t[k0],
         1.0e-11,
-    )?;
+    )
+    .map_err(|e| StarError::Terminated {
+        model_number: model.model_number,
+        reason: format!("remesh_split_merge failed: {e}"),
+    })?;
     model.ln_t[k0] = new_lnt;
     model.t[k0] = flexmesa_math::exp(new_lnt);
     Ok(())
@@ -498,6 +502,7 @@ fn do_merge(
     if nz < 2 {
         return Ok(());
     }
+    model.aux.need_to_setvars = true;
     let species = model.species;
     let star_pe0 = get_star_pe(model);
     let mut i1 = i_merge_1based;
@@ -650,6 +655,9 @@ fn do_merge(
         &mut model.aux.i_rot,
         &mut model.aux.fp_rot,
         &mut model.aux.ft_rot,
+        &mut model.aux.rsp.et_rsp,
+        &mut model.aux.etrb,
+        &mut model.aux.rsp.hp_face,
         // `star/private/adjust_mesh_split_merge.f90:656` shifts `alpha_mlt`.
         &mut model.aux.mixing.alpha_mlt,
     ] {
@@ -682,6 +690,7 @@ fn do_split(
             "remesh_split_merge::do_split requires at least 3 zones",
         )));
     }
+    model.aux.need_to_setvars = true;
 
     let species = model.species;
     let star_pe0 = get_star_pe(model);
@@ -946,6 +955,13 @@ fn do_split(
 
     model.mlt_vc[ip0] = mlt_vc_r + ((mlt_vc_l - mlt_vc_r) * dm_r) / dm_parent;
     model.tau[ip0] = tau_r + ((tau_l - tau_r) * dm_r) / dm_parent;
+    if !model.tau[ip0].is_finite() {
+        return Err(StarError::InvalidInput(format!(
+            "remesh_split_merge::do_split non-finite tau at zone {}: {}",
+            ip0 + 1,
+            model.tau[ip0]
+        )));
+    }
 
     if i1 == 1 {
         let src = model.xa[i0 * species..(i0 + 1) * species].to_vec();
@@ -1234,9 +1250,13 @@ pub(crate) fn remesh_split_merge_with(
     let nz = model.nz;
     model.q[nz - 1] = model.dq[nz - 1];
     model.m[nz - 1] = model.dm[nz - 1] + model.m_center;
-    model.set_xqs();
+    if num_split + num_merge > 0 {
+        model.set_xqs();
+    }
     model.set_dm_bar();
-    model.set_m_grav_and_grav();
+    if num_split + num_merge > 0 {
+        model.set_m_grav_and_grav();
+    }
 
     if model.controls.rotation_flag {
         // Verbatim `amr` post-split/merge rotation update
@@ -1252,15 +1272,19 @@ pub(crate) fn remesh_split_merge_with(
                 model.cgrav[k],
                 max_w,
                 max_w2,
+                // Deferred #505: `w_div_wc_flag` not yet on `StarControls`.
                 false,
             );
             crate::hydro_rotation::update1_i_rot_from_xh(model, k);
             model.omega[k] = model.j_rot[k] / model.aux.i_rot[k];
         }
         let new_j = total_angular_momentum(model);
-        if old_j.abs() > 0.0 && ((old_j - new_j) / old_j).abs() > 1.0e-14 {
+        if (old_j == 0.0 && new_j != 0.0)
+            || (old_j != 0.0 && ((old_j - new_j) / old_j).abs() > 1.0e-14)
+        {
             return Err(StarError::InvalidInput(format!(
-                "angular momentum conservation error in remesh_split_merge: old_J={old_j}, new_J={new_j}"
+                "angular momentum conservation error in remesh_split_merge: \
+                 old_J={old_j}, new_J={new_j}"
             )));
         }
     }

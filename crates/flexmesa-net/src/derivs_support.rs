@@ -47,6 +47,42 @@ const WEAKLIB_BLEND_HI_Z: usize = 26;
 const T9_WEAKLIB_FULL_OFF_HI_Z: f64 = 0.063;
 const T9_WEAKLIB_FULL_ON_HI_Z: f64 = 0.073;
 
+/// Branch-checked view of populated output buffers on [`NetWorkState`].
+///
+/// Network evaluation populates either `DirectCgs` (when `g.doing_approx21`
+/// is true) or `Molar` otherwise, while poisoning the inactive branch's
+/// buffers with `f64::NAN`.
+#[derive(Debug, Clone, Copy)]
+pub enum NetWorkOutputs<'a> {
+    /// Direct CGS / mass-fraction outputs when `g.doing_approx21` is true.
+    DirectCgs {
+        /// Category energy rates ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+        eps_nuc_categories: &'a [f64; NUM_CATEGORIES],
+        /// $\partial\epsilon_{\mathrm{nuc}}/\partial X_i$ (`num_isos`).
+        d_eps_nuc_dx: &'a [f64],
+        /// Mass-fraction rates $dX_i/dt$ ($\mathrm{s^{-1}}$, `num_isos`).
+        dxdt: &'a [f64],
+        /// $\partial(dX_i/dt)/\partial T$ (`num_isos`).
+        d_dxdt_dt: &'a [f64],
+        /// $\partial(dX_i/dt)/\partial\rho$ (`num_isos`).
+        d_dxdt_drho: &'a [f64],
+        /// $\partial(dX_i/dt)/\partial X_j$ (`num_isos * num_isos`).
+        d_dxdt_dx: &'a [f64],
+    },
+    /// Molar / MeV outputs populated for non-`approx21` networks.
+    Molar {
+        /// Category energy rates in $\mathrm{MeV\,g^{-1}\,s^{-1}}$.
+        eps_nuc_categories_mev: &'a [f64; NUM_CATEGORIES],
+        /// Total neutrino loss rate in $\mathrm{MeV\,g^{-1}\,s^{-1}}$.
+        eps_neu_total_mev: f64,
+        /// $\partial\epsilon_{\mathrm{nuc,MeV}}/\partial Y_i$ (`num_isos`).
+        d_eps_nuc_dy: &'a [f64],
+        /// Molar Jacobian $\partial(dY_i/dt)/\partial Y_j$
+        /// (`num_isos * num_isos`).
+        d_dydt_dy: &'a [f64],
+    },
+}
+
 /// Per-evaluation working buffers corresponding to `type(Net_Info)` in
 /// `net/public/net_def.f90`.
 #[derive(Debug, Clone)]
@@ -74,32 +110,33 @@ pub struct NetWorkState {
     /// Neutrino loss rate per reaction in $\mathrm{erg\,g^{-1}\,s^{-1}}$ (`num_reactions`).
     pub eps_neu_rate: Vec<f64>,
     /// Nuclear energy generation by category (`NUM_CATEGORIES = 24`).
-    pub eps_nuc_categories: [f64; NUM_CATEGORIES],
+    pub(crate) eps_nuc_categories: [f64; NUM_CATEGORIES],
     /// Total neutrino loss rate in $\mathrm{MeV\,g^{-1}\,s^{-1}}$ (scaled by `QCONV` on export).
     pub eps_neu_total: f64,
     /// $\partial \epsilon_{\mathrm{nuc,MeV}} / \partial Y_i$ (`num_isos`).
-    pub d_eps_nuc_dy: Vec<f64>,
+    pub(crate) d_eps_nuc_dy: Vec<f64>,
     /// Molar Jacobian $\partial (dY_i/dt) / \partial Y_j$ (`num_isos * num_isos`, row-major).
-    pub d_dydt_dy: Vec<f64>,
+    pub(crate) d_dydt_dy: Vec<f64>,
     /// Direct CGS category energy rates ($\mathrm{erg\,g^{-1}\,s^{-1}}$)
     /// populated when `g.doing_approx21` (`net_eval.f90:232-237,308-338`).
-    pub direct_eps_nuc_categories: [f64; NUM_CATEGORIES],
+    pub(crate) direct_eps_nuc_categories: [f64; NUM_CATEGORIES],
     /// Direct CGS $\partial\epsilon_{\mathrm{nuc}}/\partial X_i$ (`num_isos`)
     /// populated when `g.doing_approx21` (`net_eval.f90:431`).
-    pub direct_d_eps_nuc_dx: Vec<f64>,
+    pub(crate) direct_d_eps_nuc_dx: Vec<f64>,
     /// Direct mass-fraction rates $dX_i/dt$ ($\mathrm{s^{-1}}$, `num_isos`)
     /// populated when `g.doing_approx21` (`net_eval.f90:381`).
-    pub direct_dxdt: Vec<f64>,
+    pub(crate) direct_dxdt: Vec<f64>,
     /// Direct $\partial(dX_i/dt)/\partial T$ (`num_isos`) populated when
     /// `g.doing_approx21` (`net_eval.f90:433`).
-    pub direct_d_dxdt_dt: Vec<f64>,
+    pub(crate) direct_d_dxdt_dt: Vec<f64>,
     /// Direct $\partial(dX_i/dt)/\partial\rho$ (`num_isos`) populated when
     /// `g.doing_approx21` (`net_eval.f90:432`).
-    pub direct_d_dxdt_drho: Vec<f64>,
+    pub(crate) direct_d_dxdt_drho: Vec<f64>,
     /// Direct mass-fraction Jacobian $\partial(dX_i/dt)/\partial X_j$
     /// (`num_isos * num_isos`, row-major) populated when `g.doing_approx21`
     /// (`net_eval.f90:435-436`).
-    pub direct_d_dxdt_dx: Vec<f64>,
+    pub(crate) direct_d_dxdt_dx: Vec<f64>,
+    last_eval_direct_cgs: Option<bool>,
     /// Weaklib combined rate $\lambda$ (`num_wk_reactions`).
     pub wk_lambda: Vec<f64>,
     /// $\partial \lambda / \partial \ln T$ (`num_wk_reactions`).
@@ -117,13 +154,15 @@ pub struct NetWorkState {
 }
 
 impl NetWorkState {
-    /// Allocates zero-initialized buffers for `g`.
+    /// Allocates working buffers for `g`, poisoning inactive-branch outputs.
     #[must_use]
     pub fn new(g: &NetGeneralInfo) -> Self {
         let ni = g.num_isos;
         let nd = if g.doing_approx21 { ni } else { 0 };
         let nr = g.num_reactions.max(120);
         let nw = g.num_wk_reactions;
+        let molar_init = if g.doing_approx21 { f64::NAN } else { 0.0 };
+        let direct_cat_init = if g.doing_approx21 { 0.0 } else { f64::NAN };
         Self {
             y: vec![0.0; ni],
             rate_raw: vec![0.0; nr],
@@ -136,16 +175,17 @@ impl NetWorkState {
             screened_rate: vec![0.0; nr],
             eps_nuc_rate: vec![0.0; nr],
             eps_neu_rate: vec![0.0; nr],
-            eps_nuc_categories: [0.0; NUM_CATEGORIES],
-            eps_neu_total: 0.0,
-            d_eps_nuc_dy: vec![0.0; ni],
-            d_dydt_dy: vec![0.0; ni * ni],
-            direct_eps_nuc_categories: [0.0; NUM_CATEGORIES],
+            eps_nuc_categories: [molar_init; NUM_CATEGORIES],
+            eps_neu_total: molar_init,
+            d_eps_nuc_dy: vec![molar_init; ni],
+            d_dydt_dy: vec![molar_init; ni * ni],
+            direct_eps_nuc_categories: [direct_cat_init; NUM_CATEGORIES],
             direct_d_eps_nuc_dx: vec![0.0; nd],
             direct_dxdt: vec![0.0; nd],
             direct_d_dxdt_dt: vec![0.0; nd],
             direct_d_dxdt_drho: vec![0.0; nd],
             direct_d_dxdt_dx: vec![0.0; nd * nd],
+            last_eval_direct_cgs: None,
             wk_lambda: vec![0.0; nw],
             wk_dlambda_dln_t: vec![0.0; nw],
             wk_dlambda_dln_rho: vec![0.0; nw],
@@ -160,22 +200,79 @@ impl NetWorkState {
     pub fn reset(&mut self, g: &NetGeneralInfo) {
         let ni = g.num_isos;
         let nr = g.num_reactions;
-        self.eps_nuc_categories = [0.0; NUM_CATEGORIES];
-        self.eps_neu_total = 0.0;
-        self.d_eps_nuc_dy[..ni].fill(0.0);
-        self.d_dydt_dy[..ni * ni].fill(0.0);
-        self.direct_eps_nuc_categories = [0.0; NUM_CATEGORIES];
-        if g.doing_approx21 && self.direct_dxdt.len() >= ni {
+        self.last_eval_direct_cgs = None;
+        if g.doing_approx21 {
+            self.poison_molar_outputs(ni);
+            self.ensure_direct_export_len(ni);
+            self.direct_eps_nuc_categories = [0.0; NUM_CATEGORIES];
             self.direct_d_eps_nuc_dx[..ni].fill(0.0);
             self.direct_dxdt[..ni].fill(0.0);
             self.direct_d_dxdt_dt[..ni].fill(0.0);
             self.direct_d_dxdt_drho[..ni].fill(0.0);
             self.direct_d_dxdt_dx[..ni * ni].fill(0.0);
+        } else {
+            self.eps_nuc_categories = [0.0; NUM_CATEGORIES];
+            self.eps_neu_total = 0.0;
+            self.d_eps_nuc_dy[..ni].fill(0.0);
+            self.d_dydt_dy[..ni * ni].fill(0.0);
+            self.poison_direct_outputs();
         }
         self.raw_rate[..nr].fill(0.0);
         self.screened_rate[..nr].fill(0.0);
         self.eps_nuc_rate[..nr].fill(0.0);
         self.eps_neu_rate[..nr].fill(0.0);
+    }
+
+    /// Returns a branch-checked view of the output buffers populated by the
+    /// most recent full network evaluation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called before a full evaluation (or after a `rates_only`
+    /// evaluation or [`Self::reset`]).
+    #[must_use]
+    pub fn outputs(&self) -> NetWorkOutputs<'_> {
+        let ni = self.y.len();
+        let direct = self
+            .last_eval_direct_cgs
+            .expect("NetWorkState::outputs called before full net evaluation");
+        if direct {
+            NetWorkOutputs::DirectCgs {
+                eps_nuc_categories: &self.direct_eps_nuc_categories,
+                d_eps_nuc_dx: &self.direct_d_eps_nuc_dx[..ni],
+                dxdt: &self.direct_dxdt[..ni],
+                d_dxdt_dt: &self.direct_d_dxdt_dt[..ni],
+                d_dxdt_drho: &self.direct_d_dxdt_drho[..ni],
+                d_dxdt_dx: &self.direct_d_dxdt_dx[..ni * ni],
+            }
+        } else {
+            NetWorkOutputs::Molar {
+                eps_nuc_categories_mev: &self.eps_nuc_categories,
+                eps_neu_total_mev: self.eps_neu_total,
+                d_eps_nuc_dy: &self.d_eps_nuc_dy[..ni],
+                d_dydt_dy: &self.d_dydt_dy[..ni * ni],
+            }
+        }
+    }
+
+    pub(crate) fn poison_molar_outputs(&mut self, ni: usize) {
+        self.eps_nuc_categories = [f64::NAN; NUM_CATEGORIES];
+        self.eps_neu_total = f64::NAN;
+        self.d_eps_nuc_dy[..ni].fill(f64::NAN);
+        self.d_dydt_dy[..ni * ni].fill(f64::NAN);
+    }
+
+    pub(crate) fn poison_direct_outputs(&mut self) {
+        self.direct_eps_nuc_categories = [f64::NAN; NUM_CATEGORIES];
+        self.direct_d_eps_nuc_dx.fill(f64::NAN);
+        self.direct_dxdt.fill(f64::NAN);
+        self.direct_d_dxdt_dt.fill(f64::NAN);
+        self.direct_d_dxdt_drho.fill(f64::NAN);
+        self.direct_d_dxdt_dx.fill(f64::NAN);
+    }
+
+    pub(crate) fn set_eval_branch(&mut self, direct_cgs: bool) {
+        self.last_eval_direct_cgs = Some(direct_cgs);
     }
 
     /// Ensures `direct_*` export buffers match `species` isotopes.

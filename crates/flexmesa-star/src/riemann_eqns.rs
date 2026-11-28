@@ -131,11 +131,18 @@ pub fn do1_riemann_momentum_eqn(
     } else {
         model.dm[k]
     };
-    let dudt_expected = (flux_in - flux_out
+    let mut sum_ad = flux_in - flux_out
         + geometry_source
         + gravity_source
-        + diffusion_source)
-        / dm_k;
+        + diffusion_source;
+    // Turbulent eddy viscous force `Uq*dm` for TDC
+    // (`star/private/hydro_riemann.f90:127-136`).
+    if model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        && model.controls.tdc_alpha_m > 0.0
+    {
+        sum_ad = sum_ad + crate::tdc_hydro::compute_tdc_uq_dm_cell(model, k);
+    }
+    let dudt_expected = sum_ad / dm_k;
 
     let u_start_k = model.u_start.get(k).copied().unwrap_or(model.u[k]);
     let dudt_actual = (u_00 - u_start_k) / dt;
@@ -182,11 +189,8 @@ pub(crate) fn eval1_work_u_flag_ad(
                 * model.v_center,
         );
     }
-    let using_v_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let using_v_tc =
+        model.controls.using_velocity_time_centering && model.dt > 0.0;
     let (area_f, _) = get_area_info_opt_time_center(model, f_idx);
 
     let uf_ad = model

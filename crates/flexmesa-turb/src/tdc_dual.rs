@@ -25,6 +25,7 @@ use flexmesa_math::{
     atan, cos, cosh, exp, log, pow, pow2, pow3, pow4, tan, tanh,
 };
 
+use crate::tdc_support::TdcInfo;
 use crate::TurbScalar;
 
 /// Value, derivative with respect to the Newton variable, `N` structure
@@ -258,6 +259,45 @@ impl<const N: usize> TurbScalar for AutoDiffRealTdc<N> {
         }
     }
 
+    /// Evaluates the structure-type subexpressions of `eval_xis`
+    /// (`turb/private/tdc_support.f90:537-557`) with the structure type's
+    /// own rules, then lifts them with `convert`. Every structure quantity
+    /// in `info` was lifted from that type, so only its value and `d1_array`
+    /// are nonzero.
+    fn star_xi_terms(
+        info: &TdcInfo<Self>,
+    ) -> Option<crate::tdc_support::StarXiTerms<Self>> {
+        use crate::tdc_support::{StarXiTerms, X_ALFAS, X_CEDE};
+        use flexmesa_const::BOLTZ_SIGMA;
+        let star = |x: Self| DualOrder1::<N> {
+            val: x.val,
+            d1: x.d1_array,
+        };
+        let (t, rho, cp, kap, hp, h) = (
+            star(info.t),
+            star(info.rho),
+            star(info.cp),
+            star(info.kap),
+            star(info.hp),
+            star(info.h),
+        );
+        let x_gammar = 2.0 * 3.0_f64.sqrt();
+        let alpha_hp = info.mixing_length_alpha * hp;
+        let gammar_div_alfa = (info.tdc_alpha_r * x_gammar) / alpha_hp;
+        let s0_pref =
+            (info.tdc_alpha_s * X_ALFAS * info.mixing_length_alpha * cp * t)
+                / hp;
+        let dr0 = (4.0 * BOLTZ_SIGMA * gammar_div_alfa.pow2() * t.pow3())
+            / (rho.pow2() * cp * kap);
+        let d0 = (info.tdc_alpha_d * X_CEDE) / alpha_hp;
+        Some(StarXiTerms {
+            cp_t_div_h: (cp * t / h).convert(),
+            s0_pref: s0_pref.convert(),
+            d0: d0.convert(),
+            dr0: dr0.convert(),
+        })
+    }
+
     fn from_f64(v: f64) -> Self {
         Self {
             val: v,
@@ -461,8 +501,57 @@ impl<const N: usize> TurbScalar for AutoDiffRealTdc<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tdc_support::X_CEDE;
 
     type D = AutoDiffRealTdc<1>;
+
+    /// `D0` and `S0` prefactor use the structure type's `div_real_self` and
+    /// `div_self` rules (`d1_array = -dx*z*powm1(pow2(x))`), not the lifted
+    /// type's, and carry no Newton-variable partials.
+    #[test]
+    fn star_xi_terms_use_structure_type_division_rules() {
+        let lift = |v: f64, d: f64| D {
+            val: v,
+            d1val1: 0.0,
+            d1_array: [d],
+            d1val1_d1_array: [0.0],
+        };
+        let info = TdcInfo {
+            include_mlt_corr_to_tdc: false,
+            use_tdc_enthalpy_flux_limiter: true,
+            mixing_length_alpha: 1.7,
+            tdc_alpha_c: 0.2,
+            tdc_alpha_s: 0.9,
+            tdc_alpha_d: 0.7,
+            tdc_alpha_r: 0.3,
+            tdc_alpha_pt: 0.4,
+            dt: 1.0e5,
+            a0: lift(1.0, 0.0),
+            c0: lift(1.0, 0.0),
+            l: lift(1.0, 0.0),
+            l0: lift(1.0, 0.0),
+            gradl: lift(0.3, 0.0),
+            grada: lift(0.4, 0.0),
+            t: lift(3.1e6, 0.37),
+            rho: lift(0.83, 0.11),
+            dv: lift(1.0e-3, 0.0),
+            cp: lift(2.9e8, 0.57),
+            kap: lift(1.3, 0.23),
+            hp: lift(7.7e9, 0.61),
+            gamma: lift(1.0, 0.0),
+            eq_div_w: lift(0.0, 0.0),
+            h: lift(5.5e15, 0.19),
+        };
+        let st = D::star_xi_terms(&info).expect("lifted scalar overrides");
+        let alpha_hp = info.mixing_length_alpha * info.hp.val;
+        let z = info.tdc_alpha_d * X_CEDE;
+        let dalpha_hp = info.mixing_length_alpha * info.hp.d1_array[0];
+        let want = -dalpha_hp * z * (1.0 / (alpha_hp * alpha_hp));
+        assert_eq!(st.d0.d1_array[0].to_bits(), want.to_bits());
+        assert_eq!(st.d0.val.to_bits(), (z * (1.0 / alpha_hp)).to_bits());
+        assert_eq!(st.d0.d1val1, 0.0);
+        assert_eq!(st.d0.d1val1_d1_array[0], 0.0);
+    }
 
     /// `x = a + b z + c p + d z p` at `z = p = 0`.
     fn var(a: f64, b: f64, c: f64, d: f64) -> D {

@@ -12,6 +12,7 @@ use crate::ext_real::ExtR;
 use crate::fcomplex::Cplx;
 use crate::grid::{Grid, Point};
 use crate::magnus::{magnus_build_r, magnus_stencil};
+use crate::matmul::{matmul_rr, matvec_r};
 use crate::mode::Wave;
 use crate::model::idx;
 use crate::par::{ModePar, NumPar, OscPar};
@@ -32,26 +33,42 @@ fn ix(i: usize, j: usize) -> usize {
     (i - 1) + N_E * (j - 1)
 }
 
-/// `ad_trans_t` (`ad/ad_trans_m.fypp`) for the `GYRE` variable set
-/// (`SET`: no transformation).
+/// `ad_trans_t` (`ad/ad_trans_m.fypp`) for the `GYRE` (`SET`) and `JCD`
+/// (`JCD_SET`) variable sets.
 #[derive(Debug, Clone)]
-pub struct AdTrans;
+pub struct AdTrans {
+    pt: Vec<Point>,
+    /// `[V_2, dV_2, U, dU, c_1, dc_1]` per stencil point.
+    coeff: Vec<[f64; 6]>,
+    l: i32,
+    jcd: bool,
+}
 
 impl AdTrans {
     /// `ad_trans_t(cx, md_p, os_p)` (`ad_trans_m.fypp:105-139`).
     ///
     /// # Errors
     ///
-    /// [`GyreError::Unported`] for variable sets other than `GYRE`.
-    pub fn new(os_p: &OscPar) -> Result<Self, GyreError> {
-        match os_p.variables_set.as_str() {
-            "GYRE" => Ok(Self),
-            "DZIEM" | "JCD" | "MIX" | "LAGP" => Err(GyreError::Unported {
-                what: "adiabatic variables_set other than 'GYRE'",
-                at: "ad/ad_trans_m.fypp:116-129",
-            }),
-            _ => Err(GyreError::Abort("invalid variables_set")),
-        }
+    /// [`GyreError::Unported`] for `DZIEM`, `MIX`, and `LAGP`;
+    /// [`GyreError::Abort`] for unrecognized `variables_set`.
+    pub fn new(md_p: &ModePar, os_p: &OscPar) -> Result<Self, GyreError> {
+        let jcd = match os_p.variables_set.as_str() {
+            "GYRE" => false,
+            "JCD" => true,
+            "DZIEM" | "MIX" | "LAGP" => {
+                return Err(GyreError::Unported {
+                    what: "adiabatic variables_set other than 'GYRE' and 'JCD'",
+                    at: "ad/ad_trans_m.fypp:116-129",
+                });
+            }
+            _ => return Err(GyreError::Abort("invalid variables_set")),
+        };
+        Ok(Self {
+            pt: Vec::new(),
+            coeff: Vec::new(),
+            l: md_p.l,
+            jcd,
+        })
     }
 
     /// `stencil(pt)` (`ad_trans_m.fypp:143-186`).
@@ -60,34 +77,216 @@ impl AdTrans {
     ///
     /// Model evaluation errors.
     pub fn stencil(
-        &self,
+        &mut self,
         cx: &Context<'_>,
         pt: &[Point],
     ) -> Result<(), GyreError> {
         let ml = cx.ml;
         ml.check(&[idx::V_2, idx::U, idx::C_1])?;
+        self.coeff = Vec::with_capacity(pt.len());
         for &p in pt {
-            if !ml.is_vacuum(p)? {
-                let _ = ml.coeff(idx::V_2, p)?;
-                let _ = ml.dcoeff(idx::V_2, p)?;
-                let _ = ml.dcoeff(idx::U, p)?;
-            }
-            let _ = ml.coeff(idx::U, p)?;
-            let _ = ml.coeff(idx::C_1, p)?;
-            let _ = ml.dcoeff(idx::C_1, p)?;
+            let (v_2, dv_2, du) = if ml.is_vacuum(p)? {
+                (f64::MAX, f64::MAX, -f64::MAX)
+            } else {
+                (
+                    ml.coeff(idx::V_2, p)?,
+                    ml.dcoeff(idx::V_2, p)?,
+                    ml.dcoeff(idx::U, p)?,
+                )
+            };
+            let u = ml.coeff(idx::U, p)?;
+            let c_1 = ml.coeff(idx::C_1, p)?;
+            let dc_1 = ml.dcoeff(idx::C_1, p)?;
+            self.coeff.push([v_2, dv_2, u, du, c_1, dc_1]);
         }
+        self.pt = pt.to_vec();
         Ok(())
     }
 
-    /// `trans_vars(y, i, st, from=.FALSE.)` (`ad_trans_m.fypp:291-337`).
-    #[must_use]
+    fn jcd_scales(
+        &self,
+        cx: &Context<'_>,
+        i: usize,
+        omega: f64,
+    ) -> Result<(f64, Option<f64>), GyreError> {
+        let omega_rot = cx.omega_rot(self.pt[i])?;
+        let omega_c = cx.omega_c_r(omega_rot, omega);
+        let lambda = (self.l != 0).then(|| cx.lambda_r(omega_rot, omega));
+        Ok((sq(omega_c), lambda))
+    }
+
+    /// `G_jcd_(i, st)` (`ad_trans_m.fypp:412-491`); `i` is 0-based.
+    ///
+    /// # Errors
+    ///
+    /// Context rotation errors.
+    pub fn g_jcd(
+        &self,
+        cx: &Context<'_>,
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 16], GyreError> {
+        let [_, _, u, _, c_1, _] = self.coeff[i];
+        let (w2, lambda) = self.jcd_scales(cx, i, omega)?;
+        let scale = lambda.unwrap_or(1.0) / (c_1 * w2);
+        let mut g = [0.0_f64; 16];
+        g[ix(1, 1)] = 1.0;
+        g[ix(2, 2)] = scale;
+        g[ix(2, 3)] = scale;
+        g[ix(3, 3)] = -1.0;
+        g[ix(4, 3)] = -(1.0 - u);
+        g[ix(4, 4)] = -1.0;
+        Ok(g)
+    }
+
+    /// `H_jcd_(i, st)` (`ad_trans_m.fypp:656-735`); `i` is 0-based.
+    ///
+    /// # Errors
+    ///
+    /// Context rotation errors.
+    pub fn h_jcd(
+        &self,
+        cx: &Context<'_>,
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 16], GyreError> {
+        let [_, _, u, _, c_1, _] = self.coeff[i];
+        let (w2, lambda) = self.jcd_scales(cx, i, omega)?;
+        let mut h = [0.0_f64; 16];
+        h[ix(1, 1)] = 1.0;
+        h[ix(2, 2)] = match lambda {
+            Some(lam) => c_1 * w2 / lam,
+            None => c_1 * w2,
+        };
+        h[ix(2, 3)] = 1.0;
+        h[ix(3, 3)] = -1.0;
+        h[ix(4, 3)] = 1.0 - u;
+        h[ix(4, 4)] = -1.0;
+        Ok(h)
+    }
+
+    /// `dH_jcd_(i, st)` (`ad_trans_m.fypp:861-943`); `i` is 0-based.
+    ///
+    /// # Errors
+    ///
+    /// Context rotation errors.
+    pub fn dh_jcd(
+        &self,
+        cx: &Context<'_>,
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 16], GyreError> {
+        let [_, _, u, du, c_1, dc_1] = self.coeff[i];
+        let (w2, lambda) = self.jcd_scales(cx, i, omega)?;
+        let mut dh = [0.0_f64; 16];
+        dh[ix(2, 2)] = match lambda {
+            Some(lam) => c_1 * dc_1 * w2 / lam,
+            None => c_1 * dc_1 * w2,
+        };
+        dh[ix(4, 3)] = -u * du;
+        Ok(dh)
+    }
+
+    /// `trans_eqns(xA, i, st)` with `from = .TRUE.`
+    /// (`ad_trans_m.fypp:190-237`): `xA = MATMUL(G, MATMUL(xA, H) - dH)`.
+    ///
+    /// # Errors
+    ///
+    /// Context or matrix multiplication errors.
+    pub fn trans_eqns(
+        &self,
+        cx: &Context<'_>,
+        xa: &[f64; 16],
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 16], GyreError> {
+        if !self.jcd {
+            return Ok(*xa);
+        }
+        let g = self.g_jcd(cx, i, omega)?;
+        let h = self.h_jcd(cx, i, omega)?;
+        let dh = self.dh_jcd(cx, i, omega)?;
+        let xah = matmul_rr(xa, &h, 4, 4, 4)?;
+        let mut t = [0.0_f64; 16];
+        for k in 0..16 {
+            t[k] = xah[k] - dh[k];
+        }
+        let r = matmul_rr(&g, &t, 4, 4, 4)?;
+        Ok(std::array::from_fn(|k| r[k]))
+    }
+
+    fn trans_cond_rows(
+        &self,
+        cx: &Context<'_>,
+        c: &[f64],
+        rows: usize,
+        i: usize,
+        omega: f64,
+    ) -> Result<Vec<f64>, GyreError> {
+        let h = self.h_jcd(cx, i, omega)?;
+        Ok(matmul_rr(c, &h, rows, 4, 4)?)
+    }
+
+    /// `trans_cond(C, i, st)` with `from = .TRUE.`
+    /// (`ad_trans_m.fypp:241-287`): `C = MATMUL(C, H)` for a `2 x 4` `C`
+    /// (`ad_bound`).
+    ///
+    /// # Errors
+    ///
+    /// Context or matrix multiplication errors.
+    pub fn trans_cond_2x4(
+        &self,
+        cx: &Context<'_>,
+        c: &[f64; 8],
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 8], GyreError> {
+        if !self.jcd {
+            return Ok(*c);
+        }
+        let r = self.trans_cond_rows(cx, c, 2, i, omega)?;
+        Ok(std::array::from_fn(|k| r[k]))
+    }
+
+    /// `trans_cond(C, i, st)` with `from = .TRUE.` for a `4 x 4` `C`
+    /// (`ad_match`).
+    ///
+    /// # Errors
+    ///
+    /// Context or matrix multiplication errors.
+    pub fn trans_cond_4x4(
+        &self,
+        cx: &Context<'_>,
+        c: &[f64; 16],
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 16], GyreError> {
+        if !self.jcd {
+            return Ok(*c);
+        }
+        let r = self.trans_cond_rows(cx, c, 4, i, omega)?;
+        Ok(std::array::from_fn(|k| r[k]))
+    }
+
+    /// `trans_vars(y, i, st, from=.FALSE.)` (`ad_trans_m.fypp:291-337`):
+    /// `y = MATMUL(H, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Context rotation errors.
     pub fn trans_vars_to(
         &self,
+        cx: &Context<'_>,
         y: [f64; 4],
-        _i: usize,
-        _omega: f64,
-    ) -> [f64; 4] {
-        y
+        i: usize,
+        omega: f64,
+    ) -> Result<[f64; 4], GyreError> {
+        if !self.jcd {
+            return Ok(y);
+        }
+        let h = self.h_jcd(cx, i, omega)?;
+        let r = matvec_r(&h, &y, 4, 4);
+        Ok([r[0], r[1], r[2], r[3]])
     }
 }
 
@@ -119,8 +318,12 @@ impl AdEqns {
     /// # Errors
     ///
     /// [`GyreError::Unported`] or invalid options.
-    pub fn new(cx: &Context<'_>, os_p: &OscPar) -> Result<Self, GyreError> {
-        let tr = AdTrans::new(os_p)?;
+    pub fn new(
+        cx: &Context<'_>,
+        md_p: &ModePar,
+        os_p: &OscPar,
+    ) -> Result<Self, GyreError> {
+        let tr = AdTrans::new(md_p, os_p)?;
         let alpha_omg = match os_p.time_factor.as_str() {
             "OSC" => 1.0,
             "EXP" => -1.0,
@@ -219,7 +422,7 @@ impl AdEqns {
         a[ix(4, 2)] = self.alpha_grv * (co.u * co.v / co.gamma_1);
         a[ix(4, 3)] = self.alpha_grv * lambda;
         a[ix(4, 4)] = self.alpha_grv * (-co.u - l_i + 2.0);
-        Ok(a)
+        self.tr.trans_eqns(cx, &a, i, omega)
     }
 
     /// `A(i, st) = xA(i, st)/pt(i)%x` (`ad_eqns_m.fypp:180-195`).
@@ -256,6 +459,7 @@ enum AdOuterBound {
 /// and `VACUUM`/`JCD` outer boundaries.
 #[derive(Debug, Clone)]
 pub struct AdBound {
+    tr: AdTrans,
     alpha_grv: f64,
     alpha_gbc: f64,
     alpha_omg: f64,
@@ -281,8 +485,12 @@ impl AdBound {
     ///
     /// [`GyreError::Unported`] for unported boundary conditions or transforms;
     /// model evaluation errors.
-    pub fn new(cx: &Context<'_>, os_p: &OscPar) -> Result<Self, GyreError> {
-        let tr = AdTrans::new(os_p)?;
+    pub fn new(
+        cx: &Context<'_>,
+        md_p: &ModePar,
+        os_p: &OscPar,
+    ) -> Result<Self, GyreError> {
+        let mut tr = AdTrans::new(md_p, os_p)?;
         let ml = cx.ml;
         let (pt_i, pt_o) = (cx.pt_i, cx.pt_o);
         let inner = match os_p.inner_bound.as_str() {
@@ -360,6 +568,7 @@ impl AdBound {
         };
         tr.stencil(cx, &[pt_i, pt_o])?;
         Ok(Self {
+            tr,
             alpha_grv: os_p.alpha_grv,
             alpha_gbc: os_p.alpha_gbc,
             alpha_omg,
@@ -417,6 +626,7 @@ impl AdBound {
                 b[bx(2, 4)] = alpha_grv * 1.0 + (1.0 - alpha_grv);
             }
         }
+        let b = self.tr.trans_cond_2x4(cx, &b, 0, omega)?;
         Ok((b, [1.0, 1.0]))
     }
 
@@ -474,6 +684,7 @@ impl AdBound {
                 b[bx(2, 4)] = self.alpha_grv * 1.0;
             }
         }
+        let b = self.tr.trans_cond_2x4(cx, &b, 1, omega)?;
         Ok((b, [1.0, 1.0]))
     }
 }
@@ -481,6 +692,7 @@ impl AdBound {
 /// `ad_match_t` (`ad/ad_match_m.fypp`).
 #[derive(Debug, Clone)]
 pub struct AdMatch {
+    tr: AdTrans,
     u_l: f64,
     u_r: f64,
 }
@@ -495,20 +707,28 @@ impl AdMatch {
         cx: &Context<'_>,
         pt_a: Point,
         pt_b: Point,
+        md_p: &ModePar,
         os_p: &OscPar,
     ) -> Result<Self, GyreError> {
         let ml = cx.ml;
         ml.check(&[idx::U])?;
         let u_l = ml.coeff(idx::U, pt_a)?;
         let u_r = ml.coeff(idx::U, pt_b)?;
-        let tr = AdTrans::new(os_p)?;
+        let mut tr = AdTrans::new(md_p, os_p)?;
         tr.stencil(cx, &[pt_a, pt_b])?;
-        Ok(Self { u_l, u_r })
+        Ok(Self { tr, u_l, u_r })
     }
 
     /// `build(st, E_l, E_r, scl)` (`ad_match_m.fypp:140-220`).
-    #[must_use]
-    pub fn build(&self) -> ([f64; 16], [f64; 16], ExtR) {
+    ///
+    /// # Errors
+    ///
+    /// Context rotation or transform errors.
+    pub fn build(
+        &self,
+        cx: &Context<'_>,
+        omega: f64,
+    ) -> Result<([f64; 16], [f64; 16], ExtR), GyreError> {
         let mut e_l = [0.0_f64; 16];
         let mut e_r = [0.0_f64; 16];
         e_l[ix(1, 1)] = -1.0;
@@ -524,7 +744,9 @@ impl AdMatch {
         e_r[ix(3, 3)] = 1.0;
         e_r[ix(4, 1)] = self.u_r;
         e_r[ix(4, 4)] = 1.0;
-        (e_l, e_r, ExtR::from_real(1.0))
+        let e_l = self.tr.trans_cond_4x4(cx, &e_l, 0, omega)?;
+        let e_r = self.tr.trans_cond_4x4(cx, &e_r, 1, omega)?;
+        Ok((e_l, e_r, ExtR::from_real(1.0)))
     }
 }
 
@@ -560,15 +782,18 @@ impl AdDiff {
         cx: &Context<'_>,
         pt_a: Point,
         pt_b: Point,
+        md_p: &ModePar,
         nm_p: &NumPar,
         os_p: &OscPar,
     ) -> Result<Self, GyreError> {
         if pt_a.s != pt_b.s {
             return Ok(Self {
-                kind: AdDiffKind::Match(AdMatch::new(cx, pt_a, pt_b, os_p)?),
+                kind: AdDiffKind::Match(AdMatch::new(
+                    cx, pt_a, pt_b, md_p, os_p,
+                )?),
             });
         }
-        let mut eq = AdEqns::new(cx, os_p)?;
+        let mut eq = AdEqns::new(cx, md_p, os_p)?;
         match diff_kind(&nm_p.diff_scheme)? {
             DiffKind::CollocGl2 => {
                 let (reverse, dx, pt) = colloc_stencil(pt_a, pt_b, true);
@@ -615,7 +840,7 @@ impl AdDiff {
         omega: f64,
     ) -> Result<([f64; 16], [f64; 16], ExtR), GyreError> {
         let (e_l, e_r, scl) = match &self.kind {
-            AdDiffKind::Match(mt) => return Ok(mt.build()),
+            AdDiffKind::Match(mt) => return mt.build(cx, omega),
             AdDiffKind::MagnusGl2 { eq, dx } => {
                 let mut domega = eq.a(cx, 0, omega)?;
                 magnus_build_r(N_E, *dx, &mut domega)?
@@ -684,10 +909,10 @@ impl<'a> AdBvp<'a> {
         nm_p: &NumPar,
         os_p: &OscPar,
     ) -> Result<Self, GyreError> {
-        let bd = AdBound::new(cx, os_p)?;
+        let bd = AdBound::new(cx, md_p, os_p)?;
         let mut df = Vec::with_capacity(gr.n() - 1);
         for j in 0..gr.n() - 1 {
-            df.push(AdDiff::new(cx, gr.pt[j], gr.pt[j + 1], nm_p, os_p)?);
+            df.push(AdDiff::new(cx, gr.pt[j], gr.pt[j + 1], md_p, nm_p, os_p)?);
         }
         match nm_p.matrix_type.as_str() {
             "BLOCK" => {}
@@ -700,7 +925,7 @@ impl<'a> AdBvp<'a> {
             _ => return Err(GyreError::Abort("invalid matrix_type")),
         }
         let sm = BlockSysmtx::new(gr.n() - 1, N_E, AdBound::N_I, AdBound::N_O);
-        let tr = AdTrans::new(os_p)?;
+        let mut tr = AdTrans::new(md_p, os_p)?;
         tr.stencil(cx, &gr.pt)?;
         if os_p.quasiad_eigfuncs {
             return Err(GyreError::Unported {
@@ -805,10 +1030,11 @@ pub fn ad_wave_hom<'a>(
     let mut y_c = vec![Cplx::from_real(0.0); 6 * n];
     for j in 0..n {
         let yj = bp.tr.trans_vars_to(
+            bp.cx,
             [y[4 * j], y[4 * j + 1], y[4 * j + 2], y[4 * j + 3]],
             j,
             omega,
-        );
+        )?;
         for r in 0..4 {
             y_c[6 * j + r] = Cplx::from_real(yj[r]);
         }

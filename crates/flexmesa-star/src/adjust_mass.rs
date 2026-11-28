@@ -68,6 +68,8 @@ fn reset_zero_mass_change_state(model: &mut StarModel) {
     model.aux.k_const_mass = 0;
     model.k_below_just_added = 1;
     model.eps_mdot.fill(0.0);
+    model.aux.xa_removed.resize(model.species, 0.0);
+    model.aux.xa_removed.fill(0.0);
     model.aux.step_hist.clear_adjust_mass_energy_fields();
 }
 
@@ -474,6 +476,35 @@ fn do_adjust_mass_core(
         }
     }
     let prev_dm_raw = model.dm.clone();
+    // Mass-weighted composition of removed surface layers
+    // (`star/private/adjust_mass.f90:285-314`).
+    model.aux.xa_removed.resize(species, 0.0);
+    model.aux.xa_removed.fill(0.0);
+    if delta_m < 0.0 && species > 0 {
+        let removed = -delta_m;
+        let mut xm_old = 0.0_f64;
+        let mut divided = false;
+        for k in 0..nz {
+            if xm_old >= removed {
+                for v in &mut model.aux.xa_removed[..species] {
+                    *v /= removed;
+                }
+                divided = true;
+                break;
+            }
+            let dm = prev_dm_raw[k].min(removed - xm_old);
+            let row = &model.xa[k * species..(k + 1) * species];
+            for j in 0..species {
+                model.aux.xa_removed[j] += row[j] * dm;
+            }
+            xm_old += prev_dm_raw[k];
+        }
+        if !divided && removed > 0.0 {
+            for v in &mut model.aux.xa_removed[..species] {
+                *v /= removed;
+            }
+        }
+    }
     // `save_for_eps_mdot` (`adjust_mass.f90:75-95, 204`).
     let total_energy_profile_before = if need_eps_mdot {
         let (profile, (_, _, _, _, _, e_before)) =

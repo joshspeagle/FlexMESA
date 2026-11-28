@@ -1452,7 +1452,8 @@ pub fn format_star_profile_text(
         &ctx,
         &[],
         &[],
-    );
+    )
+    .expect("format_star_profile_text: invalid model array lengths");
     let mut out = String::with_capacity(hdr.len() + body.len());
     out.push_str(&hdr);
     out.push_str(&body);
@@ -1476,7 +1477,7 @@ pub fn format_star_profile_text_with_extras(
         &ctx,
         extra_header_items,
         extra_cols,
-    );
+    )?;
     let mut out = String::with_capacity(hdr.len() + body.len());
     out.push_str(&hdr);
     out.push_str(&body);
@@ -1489,7 +1490,7 @@ fn format_star_profile_parts_with_extras_impl(
     ctx: &StepReportContext,
     extra_header_items: &[(String, f64)],
     extra_cols: &[(String, Vec<f64>)],
-) -> (String, String) {
+) -> Result<(String, String), StarError> {
     let nz = model.nz;
     let o = &model.controls.output;
     let star_mass = model.mstar / M_SUN;
@@ -1525,7 +1526,7 @@ fn format_star_profile_parts_with_extras_impl(
     hdr.push(("photosphere_r", format_mesa_dbl(ctx.phot.r_rsun)));
     hdr.push((
         "center_eta",
-        format_mesa_dbl(center_value(model, &model.eta)),
+        format_mesa_dbl(center_value(model, &model.eta)?),
     ));
     for (label, iso) in [
         ("center_h1", "h1"),
@@ -1536,7 +1537,7 @@ fn format_star_profile_parts_with_extras_impl(
         ("center_o16", "o16"),
         ("center_ne20", "ne20"),
     ] {
-        hdr.push((label, format_mesa_dbl(center_avg_x_by_name(model, iso))));
+        hdr.push((label, format_mesa_dbl(center_avg_x_by_name(model, iso)?)));
     }
     hdr.push(("star_mass", format_mesa_dbl(star_mass)));
     hdr.push(("star_mdot", format_mesa_dbl(star_mdot)));
@@ -1710,7 +1711,7 @@ fn format_star_profile_parts_with_extras_impl(
         }
         let _ = writeln!(body);
     }
-    (hdr_text, body)
+    Ok((hdr_text, body))
 }
 
 /// Single entry in `LOGS/profiles.index` (`star/private/profile.f90:1024-1160`).
@@ -1860,7 +1861,7 @@ impl ProfilesIndex {
             ctx,
             extra_header_items,
             extra_cols,
-        );
+        )?;
         let hdr_suffix = o.profile_data_header_suffix.trim();
         if hdr_suffix.is_empty() {
             let mut full =
@@ -2401,7 +2402,7 @@ impl StarLogsWriter {
                 &ctx,
                 extras.profile_header_items,
                 extras.profile_columns,
-            );
+            )?;
             let mut full = String::with_capacity(hdr_t.len() + body_t.len());
             full.push_str(&hdr_t);
             full.push_str(&body_t);

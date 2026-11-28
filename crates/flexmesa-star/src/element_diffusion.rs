@@ -342,7 +342,10 @@ pub fn do_element_diffusion_step(
                     .diffusion_class_typical_charge
                     .get(j)
                     .copied()
-                    .unwrap_or(1.0);
+                    // Upstream zero-fills all 100 slots of
+                    // `diffusion_class_typical_charge`
+                    // (`star/private/ctrls_io.f90:743-746`).
+                    .unwrap_or(0.0);
             }
         }
     }

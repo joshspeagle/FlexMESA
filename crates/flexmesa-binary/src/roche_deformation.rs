@@ -17,6 +17,7 @@ use flexmesa_star::{
     StarError, TidalDeformationHandle, TidalDeformationHook,
     TidalShellDeformation,
 };
+use flexmesa_utils::resolve_mesa_test_inputs_dir;
 
 use crate::orbit::eval_rlobe;
 
@@ -254,42 +255,31 @@ pub struct RocheDeformationTables {
 static GLOBAL_ROCHE_TABLES: OnceLock<Result<RocheDeformationTables, String>> =
     OnceLock::new();
 
+fn resolve_roche_data_dir_from(mesa_root: &Path) -> Result<PathBuf, StarError> {
+    let dir = mesa_root.join("data").join("roche_data");
+    if !dir.is_dir() {
+        return Err(StarError::IoError(format!(
+            "roche_data directory not found at '{}' (set MESA_DIR or run \
+             `flexmesa data fetch --include-test-inputs`)",
+            dir.display()
+        )));
+    }
+    Ok(dir)
+}
+
 fn resolve_roche_data_dir() -> Result<PathBuf, StarError> {
-    if let Some(mesa_dir) = std::env::var_os("MESA_DIR") {
-        let p = PathBuf::from(mesa_dir).join("data").join("roche_data");
-        if p.is_dir() {
-            return Ok(p);
-        }
-    }
-    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
-        let p = PathBuf::from(xdg)
-            .join("flexmesa")
-            .join("mesa_test_inputs")
-            .join("data")
-            .join("roche_data");
-        if p.is_dir() {
-            return Ok(p);
-        }
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        let p = PathBuf::from(home)
-            .join(".cache")
-            .join("flexmesa")
-            .join("mesa_test_inputs")
-            .join("data")
-            .join("roche_data");
-        if p.is_dir() {
-            return Ok(p);
-        }
-    }
-    Err(StarError::IoError(String::from(
-        "roche_data directory not found under $MESA_DIR/data/roche_data or $HOME/.cache/flexmesa/mesa_test_inputs/data/roche_data",
-    )))
+    resolve_roche_data_dir_from(&resolve_mesa_test_inputs_dir())
 }
 
 impl RocheDeformationTables {
     /// Loads the four Roche distortion tables from `roche_data_dir`.
     pub fn from_dir(roche_data_dir: &Path) -> Result<Self, StarError> {
+        if !roche_data_dir.is_dir() {
+            return Err(StarError::IoError(format!(
+                "roche_data directory not found at '{}'",
+                roche_data_dir.display()
+            )));
+        }
         let load = |name: &str| -> Result<RocheTable2D, StarError> {
             let path = roche_data_dir.join(name);
             let text = fs::read_to_string(&path).map_err(|e| {
@@ -313,7 +303,8 @@ impl RocheDeformationTables {
         })
     }
 
-    /// Returns the lazily initialized global [`RocheDeformationTables`].
+    /// Returns the lazily initialized global [`RocheDeformationTables`],
+    /// loaded from `data/roche_data` under [`resolve_mesa_test_inputs_dir`].
     pub fn global() -> Result<&'static Self, StarError> {
         let res = GLOBAL_ROCHE_TABLES.get_or_init(|| {
             let dir = resolve_roche_data_dir().map_err(|e| e.to_string())?;
@@ -497,5 +488,334 @@ impl TidalDeformationHook for BinaryTidalDeformationHook {
             d_irot_dlnr,
             f_switch,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+
+    struct TempDirGuard {
+        root: PathBuf,
+    }
+
+    impl TempDirGuard {
+        fn new(tag: &str) -> Self {
+            static SEQ: AtomicU64 = AtomicU64::new(0);
+            let id = SEQ.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "flexmesa_roche_{tag}_{}_{id}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(&root).expect("create temp roche dir");
+            Self { root }
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn constant_table_text(val: f64) -> String {
+        format!("2\n-1.0 1.0\n2\n0.0 1.0\n{val} {val}\n{val} {val}\n")
+    }
+
+    fn write_minimal_roche_tables(roche_dir: &Path, fp_val: f64) {
+        fs::create_dir_all(roche_dir).expect("mkdir roche_data");
+        let files = [
+            ("fp_data.txt", fp_val),
+            ("ft_data.txt", 0.8),
+            ("irot_data.txt", 1.25),
+            ("psi_data.txt", -1.5),
+        ];
+        for (name, val) in files {
+            fs::write(roche_dir.join(name), constant_table_text(val))
+                .expect("write minimal roche table");
+        }
+    }
+
+    #[test]
+    fn test_resolve_roche_data_dir_from_rejects_missing_or_file() {
+        let tmp = TempDirGuard::new("root");
+        let missing_root = tmp.root.join("missing_mesa");
+        fs::create_dir_all(&missing_root).expect("mkdir missing_mesa");
+        let expected_missing = missing_root.join("data").join("roche_data");
+        let err = resolve_roche_data_dir_from(&missing_root)
+            .expect_err("missing data/roche_data must fail");
+        assert!(matches!(err, StarError::IoError(_)));
+        let msg = err.to_string();
+        assert!(
+            msg.contains(&expected_missing.display().to_string()),
+            "expected missing path in error: {msg}"
+        );
+
+        let file_root = tmp.root.join("file_mesa");
+        fs::create_dir_all(file_root.join("data")).expect("mkdir data");
+        let file_roche = file_root.join("data").join("roche_data");
+        fs::write(&file_roche, b"not a dir").expect("write marker file");
+        let err_file = resolve_roche_data_dir_from(&file_root)
+            .expect_err("non-directory roche_data must fail");
+        assert!(
+            err_file
+                .to_string()
+                .contains(&file_roche.display().to_string()),
+            "expected non-dir path in error: {err_file}"
+        );
+
+        let valid_root = tmp.root.join("valid_mesa");
+        let valid_roche = valid_root.join("data").join("roche_data");
+        fs::create_dir_all(&valid_roche).expect("mkdir valid roche_data");
+        let resolved = resolve_roche_data_dir_from(&valid_root)
+            .expect("valid roche_data directory should resolve");
+        assert_eq!(resolved, valid_roche);
+    }
+
+    #[test]
+    fn test_roche_tables_from_dir_requires_dir_and_all_four_files() {
+        let tmp = TempDirGuard::new("tables");
+        let absent = tmp.root.join("absent_roche_data");
+        let err_dir = RocheDeformationTables::from_dir(&absent)
+            .expect_err("absent roche_data dir must fail");
+        assert!(
+            err_dir.to_string().contains(&absent.display().to_string()),
+            "expected missing dir in error: {err_dir}"
+        );
+
+        let roche_dir = tmp.root.join("roche_data");
+        write_minimal_roche_tables(&roche_dir, 0.65);
+        let tables = RocheDeformationTables::from_dir(&roche_dir)
+            .expect("all four tables present should load");
+        assert!((tables.eval_fp(0.0, 0.5) - 0.65).abs() < 1.0e-14);
+        assert!((tables.eval_ft(0.0, 0.5) - 0.8).abs() < 1.0e-14);
+        assert!((tables.eval_irot(0.0, 0.5) - 1.25).abs() < 1.0e-14);
+        assert!((tables.eval_psi(0.0, 0.5) + 1.5).abs() < 1.0e-14);
+
+        for missing_name in [
+            "fp_data.txt",
+            "ft_data.txt",
+            "irot_data.txt",
+            "psi_data.txt",
+        ] {
+            let case_dir = tmp.root.join(format!("missing_{missing_name}"));
+            write_minimal_roche_tables(&case_dir, 0.65);
+            let missing_file = case_dir.join(missing_name);
+            fs::remove_file(&missing_file).expect("remove table file");
+            let err = RocheDeformationTables::from_dir(&case_dir)
+                .expect_err("incomplete roche_data directory must fail");
+            let msg = err.to_string();
+            assert!(
+                msg.contains(&missing_file.display().to_string()),
+                "expected missing file '{missing_name}' in error: {msg}"
+            );
+        }
+    }
+
+    fn spawn_env_probe(
+        mode: &str,
+        mesa_dir: Option<&Path>,
+        xdg_cache_home: Option<&Path>,
+        home: Option<&Path>,
+        expected_substr: &str,
+    ) {
+        let exe = std::env::current_exe().expect("current test executable");
+        let mut cmd = Command::new(exe);
+        cmd.args([
+            "--exact",
+            "roche_deformation::tests::roche_env_probe_worker",
+            "--nocapture",
+        ])
+        .env("FLEXMESA_ROCHE_ENV_PROBE", mode)
+        .env("FLEXMESA_ROCHE_EXPECTED", expected_substr);
+        match mesa_dir {
+            Some(p) => {
+                cmd.env("MESA_DIR", p);
+            }
+            None => {
+                cmd.env_remove("MESA_DIR");
+            }
+        }
+        match xdg_cache_home {
+            Some(p) => {
+                cmd.env("XDG_CACHE_HOME", p);
+            }
+            None => {
+                cmd.env_remove("XDG_CACHE_HOME");
+            }
+        }
+        match home {
+            Some(p) => {
+                cmd.env("HOME", p);
+            }
+            None => {
+                cmd.env_remove("HOME");
+            }
+        }
+        let output = cmd.output().expect("spawn roche env probe process");
+        assert!(
+            output.status.success(),
+            "probe mode '{mode}' failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn roche_env_probe_worker() {
+        let Ok(mode) = std::env::var("FLEXMESA_ROCHE_ENV_PROBE") else {
+            return;
+        };
+        let expected =
+            std::env::var("FLEXMESA_ROCHE_EXPECTED").unwrap_or_default();
+        match mode.as_str() {
+            "expect_dir_error" => {
+                let dir_err = resolve_roche_data_dir()
+                    .expect_err("resolve_roche_data_dir must fail loudly");
+                assert!(
+                    dir_err.to_string().contains(&expected),
+                    "missing expected path '{expected}' in dir error: {dir_err}"
+                );
+                let global_err = RocheDeformationTables::global()
+                    .expect_err("global() must fail loudly");
+                assert!(
+                    global_err.to_string().contains(&expected),
+                    "missing expected path '{expected}' in global error: \
+                     {global_err}"
+                );
+            }
+            "expect_global_error" => {
+                let global_err = RocheDeformationTables::global()
+                    .expect_err("partial roche_data must fail loudly");
+                assert!(
+                    global_err.to_string().contains(&expected),
+                    "missing expected path '{expected}' in global error: \
+                     {global_err}"
+                );
+            }
+            "expect_fp_val" => {
+                let want: f64 = expected.parse().expect("expected fp float");
+                let tables = RocheDeformationTables::global()
+                    .expect("expected valid roche tables");
+                let got = tables.eval_fp(0.0, 0.5);
+                assert!(
+                    (got - want).abs() < 1.0e-14,
+                    "loaded wrong roche root: got fp={got}, want fp={want}"
+                );
+            }
+            other => {
+                panic!("unexpected FLEXMESA_ROCHE_ENV_PROBE mode: {other}")
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_roche_data_dir_uses_single_root_without_fallback() {
+        let tmp = TempDirGuard::new("env_probe");
+        let mesa_empty = tmp.root.join("mesa_empty");
+        let mesa_partial = tmp.root.join("mesa_partial");
+        let mesa_valid = tmp.root.join("mesa_valid");
+        let xdg_empty = tmp.root.join("xdg_empty");
+        let xdg_valid = tmp.root.join("xdg_valid");
+        let home_valid = tmp.root.join("home_valid");
+
+        fs::create_dir_all(&mesa_empty).expect("mkdir mesa_empty");
+        fs::create_dir_all(&xdg_empty).expect("mkdir xdg_empty");
+
+        write_minimal_roche_tables(
+            &mesa_partial.join("data").join("roche_data"),
+            0.31,
+        );
+        fs::remove_file(
+            mesa_partial
+                .join("data")
+                .join("roche_data")
+                .join("psi_data.txt"),
+        )
+        .expect("remove psi_data.txt");
+
+        write_minimal_roche_tables(
+            &mesa_valid.join("data").join("roche_data"),
+            0.42,
+        );
+        write_minimal_roche_tables(
+            &xdg_valid
+                .join("flexmesa")
+                .join("mesa_test_inputs")
+                .join("data")
+                .join("roche_data"),
+            0.61,
+        );
+        write_minimal_roche_tables(
+            &home_valid
+                .join(".cache")
+                .join("flexmesa")
+                .join("mesa_test_inputs")
+                .join("data")
+                .join("roche_data"),
+            0.77,
+        );
+
+        // 1. MESA_DIR set without data/roche_data must NOT fall back to XDG or HOME.
+        let missing_mesa_roche = mesa_empty.join("data").join("roche_data");
+        spawn_env_probe(
+            "expect_dir_error",
+            Some(&mesa_empty),
+            Some(&xdg_valid),
+            Some(&home_valid),
+            &missing_mesa_roche.display().to_string(),
+        );
+
+        // 2. XDG_CACHE_HOME set without mesa_test_inputs/data/roche_data must NOT fall back to HOME.
+        let missing_xdg_roche = xdg_empty
+            .join("flexmesa")
+            .join("mesa_test_inputs")
+            .join("data")
+            .join("roche_data");
+        spawn_env_probe(
+            "expect_dir_error",
+            None,
+            Some(&xdg_empty),
+            Some(&home_valid),
+            &missing_xdg_roche.display().to_string(),
+        );
+
+        // 3. Partial MESA_DIR/data/roche_data must fail naming the missing file without fallback.
+        let missing_psi = mesa_partial
+            .join("data")
+            .join("roche_data")
+            .join("psi_data.txt");
+        spawn_env_probe(
+            "expect_global_error",
+            Some(&mesa_partial),
+            Some(&xdg_valid),
+            Some(&home_valid),
+            &missing_psi.display().to_string(),
+        );
+
+        // 4. Valid MESA_DIR takes precedence over XDG_CACHE_HOME and HOME.
+        spawn_env_probe(
+            "expect_fp_val",
+            Some(&mesa_valid),
+            Some(&xdg_valid),
+            Some(&home_valid),
+            "0.42",
+        );
+
+        // 5. Valid XDG_CACHE_HOME takes precedence over HOME when MESA_DIR is unset.
+        spawn_env_probe(
+            "expect_fp_val",
+            None,
+            Some(&xdg_valid),
+            Some(&home_valid),
+            "0.61",
+        );
+
+        // 6. Valid HOME fallback resolves when MESA_DIR and XDG_CACHE_HOME are unset.
+        spawn_env_probe("expect_fp_val", None, None, Some(&home_valid), "0.77");
     }
 }

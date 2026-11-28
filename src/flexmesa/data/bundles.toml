@@ -116,18 +116,18 @@ description = "3,853 MESA 26.4.1 test_output goldens, test_suite inputs, *.defau
 
 [[bundles]]
 name = "mesa_histories"
-archive = "mesa-histories-v1.tar.zst"
+archive = "mesa-histories-v2.tar.zst"
 kind = "tar_zst"
 bundle_root = "mesa_histories"
 target_relpath = "."
 manifest_file = "bundle_hashes/mesa_histories.sha256.tsv"
 sentinel_relpaths = ["PROVENANCE.json", "SUMMARY_TABLE.md", "thinned/star/1.3M_ms_high_Z.data", "thinned/binary/double_bh.data", "thinned/astero/example_astero.data"]
-archive_sha256 = "d33fc1999923f26f83713488844aad8271bd21f147bd38bdfcc882385ae7a1e1"
-archive_size_bytes = 307583060
+archive_sha256 = "0ffee97216992e93c2ec08651347139ba503ba93bcceaa8e939d763270260694"
+archive_size_bytes = 307675454
 unpacked_sha256 = ""
-unpacked_size_bytes = 1355417214
+unpacked_size_bytes = 1356400432
 test_only = true
-description = "102 MESA 26.4.1 6-line-header thinned and full reference histories, .mod files, and 34,393 GYRE/ADIPLS oscillation modes (SDK 26.6.1, gfortran 15.2.0)."
+description = "102 MESA 26.4.1 6-line-header thinned and full reference histories, .mod files, and 34,393 GYRE/ADIPLS oscillation modes (SDK 26.6.1, gfortran 15.2.0). v2: the star/rsp_Delta_Scuti reference spans history.data and map_history.data (DECISIONS #78)."
 
 [[bundles]]
 name = "mesa_module_hex"

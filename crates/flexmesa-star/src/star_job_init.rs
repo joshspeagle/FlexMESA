@@ -95,8 +95,8 @@ fn load_saved_mod(
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] on paths whose callees are not ported
-/// here (`RSP_setup_part1` / `RSP_setup_part2`, `set_viscosity_vars_TDC`),
-/// and propagates `set_vars` and brunt errors.
+/// here (`RSP_setup_part1` / `RSP_setup_part2`), and propagates `set_vars`,
+/// `set_viscosity_vars_TDC` and brunt errors.
 pub(crate) fn finish_load_model(
     model: &mut StarModel,
     extras: &mut dyn StarExtras,
@@ -108,16 +108,6 @@ pub(crate) fn finish_load_model(
     if model.controls.rsp_flag {
         return Err(StarError::InvalidInput(String::from(
             "finish_load_model: RSP_setup_part1 is not ported on the load_saved_model path (star/private/read_model.f90:150-156)",
-        )));
-    }
-    // `set_viscosity_vars_TDC` (`star/private/tdc_hydro.f90:40-89`), called
-    // at `read_model.f90:164-167`, is not ported.
-    if model.controls.tdc_alpha_m > 0.0
-        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
-        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
-    {
-        return Err(StarError::InvalidInput(String::from(
-            "finish_load_model: set_viscosity_vars_TDC (star/private/tdc_hydro.f90:40-89) is not ported; required when TDC_alpha_M > 0 and MLT_option = 'TDC' (star/private/read_model.f90:164-167)",
         )));
     }
     model.layout = VarLayout::with_flags(
@@ -191,7 +181,21 @@ pub(crate) fn finish_load_model(
             }
         }
         model.pack_xh();
+        if let Err(e) = crate::hydro_eqns::check_start_of_step_arrays(model) {
+            model.aux.doing_finish_load_model = false;
+            return Err(e);
+        }
         crate::rsp2_ad::update_rsp2_vars_ad(model);
+    }
+    // `set_viscosity_vars_TDC` after `set_vars` (`read_model.f90:164-167`).
+    if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        && !(model.controls.rsp2_flag || model.controls.rsp_flag)
+    {
+        if let Err(e) = crate::tdc_hydro::set_viscosity_vars_tdc(model) {
+            model.aux.doing_finish_load_model = false;
+            return Err(e);
+        }
     }
     model.aux.doing_finish_load_model = false;
 
@@ -397,8 +401,9 @@ pub(crate) enum InitModelOutcome {
     Terminate(String),
 }
 
-/// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
-/// subsequent multi-inlist stages) and executes all `&star_job` startup and
+/// Initializes a [`StarModel`] from `bundle` (or updates `existing_model`, an
+/// in-memory model supplied by an API caller; the `./rn` stage runner never
+/// supplies one) and executes all `&star_job` startup and
 /// relaxation directives (`star/private/star_job_controls_io.f90` &
 /// `star/private/init.f90`).
 ///
@@ -634,10 +639,11 @@ fn init_or_update_model_impl(
     let mut did_load_zams_model =
         existing_is_zams_seed && existing_model.is_some();
     // Upstream's `restart` is a photo restart only
-    // (`star/job/run_star_support.f90:433-442`). A model carried over from an
-    // earlier `./rn` stage stands for the `.mod` file that stage saved and
-    // the next one loads, and a binary seed is a freshly loaded model, so
-    // neither is a restart: every `.not. restart` control applies.
+    // (`star/job/run_star_support.f90:433-442`). A model passed in by an API
+    // caller and a binary seed are not restarts either: every
+    // `.not. restart` control applies. The `./rn` stage runner passes no
+    // model, because each `do_one` is a separate MESA process that reads
+    // the `.mod` file the earlier stage saved.
     let restart = false;
     let had_existing_model = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {

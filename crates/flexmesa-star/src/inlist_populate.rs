@@ -588,9 +588,6 @@ impl InlistBundle {
             &mut c.steps_before_use_velocity_time_centering,
             "steps_before_use_velocity_time_centering",
         )?;
-        if c.steps_before_use_velocity_time_centering == 0 {
-            c.using_velocity_time_centering = true;
-        }
         ctrl.try_bool_into("controls", &mut self.job.use_other_build_initial_model, "use_other_build_initial_model")?;
         c.accretion_species_id = ctrl.try_get_indexed_strings("controls", "accretion_species_id")?;
         c.accretion_species_xa = ctrl.try_get_indexed_f64s("controls", "accretion_species_xa")?;

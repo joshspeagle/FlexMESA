@@ -25,7 +25,9 @@ use crate::edd_wind::{
     eval_tout_wind_enhancement_orbit_averaged,
 };
 use crate::extras::{BinaryExtras, DefaultBinaryExtras};
-use crate::inlist::BinaryInlistControls;
+use crate::inlist::{
+    ensure_no_unported_binary_driver_controls, BinaryInlistControls,
+};
 use crate::mdot::{
     eval_arras_mdot_thin, eval_kolb_mdot_eccentric_photosphere,
     eval_kolb_mdot_thick_photosphere, eval_ritter_mdot_eccentric,
@@ -122,6 +124,8 @@ pub struct BinaryStepSnapshot {
     pub max_timestep_sec: f64,
     /// Binary timestep reason code (`dt_why_reason`).
     pub dt_why_reason: i32,
+    /// Common-envelope evolution flag (`CE_flag`).
+    pub ce_flag: bool,
     /// Implicit solver adaptive `change_factor`.
     pub change_factor: f64,
     /// Magnetic-braking active flags `[mb_1, mb_2]`.
@@ -187,6 +191,8 @@ pub struct BinaryStepScalars {
     pub max_timestep_sec: f64,
     /// Binary timestep reason code (`dt_why_reason`).
     pub dt_why_reason: i32,
+    /// Common-envelope evolution flag (`CE_flag`).
+    pub ce_flag: bool,
     /// Implicit solver adaptive `change_factor`.
     pub change_factor: f64,
     /// Magnetic-braking active flags `[mb_1, mb_2]`.
@@ -237,6 +243,7 @@ impl BinaryStepSnapshot {
             model_number: s.model_number,
             max_timestep_sec: s.max_timestep_sec,
             dt_why_reason: s.dt_why_reason,
+            ce_flag: s.ce_flag,
             change_factor: s.change_factor,
             using_jdot_mb: s.using_jdot_mb,
             cumulative_j_ext: s.cumulative_j_ext,
@@ -288,6 +295,7 @@ impl BinaryStepSnapshot {
         self.model_number = s.model_number;
         self.max_timestep_sec = s.max_timestep_sec;
         self.dt_why_reason = s.dt_why_reason;
+        self.ce_flag = s.ce_flag;
         self.change_factor = s.change_factor;
         self.using_jdot_mb = s.using_jdot_mb;
         self.cumulative_j_ext = s.cumulative_j_ext;
@@ -472,6 +480,57 @@ pub fn eval_star_intrinsic_wind_cgs_eccentric(
     Ok(wind_cgs)
 }
 
+/// Maximum accretion species array length (`max_num_accretion_species`,
+/// `star_data/public/star_data_def.inc:365`).
+pub const MAX_NUM_ACCRETION_SPECIES: usize = 250;
+
+/// Copies mass-weighted removed composition `xa_removed` from the mass-losing
+/// star into the accreting star's `accretion_species_*` controls
+/// (`set_accretion_composition` in `binary/private/binary_mdot.f90:988-1021`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if the mass-losing star's `species`
+/// exceeds [`MAX_NUM_ACCRETION_SPECIES`] or its `iso_names` slice is shorter
+/// than `species`.
+pub fn set_accretion_composition(
+    donor: &mut StarModel,
+    accretor: &mut StarModel,
+    acc_is_accretor: bool,
+) -> Result<(), StarError> {
+    let (src, dst, role) = if acc_is_accretor {
+        (&*donor, accretor, "accretor")
+    } else {
+        (&*accretor, donor, "donor")
+    };
+    if src.species > MAX_NUM_ACCRETION_SPECIES {
+        return Err(StarError::InvalidInput(format!(
+            "set_accretion_composition: nuclear network is too large for \
+             {role} ({} > max_num_accretion_species = \
+             {MAX_NUM_ACCRETION_SPECIES}, binary_mdot.f90:999-1013)",
+            src.species
+        )));
+    }
+    if src.iso_names.len() < src.species {
+        return Err(StarError::InvalidInput(format!(
+            "set_accretion_composition: source star iso_names length {} < \
+             species {}",
+            src.iso_names.len(),
+            src.species
+        )));
+    }
+    dst.controls.accrete_same_as_surface = false;
+    dst.controls.accrete_given_mass_fractions = true;
+    dst.controls.mix_wind.num_accretion_species = src.species;
+    dst.controls.accretion_species_id = src.iso_names[..src.species].to_vec();
+    dst.controls.accretion_species_xa =
+        if src.aux.xa_removed.len() >= src.species {
+            src.aux.xa_removed[..src.species].to_vec()
+        } else {
+            vec![0.0; src.species]
+        };
+    Ok(())
+}
+
 /// Evaluates coupled winds, Bondi-Hoyle wind transfer, and Eddington retention
 /// (`binary_mdot.f90:428-622`) using [`DefaultBinaryExtras`].
 #[allow(clippy::too_many_arguments)]
@@ -504,10 +563,43 @@ pub fn prepare_coupled_mdots(
 
 /// Evaluates coupled winds, Bondi-Hoyle wind transfer, decoupled Eddington
 /// retention vs. radiation-corrected accretion (`binary_mdot.f90:428-622`), and
-/// configures `donor` and optional `accretor` `mstar_dot`, accretion
-/// composition, and `accreted_material_j` before `star_evolve_step_part2`.
+/// configures `donor` and optional `accretor` `mstar_dot` and
+/// `accreted_material_j` before `star_evolve_step_part2`.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_coupled_mdots_with_extras(
+    ctrl: &BinaryInlistControls,
+    donor: &mut StarModel,
+    accretor_star: Option<&mut StarModel>,
+    point_mass_state: Option<(f64, f64)>,
+    donor_i: usize,
+    rl: [f64; 2],
+    separation: f64,
+    eccentricity: f64,
+    trial_mtransfer_rate: f64,
+    ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
+) -> Result<CoupledMdotAccounting, StarError> {
+    prepare_coupled_mdots_for_trial(
+        ctrl,
+        donor,
+        accretor_star,
+        point_mass_state,
+        donor_i,
+        rl,
+        separation,
+        eccentricity,
+        trial_mtransfer_rate,
+        ignore_rlof,
+        extras,
+        false,
+    )
+}
+
+/// Evaluates `adjust_mdots` (`binary/private/binary_mdot.f90:495-622`),
+/// optionally skipping accretor wind and accretion updates during implicit
+/// redos when `s_accretor` hit `was_in_implicit_wind_limit` (`:526, 555`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prepare_coupled_mdots_for_trial(
     ctrl: &BinaryInlistControls,
     donor: &mut StarModel,
     mut accretor_star: Option<&mut StarModel>,
@@ -519,7 +611,9 @@ pub fn prepare_coupled_mdots_with_extras(
     trial_mtransfer_rate: f64,
     ignore_rlof: bool,
     extras: &mut dyn BinaryExtras,
+    skip_accretor_implicit_wind: bool,
 ) -> Result<CoupledMdotAccounting, StarError> {
+    ensure_no_unported_binary_driver_controls(ctrl, false)?;
     let mtransfer_rate = if ignore_rlof {
         0.0
     } else {
@@ -590,6 +684,7 @@ pub fn prepare_coupled_mdots_with_extras(
         extras,
     )?;
     let w_a = match accretor_star.as_deref_mut() {
+        Some(acc) if skip_accretor_implicit_wind => acc.mstar_dot,
         Some(acc) => eval_star_intrinsic_wind_cgs_eccentric(
             acc,
             acc_i,
@@ -662,45 +757,43 @@ pub fn prepare_coupled_mdots_with_extras(
             donor_net_mdot,
         );
     } else if let Some(acc) = accretor_star {
-        let fixed_xfer = (1.0
+        // `binary/private/binary_mdot.f90:513-514`: unclamped `1 - alpha -
+        // beta - delta`.
+        let fixed_xfer = 1.0
             - ctrl.mass_transfer_alpha
             - ctrl.mass_transfer_beta
-            - ctrl.mass_transfer_delta)
-            .clamp(0.0, 1.0);
+            - ctrl.mass_transfer_delta;
         let actual_tr = mtransfer_rate * fixed_xfer + w_tr_d;
-        let retained = (-actual_tr).max(0.0);
-        let acc_net_mdot = retained + w_a;
-        // `binary/private/binary_mdot.f90:552-560`: upstream updates
-        // `s_accretor% mstar_dot` directly without touching `mass_change`.
-        acc.mstar_dot = acc_net_mdot;
-        if retained > 0.0 && donor.nz > 0 && donor.species == acc.species {
-            acc.controls.accrete_same_as_surface = false;
-            acc.controls.accrete_given_mass_fractions = true;
-            acc.controls.mix_wind.num_accretion_species = donor.iso_names.len();
-            acc.controls
-                .accretion_species_id
-                .clone_from(&donor.iso_names);
-            acc.controls.accretion_species_xa = donor.cell_xa(0).to_vec();
-        }
+        let retained = -actual_tr;
         out.actual_mtransfer_rate = actual_tr;
         out.retained_accretion_rate = retained;
-        out.accreted_material_j = if ctrl.do_j_accretion && acc_net_mdot > 0.0 {
-            eval_accreted_material_j(
-                m_d,
-                m_a,
-                star_photosphere_radius_cm(acc),
-                separation,
-            )
-            .0
+        if skip_accretor_implicit_wind {
+            // `binary/private/binary_mdot.f90:555`: keep accretor `mstar_dot`
+            // and `accreted_material_j` untouched when skipping accretor.
+            out.accreted_material_j = acc.controls.mix_wind.accreted_material_j;
+            out.component_mdot = [donor_net_mdot, acc.mstar_dot];
         } else {
-            0.0
-        };
-        // `run_binary_support.f90:261-263` & `binary_mdot.f90:562-572`:
-        // wire `use_accreted_material_j` and `accreted_material_j` into `adjust_mass`.
-        acc.controls.mix_wind.use_accreted_material_j =
-            ctrl.do_j_accretion && acc_net_mdot > 0.0;
-        acc.controls.mix_wind.accreted_material_j = out.accreted_material_j;
-        out.component_mdot = [donor_net_mdot, acc_net_mdot];
+            let acc_net_mdot = retained + w_a;
+            // `binary/private/binary_mdot.f90:552-560`: upstream updates
+            // `s_accretor% mstar_dot` directly without touching `mass_change`.
+            acc.mstar_dot = acc_net_mdot;
+            out.accreted_material_j = if ctrl.do_j_accretion {
+                eval_accreted_material_j(
+                    m_d,
+                    m_a,
+                    star_photosphere_radius_cm(acc),
+                    separation,
+                )
+                .0
+            } else {
+                0.0
+            };
+            // `run_binary_support.f90:261-263` & `binary_mdot.f90:562-572`:
+            // apply `do_j_accretion` unconditionally across net `mstar_dot`.
+            acc.controls.mix_wind.use_accreted_material_j = ctrl.do_j_accretion;
+            acc.controls.mix_wind.accreted_material_j = out.accreted_material_j;
+            out.component_mdot = [donor_net_mdot, acc_net_mdot];
+        }
         // `binary/private/binary_mdot.f90:605-614`: only ascribe `alpha`/`beta`/`delta`
         // outflows when net RLOF + donor wind transfer leaves the donor (`< 0`).
         if mtransfer_rate + w_tr_d < 0.0 {
@@ -855,7 +948,7 @@ pub fn star_skips_hard_limits(star: &StarModel) -> bool {
         return false;
     }
     let sh = &star.aux.step_hist;
-    sh.timestep_hold >= star.model_number
+    (sh.timestep_hold > 0 && sh.timestep_hold >= star.model_number)
         || (ts.relax_hard_limits_after_retry
             && sh.model_number_for_last_retry == Some(star.model_number))
 }
@@ -987,6 +1080,13 @@ fn begin_single_star_attempt_core(
     );
     let saved_other_wind = mask_other_wind
         .then(|| std::mem::replace(&mut star.controls.use_other_wind, false));
+    // `star/private/evolve.f90:376, 1845`: `prepare_for_new_step` (and its
+    // `min_timestep_limit` check) runs only on `first_try`; binary outer
+    // retries already enforce `min_timestep_limit` before
+    // `dt_reduction_factor_for_j` (`binary_timestep.f90:86-95`).
+    let saved_min_dt = (!first_try).then(|| {
+        std::mem::replace(&mut star.controls.min_timestep_limit, 0.0)
+    });
     star.dt = dt_try;
     star.dt_next = dt_try;
     let do_remesh = allow_remesh
@@ -1001,6 +1101,9 @@ fn begin_single_star_attempt_core(
         do_remesh,
         extras,
     );
+    if let Some(prev) = saved_min_dt {
+        star.controls.min_timestep_limit = prev;
+    }
     if let Some(prev) = saved_other_wind {
         star.controls.use_other_wind = prev;
     }

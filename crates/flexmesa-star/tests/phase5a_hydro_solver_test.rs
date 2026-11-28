@@ -384,24 +384,12 @@ fn assert_tridiagonal_jacobian_matches_fd(
                 let p_surf = flexmesa_math::exp(m.ln_peos_surf_ad.val);
                 (sys, p_surf, m.energy)
             };
-            let perturb_x = |sgn: f64, sink: Option<usize>| {
-                perturb_x_with_p_surf(sgn, sink).0
-            };
-            let (sys_p, sys_m) = (perturb_x(1.0, None), perturb_x(-1.0, None));
-            for k_equ in 0..nz {
-                if k_equ.abs_diff(k_var) > 1 {
-                    continue;
-                }
-                for i_equ in nvar_hydro..nvar {
-                    let fd = (sys_p.equ[k_equ * nvar + i_equ]
-                        - sys_m.equ[k_equ * nvar + i_equ])
-                        / (2.0 * eps_scaled);
-                    let an =
-                        lookup_block_entry(&sys0, k_equ, i_equ, k_var, j_var);
-                    assert_entry_matches("chem", an, fd, 1.0e-5, 1.0e-9);
-                }
-            }
-
+            // A lone `xa` perturbation is rescaled by `set_basic_vars`
+            // (`star/private/hydro_vars.f90:746-754`: clamp to [0, 1] and
+            // renormalize when |sum - 1| > 1e-12), so single-column central
+            // differences no longer measure the independent-variable partial.
+            // The sum-preserving `e_j - e_sink` checks below cover each
+            // column through the combination `a_j - a_sink * scale ratio`.
             for idx_sink in [idx_he4, idx_o16] {
                 if j_sp == idx_sink {
                     continue;

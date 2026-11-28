@@ -13,8 +13,9 @@ use flexmesa_num::binary_search_1based;
 
 use crate::controls::StarError;
 use crate::controls_timestep_stop::MAX_DX_LIMIT_CTRLS;
-use crate::core_boundaries::compute_power_categories;
+use crate::core_boundaries::{compute_power_categories, PowerCategories};
 use crate::evolve_support::eval_lum_by_category_erg_s;
+use crate::mesa_history::{eval_min_cell_collapse_time, eval_min_dr_div_cs};
 use crate::model::StarModel;
 
 #[derive(Debug)]
@@ -29,6 +30,9 @@ impl From<String> for CheckFailure {
     }
 }
 
+/// `check_change` (`star/private/timestep.f90:732-766`). Like upstream, the
+/// `dt_limit_ratio` slot is `intent(inout)` and is assigned only when the
+/// soft limit is positive; with `lim <= 0` the slot keeps its earlier value.
 #[inline]
 pub(crate) fn check_change(
     delta_value: f64,
@@ -37,21 +41,33 @@ pub(crate) fn check_change(
     time_delta_coeff: f64,
     msg: &str,
     skip_hard_limit: bool,
-) -> Result<f64, String> {
+    slot: &mut f64,
+) -> Result<(), CheckFailure> {
+    // Upstream stops with `mesa_error` on a non-finite change
+    // (`timestep.f90:744-747`); there is no retry on this path.
     if !delta_value.is_finite() {
-        return Err(format!("{msg} non-finite delta"));
+        return Err(CheckFailure::Fatal(StarError::InvalidInput(format!(
+            "check_change: {msg} delta_value is not finite"
+        ))));
     }
     let abs_change = delta_value.abs();
     let lim = lim_in * time_delta_coeff;
     let hard_lim = hard_lim_in * time_delta_coeff;
     if hard_lim > 0.0 && abs_change > hard_lim && !skip_hard_limit {
-        return Err(format!("{msg} hard limit"));
+        return Err(CheckFailure::Retry(format!("{msg} hard limit")));
     }
     if lim <= 0.0 {
-        return Ok(0.0);
+        return Ok(());
     }
     let r = abs_change / lim;
-    Ok(if r <= 1.0 { 0.0 } else { r })
+    // `timestep.f90:760-763`.
+    if !r.is_finite() {
+        return Err(CheckFailure::Fatal(StarError::InvalidInput(format!(
+            "check_change: {msg} dt_limit_ratio is not finite"
+        ))));
+    }
+    *slot = if r <= 1.0 { 0.0 } else { r };
+    Ok(())
 }
 
 #[inline]
@@ -289,235 +305,6 @@ pub(crate) fn check_dx_limits(
     Ok((dx_ratio, dxx_ratio))
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn check_cntr_abundance_limits(
-    model: &StarModel,
-    skip_hard_limit: bool,
-) -> Result<f64, String> {
-    let c = &model.controls;
-    let ts = &c.ts_stop;
-    let (nz, sp, coeff) = (model.nz, model.species, ts.time_delta_coeff);
-    if nz == 0
-        || sp == 0
-        || model.xa_old.len() != nz * sp
-        || (c.mix_factor == 0.0 && c.dxdt_nuc_factor == 0.0)
-    {
-        return Ok(0.0);
-    }
-    let base = (nz - 1) * sp;
-    let mut ratio = 0.0_f64;
-
-    // `check_dX_div_X_cntr` (`star/private/timestep.f90:1484-1516`)
-    let mut max_abs_dxx = -1.0_f64;
-    for j in 0..sp {
-        let x = model.xa[base + j];
-        if x > ts.delta_dx_div_x_cntr_max
-            || x < ts.delta_dx_div_x_cntr_min
-            || x <= 0.0
-        {
-            continue;
-        }
-        let dx = x - model.xa_old[base + j];
-        if ts.delta_dx_div_x_drop_only && dx > 0.0 {
-            continue;
-        }
-        let abs_dxx = (dx / x).abs();
-        if abs_dxx > max_abs_dxx {
-            max_abs_dxx = abs_dxx;
-        }
-    }
-    if max_abs_dxx > 0.0 {
-        ratio = ratio.max(check_change(
-            max_abs_dxx,
-            ts.delta_dx_div_x_cntr_limit,
-            ts.delta_dx_div_x_cntr_hard_limit,
-            coeff,
-            "delta_dX_div_X_cntr",
-            skip_hard_limit,
-        )?);
-    }
-
-    let find_iso = |name: &str| {
-        model
-            .iso_names
-            .iter()
-            .position(|n| n.eq_ignore_ascii_case(name))
-    };
-    let h1 = find_iso("h1");
-    let he4 = find_iso("he4");
-    let c12 = find_iso("c12");
-    let ne20 = find_iso("ne20");
-    let o16 = find_iso("o16");
-    let si28 = find_iso("si28");
-
-    let eval_lg = |iso: usize,
-                   min_x: f64,
-                   lg_min: f64,
-                   lg_max: f64,
-                   lim: f64,
-                   hard: f64,
-                   drop_only: bool,
-                   msg: &str|
-     -> Result<f64, String> {
-        let x = model.xa[base + iso];
-        if x < min_x || x < 1.0e-10 {
-            return Ok(0.0);
-        }
-        let lg_x = flexmesa_math::log10(x);
-        if lg_x < lg_min || lg_x > lg_max {
-            return Ok(0.0);
-        }
-        let lg_old =
-            flexmesa_math::log10(model.xa_old[base + iso].max(1.0e-99));
-        if drop_only && lg_x >= lg_old {
-            return Ok(0.0);
-        }
-        check_change(lg_x - lg_old, lim, hard, coeff, msg, skip_hard_limit)
-    };
-
-    // `check_lg_X{H,He,C,Ne,O,Si}_cntr` (`timestep.f90:1519-1725`)
-    if let Some(ih1) = h1 {
-        let xh1 = model.xa[base + ih1];
-        ratio = ratio.max(eval_lg(
-            ih1,
-            1.0e-10,
-            ts.delta_lg_xh_cntr_min,
-            ts.delta_lg_xh_cntr_max,
-            ts.delta_lg_xh_cntr_limit,
-            ts.delta_lg_xh_cntr_hard_limit,
-            ts.delta_lg_xh_drop_only,
-            "delta_lg_XH_cntr",
-        )?);
-        if let Some(ihe4) = he4 {
-            let xhe4 = model.xa[base + ihe4];
-            ratio = ratio.max(eval_lg(
-                ihe4,
-                xh1.max(1.0e-10),
-                ts.delta_lg_xhe_cntr_min,
-                ts.delta_lg_xhe_cntr_max,
-                ts.delta_lg_xhe_cntr_limit,
-                ts.delta_lg_xhe_cntr_hard_limit,
-                ts.delta_lg_xhe_drop_only,
-                "delta_lg_XHe_cntr",
-            )?);
-            if let Some(ic12) = c12 {
-                let xc12 = model.xa[base + ic12];
-                let min_h_he = xh1.max(xhe4).max(1.0e-10);
-                ratio = ratio.max(eval_lg(
-                    ic12,
-                    min_h_he,
-                    ts.delta_lg_xc_cntr_min,
-                    ts.delta_lg_xc_cntr_max,
-                    ts.delta_lg_xc_cntr_limit,
-                    ts.delta_lg_xc_cntr_hard_limit,
-                    ts.delta_lg_xc_drop_only,
-                    "delta_lg_XC_cntr",
-                )?);
-                let min_h_he_c = min_h_he.max(xc12);
-                if let Some(ine20) = ne20 {
-                    ratio = ratio.max(eval_lg(
-                        ine20,
-                        min_h_he_c,
-                        ts.delta_lg_xne_cntr_min,
-                        ts.delta_lg_xne_cntr_max,
-                        ts.delta_lg_xne_cntr_limit,
-                        ts.delta_lg_xne_cntr_hard_limit,
-                        ts.delta_lg_xne_drop_only,
-                        "delta_lg_XNe_cntr",
-                    )?);
-                }
-                if let Some(io16) = o16 {
-                    ratio = ratio.max(eval_lg(
-                        io16,
-                        min_h_he_c,
-                        ts.delta_lg_xo_cntr_min,
-                        ts.delta_lg_xo_cntr_max,
-                        ts.delta_lg_xo_cntr_limit,
-                        ts.delta_lg_xo_cntr_hard_limit,
-                        ts.delta_lg_xo_drop_only,
-                        "delta_lg_XO_cntr",
-                    )?);
-                }
-                if let Some(isi28) = si28 {
-                    ratio = ratio.max(eval_lg(
-                        isi28,
-                        min_h_he_c,
-                        ts.delta_lg_xsi_cntr_min,
-                        ts.delta_lg_xsi_cntr_max,
-                        ts.delta_lg_xsi_cntr_limit,
-                        ts.delta_lg_xsi_cntr_hard_limit,
-                        ts.delta_lg_xsi_drop_only,
-                        "delta_lg_XSi_cntr",
-                    )?);
-                }
-            }
-        }
-    }
-
-    // `check_X{H,He,C,Ne,O,Si}_cntr` (`timestep.f90:1728-1881`)
-    for (iso_opt, lim, hard, drop_only, msg) in [
-        (
-            h1,
-            ts.delta_xh_cntr_limit,
-            ts.delta_xh_cntr_hard_limit,
-            ts.delta_xh_drop_only,
-            "delta_XH_cntr",
-        ),
-        (
-            he4,
-            ts.delta_xhe_cntr_limit,
-            ts.delta_xhe_cntr_hard_limit,
-            ts.delta_xhe_drop_only,
-            "delta_XHe_cntr",
-        ),
-        (
-            c12,
-            ts.delta_xc_cntr_limit,
-            ts.delta_xc_cntr_hard_limit,
-            ts.delta_xc_drop_only,
-            "delta_XC_cntr",
-        ),
-        (
-            ne20,
-            ts.delta_xne_cntr_limit,
-            ts.delta_xne_cntr_hard_limit,
-            ts.delta_xne_drop_only,
-            "delta_XNe_cntr",
-        ),
-        (
-            o16,
-            ts.delta_xo_cntr_limit,
-            ts.delta_xo_cntr_hard_limit,
-            ts.delta_xo_drop_only,
-            "delta_XO_cntr",
-        ),
-        (
-            si28,
-            ts.delta_xsi_cntr_limit,
-            ts.delta_xsi_cntr_hard_limit,
-            ts.delta_xsi_drop_only,
-            "delta_XSi_cntr",
-        ),
-    ] {
-        if let Some(iso) = iso_opt {
-            let x = model.xa[base + iso];
-            let x_old = model.xa_old[base + iso];
-            if !(drop_only && x >= x_old) {
-                ratio = ratio.max(check_change(
-                    x - x_old,
-                    lim,
-                    hard,
-                    coeff,
-                    msg,
-                    skip_hard_limit,
-                )?);
-            }
-        }
-    }
-
-    Ok(ratio)
-}
-
 pub(crate) fn check_dx_nuc_drop_full(
     model: &StarModel,
     skip_hard_limit: bool,
@@ -595,17 +382,61 @@ pub(crate) fn check_dx_nuc_drop_full(
     Ok(if r <= 1.0 { 0.0 } else { r })
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn check_structural_limits(
-    model: &StarModel,
-    skip_hard_limit: bool,
-) -> Result<f64, String> {
+/// Inputs shared by the per-limit checks of one `do_timestep_limits` call
+/// (`star/private/timestep.f90:83-127`), computed once.
+pub(crate) struct LimitCtx<'a> {
+    pub model: &'a StarModel,
+    /// `skip_hard_limit` (`timestep.f90:90-97`).
+    pub skip: bool,
+    /// `s% log_max_temperature`.
+    pub log_max_t: f64,
+    /// `s% mix_bdy_q`.
+    pub mix_bdy_q: Vec<f64>,
+    /// Burning power categories from the report routine (`report.f90:76-113`).
+    pub power: PowerCategories,
+}
+
+impl<'a> LimitCtx<'a> {
+    pub(crate) fn new(model: &'a StarModel, skip: bool) -> Self {
+        let log_max_t = model
+            .ln_t
+            .iter()
+            .take(model.nz)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max)
+            / LN_10;
+        Self {
+            model,
+            skip,
+            log_max_t,
+            mix_bdy_q: collect_mixing_boundary_qs(model),
+            power: compute_power_categories(model),
+        }
+    }
+
+    /// `X(nz) > 0.1 .and. power_nuc_burn / L_phot < Lnuc_div_L_zams_limit`
+    /// (`timestep.f90:1324-1325, 1380-1381`).
+    fn before_near_zams(&self) -> bool {
+        let m = self.model;
+        let l_phot_lsun = crate::report_utils::eval_photosphere_info(m).l_lsun;
+        m.xh_mass[m.nz - 1] > 0.1
+            && l_phot_lsun > 0.0
+            && (self.power.power_nuc_burn / l_phot_lsun)
+                < m.controls.lnuc_div_l_zams_limit
+    }
+}
+
+type CheckResult = Result<(), CheckFailure>;
+
+/// `check_dL_div_L` (`star/private/timestep.f90:676-729`).
+pub(crate) fn check_dl_div_l(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
     let ts = &model.controls.ts_stop;
     let coeff = ts.time_delta_coeff;
     let nz = model.nz;
-    let mut ratio = 0.0_f64;
-
-    // `check_dL_div_L` (`star/private/timestep.f90:676-729`)
     let dl_min_l = L_SUN * ts.dl_div_l_limit_min_l;
     let dl_lim = ts.dl_div_l_limit * coeff;
     let dl_hard = ts.dl_div_l_hard_limit * coeff;
@@ -618,8 +449,10 @@ pub(crate) fn check_structural_limits(
             let l = model.lum[k];
             if l >= dl_min_l {
                 let abs_dl_div_l = (l - model.lum_start[k]).abs() / l;
-                if dl_hard > 0.0 && !skip_hard_limit && abs_dl_div_l > dl_hard {
-                    return Err(String::from("dL_div_L hard limit"));
+                if dl_hard > 0.0 && !ctx.skip && abs_dl_div_l > dl_hard {
+                    return Err(CheckFailure::Retry(String::from(
+                        "dL_div_L hard limit",
+                    )));
                 }
                 if abs_dl_div_l > max_dl {
                     max_dl = abs_dl_div_l;
@@ -627,93 +460,146 @@ pub(crate) fn check_structural_limits(
             }
         }
         if dl_lim > 0.0 && max_dl >= 0.0 {
-            ratio = ratio.max(max_dl / dl_lim);
+            *slot = max_dl / dl_lim;
         }
     }
+    Ok(())
+}
 
-    let max_zone_diff =
-        |cur: &[f64], start: &[f64], min_lg: f64| -> Option<f64> {
-            if start.len() != nz {
-                return None;
-            }
-            let lim_ln = LN_10 * min_lg;
-            let mut found = false;
-            let mut best = 0.0_f64;
-            for k in 0..nz {
-                if cur[k] < lim_ln {
-                    continue;
-                }
-                let d = (cur[k] - start[k]).abs();
-                if d > best {
-                    best = d;
-                    found = true;
-                }
-            }
-            found.then_some(best / LN_10)
-        };
-
-    for (val_opt, lim, hard, msg) in [
-        (
-            max_zone_diff(
-                &model.ln_peos,
-                &model.ln_peos_start,
-                ts.delta_lgp_limit_min_lgp,
-            ),
-            ts.delta_lgp_limit,
-            ts.delta_lgp_hard_limit,
-            "delta_lgP",
-        ),
-        (
-            max_zone_diff(
-                &model.lnd,
-                &model.lnd_start,
-                ts.delta_lgrho_limit_min_lgrho,
-            ),
-            ts.delta_lgrho_limit,
-            ts.delta_lgrho_hard_limit,
-            "delta_lgRho",
-        ),
-        (
-            max_zone_diff(
-                &model.ln_t,
-                &model.ln_t_start,
-                ts.delta_lgt_limit_min_lgt,
-            ),
-            ts.delta_lgt_limit,
-            ts.delta_lgt_hard_limit,
-            "delta_lgT",
-        ),
-        (
-            max_zone_diff(
-                &model.ln_r,
-                &model.ln_r_start,
-                ts.delta_lgr_limit_min_lgr,
-            ),
-            ts.delta_lgr_limit,
-            ts.delta_lgr_hard_limit,
-            "delta_lgR",
-        ),
-    ] {
-        if let Some(val) = val_opt {
-            ratio = ratio.max(check_change(
-                val,
-                lim,
-                hard,
-                coeff,
-                msg,
-                skip_hard_limit,
-            )?);
+/// Shared body of `get_dlg{P,Rho,T,R}_info` + `check_dlg*_change`
+/// (`star/private/timestep.f90:769-986`).
+#[allow(clippy::too_many_arguments)]
+fn check_zone_dlg_change(
+    ctx: &LimitCtx<'_>,
+    cur: &[f64],
+    start: &[f64],
+    min_lg: f64,
+    lim: f64,
+    hard: f64,
+    msg: &str,
+    slot: &mut f64,
+) -> CheckResult {
+    let nz = ctx.model.nz;
+    if start.len() != nz {
+        return Ok(());
+    }
+    let lim_ln = LN_10 * min_lg;
+    let mut found = false;
+    let mut best = 0.0_f64;
+    for k in 0..nz {
+        if cur[k] < lim_ln {
+            continue;
+        }
+        let d = (cur[k] - start[k]).abs();
+        if d > best {
+            best = d;
+            found = true;
         }
     }
+    if found {
+        check_change(
+            best / LN_10,
+            lim,
+            hard,
+            ctx.model.controls.ts_stop.time_delta_coeff,
+            msg,
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
 
+/// `check_dlgP_change` (`star/private/timestep.f90:790-809`).
+pub(crate) fn check_dlg_p_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    check_zone_dlg_change(
+        ctx,
+        &m.ln_peos,
+        &m.ln_peos_start,
+        ts.delta_lgp_limit_min_lgp,
+        ts.delta_lgp_limit,
+        ts.delta_lgp_hard_limit,
+        "delta_lgP",
+        slot,
+    )
+}
+
+/// `check_dlgRho_change` (`star/private/timestep.f90:834-854`).
+pub(crate) fn check_dlg_rho_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    check_zone_dlg_change(
+        ctx,
+        &m.lnd,
+        &m.lnd_start,
+        ts.delta_lgrho_limit_min_lgrho,
+        ts.delta_lgrho_limit,
+        ts.delta_lgrho_hard_limit,
+        "delta_lgRho",
+        slot,
+    )
+}
+
+/// `check_dlgT_change` (`star/private/timestep.f90:879-899`).
+pub(crate) fn check_dlg_t_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    check_zone_dlg_change(
+        ctx,
+        &m.ln_t,
+        &m.ln_t_start,
+        ts.delta_lgt_limit_min_lgt,
+        ts.delta_lgt_limit,
+        ts.delta_lgt_hard_limit,
+        "delta_lgT",
+        slot,
+    )
+}
+
+/// `check_dlgR_change` (`star/private/timestep.f90:967-986`).
+pub(crate) fn check_dlg_r_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    check_zone_dlg_change(
+        ctx,
+        &m.ln_r,
+        &m.ln_r_start,
+        ts.delta_lgr_limit_min_lgr,
+        ts.delta_lgr_limit,
+        ts.delta_lgr_hard_limit,
+        "delta_lgR",
+        slot,
+    )
+}
+
+/// `get_dlgE_info` + `check_dlgE_change` (`star/private/timestep.f90:902-943`).
+pub(crate) fn check_dlg_e_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let nz = model.nz;
     if model.energy_start.len() == nz {
         let lim_lne = LN_10 * ts.delta_lge_limit_min_lge;
         let mut found_e = false;
         let mut max_dlne = 0.0_f64;
         for k in 0..nz {
-            if model.ln_e[k] >= lim_lne && model.energy[k].abs() > 1.0e-30 {
+            if model.ln_e[k] >= lim_lne {
+                // Signed denominator, as upstream
+                // (`abs(energy - energy_start)/energy`, `timestep.f90:918`).
                 let d = (model.energy[k] - model.energy_start[k]).abs()
-                    / model.energy[k].abs();
+                    / model.energy[k];
                 if d > max_dlne {
                     max_dlne = d;
                     found_e = true;
@@ -721,167 +607,69 @@ pub(crate) fn check_structural_limits(
             }
         }
         if found_e {
-            ratio = ratio.max(check_change(
+            check_change(
                 max_dlne / LN_10,
                 ts.delta_lge_limit,
                 ts.delta_lge_hard_limit,
-                coeff,
+                ts.time_delta_coeff,
                 "delta_lgE",
-                skip_hard_limit,
-            )?);
+                ctx.skip,
+                slot,
+            )?;
         }
     }
+    Ok(())
+}
 
-    if !model.aux.doing_relax && nz > 0 {
-        let c_idx = nz - 1;
-        if model.ln_t_start.len() == nz {
-            let p_cat = compute_power_categories(model);
-            // `star/private/timestep.f90:1324-1325, 1380-1381` compares
-            // `L_nuc_burn_total / L_phot` against `Lnuc_div_L_zams_limit`.
-            let l_phot_lsun =
-                crate::report_utils::eval_photosphere_info(model).l_lsun;
-            let before_near_zams = model.xh_mass[c_idx] > 0.1
-                && l_phot_lsun > 0.0
-                && (p_cat.power_nuc_burn / l_phot_lsun)
-                    < model.controls.lnuc_div_l_zams_limit;
-
-            if !(ts.delta_lgt_cntr_limit_only_after_near_zams
-                && before_near_zams)
-            {
-                ratio = ratio.max(check_change(
-                    (model.ln_t[c_idx] - model.ln_t_start[c_idx]) / LN_10,
-                    ts.delta_lgt_cntr_limit,
-                    ts.delta_lgt_cntr_hard_limit,
-                    coeff,
-                    "delta_lgT_cntr",
-                    skip_hard_limit,
-                )?);
-            }
-
-            let lnt_max =
-                model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let lnt_max_s = model
-                .ln_t_start
-                .iter()
-                .copied()
-                .fold(f64::NEG_INFINITY, f64::max);
-            if ts.delta_lgt_max_limit_lgt_min >= 0.0
-                && !(ts.delta_lgt_max_limit_only_after_near_zams
-                    && before_near_zams)
-                && lnt_max >= ts.delta_lgt_max_limit_lgt_min * LN_10
-            {
-                ratio = ratio.max(check_change(
-                    (lnt_max - lnt_max_s) / LN_10,
-                    ts.delta_lgt_max_limit,
-                    ts.delta_lgt_max_hard_limit,
-                    coeff,
-                    "delta_lgT_max",
-                    skip_hard_limit,
-                )?);
-            }
-            if ts.delta_lgt_max_at_high_t_limit_lgt_min >= 0.0
-                && lnt_max >= ts.delta_lgt_max_at_high_t_limit_lgt_min * LN_10
-            {
-                ratio = ratio.max(check_change(
-                    (lnt_max - lnt_max_s) / LN_10,
-                    ts.delta_lgt_max_at_high_t_limit,
-                    ts.delta_lgt_max_at_high_t_hard_limit,
-                    coeff,
-                    "delta_lgT_max_at_high_T",
-                    skip_hard_limit,
-                )?);
-            }
-        }
-        if model.lnd_start.len() == nz {
-            ratio = ratio.max(check_change(
-                (model.lnd[c_idx] - model.lnd_start[c_idx]) / LN_10,
-                ts.delta_lgrho_cntr_limit,
-                ts.delta_lgrho_cntr_hard_limit,
-                coeff,
-                "delta_lgRho_cntr",
-                skip_hard_limit,
-            )?);
-        }
-        if model.ln_peos_start.len() == nz {
-            ratio = ratio.max(check_change(
-                (model.ln_peos[c_idx] - model.ln_peos_start[c_idx]) / LN_10,
-                ts.delta_lgp_cntr_limit,
-                ts.delta_lgp_cntr_hard_limit,
-                coeff,
-                "delta_lgP_cntr",
-                skip_hard_limit,
-            )?);
-        }
-
-        // `check_dYe_highT_change` (`star/private/timestep.f90:1281-1308`)
-        if model.ye_start.len() == nz {
-            let t_lim = ts.mint_for_hight_ye_limit;
-            let mut max_ye_diff = 0.0_f64;
-            for k in 0..nz {
-                if model.t[k] >= t_lim {
-                    max_ye_diff = max_ye_diff
-                        .max((model.ye[k] - model.ye_start[k]).abs());
-                }
-            }
-            ratio = ratio.max(check_change(
-                max_ye_diff,
-                ts.delta_ye_hight_limit,
-                ts.delta_ye_hight_hard_limit,
-                coeff,
-                "delta_Ye_highT",
-                false,
-            )?);
-        }
-    }
-
-    // `check_dlog_eps_nuc_change` (`star/private/timestep.f90:1438-1481`)
-    if nz > 0
-        && model.eps_nuc_start.len() == nz
-        && (ts.delta_log_eps_nuc_limit > 0.0
-            || ts.delta_log_eps_nuc_hard_limit > 0.0)
+/// `check_lgL_nuc_cat_change` (`star/private/timestep.f90:1169-1258`).
+pub(crate) fn check_lgl_nuc_cat_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let mix_bdy_q = &ctx.mix_bdy_q;
+    if (ts.delta_lgl_nuc_cat_limit > 0.0
+        || ts.delta_lgl_nuc_cat_hard_limit > 0.0)
+        && model.lum_by_category_start.len() == model.nz
     {
-        let conv_bdy_locs = collect_conv_boundary_locs(model);
-        // `star/private/timestep.f90:1449-1450`.
-        let limit_ratio = flexmesa_math::exp10(ts.delta_log_eps_nuc_limit);
-        let mut max_eps_ratio = limit_ratio;
-        let mut found_eps = false;
-        'zoneloop: for k in 0..nz {
-            if model.eps_nuc_start[k] < 1.0 {
+        let cat_burn_min = flexmesa_math::exp10(ts.lgl_nuc_cat_burn_min);
+        let lum_cat = eval_lum_by_category_erg_s(model);
+        let mut max_diff = 0.0_f64;
+        let mut bdy = 0_usize;
+        for k in 0..model.nz {
+            bdy = binary_search_1based(mix_bdy_q, model.q[k], bdy);
+            if bdy > 0
+                && (model.q[k] - mix_bdy_q[bdy - 1]).abs()
+                    < ts.lgl_nuc_mix_dist_limit
+            {
                 continue;
             }
-            let r_eps = model.eps_nuc[k] / model.eps_nuc_start[k];
-            let k_next = (k + 1).min(nz - 1);
-            if model.mixing_type[k] != MixingType::ConvectiveMixing
-                && model.mixing_type[k_next] != MixingType::ConvectiveMixing
-                && r_eps > max_eps_ratio
-            {
-                for &b_loc in &conv_bdy_locs {
-                    if (model.r[b_loc] - model.r[k]).abs()
-                        <= model.scale_height[k]
-                    {
-                        continue 'zoneloop;
+            for cat_j in 0..19 {
+                let l_now = lum_cat[k][cat_j];
+                let l_beg = model.lum_by_category_start[k][cat_j];
+                if l_now >= cat_burn_min && l_beg >= cat_burn_min {
+                    let abs_diff = (l_now - l_beg).abs();
+                    if abs_diff > max_diff {
+                        max_diff = abs_diff;
                     }
                 }
-                max_eps_ratio = r_eps;
-                found_eps = true;
             }
         }
-        let delta_eps = if found_eps {
-            flexmesa_math::log10(max_eps_ratio)
-        } else {
-            0.0
-        };
-        ratio = ratio.max(check_change(
-            delta_eps,
-            ts.delta_log_eps_nuc_limit,
-            ts.delta_log_eps_nuc_hard_limit,
-            coeff,
-            "delta_log_eps_nuc",
-            skip_hard_limit,
-        )?);
+        if max_diff > 0.0 {
+            let max_lgl_diff = flexmesa_math::log10(max_diff / L_SUN);
+            check_change(
+                max_lgl_diff,
+                ts.delta_lgl_nuc_cat_limit,
+                ts.delta_lgl_nuc_cat_hard_limit,
+                ts.time_delta_coeff,
+                "delta_lgL_nuc_cat",
+                ctx.skip,
+                slot,
+            )?;
+        }
     }
-
-    Ok(ratio)
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -927,113 +715,87 @@ fn check_one_lgl_burn(
     Ok(if r <= 1.0 { 0.0 } else { r })
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn check_luminosity_and_hr_limits(
-    model: &StarModel,
-    skip_hard_limit: bool,
-    log_max_t: f64,
-    mix_bdy_q: &[f64],
-) -> Result<f64, String> {
-    let ts = &model.controls.ts_stop;
-    let sh = &model.aux.step_hist;
-    let (coeff, dtf) = (ts.time_delta_coeff, ts.timestep_dt_factor);
-    let p = compute_power_categories(model);
-    let mut ratio = 0.0_f64;
+/// `check_lgL_H_change` (`star/private/timestep.f90:1118-1125`).
+pub(crate) fn check_lgl_h_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let ts = &ctx.model.controls.ts_stop;
+    let (p, sh) = (&ctx.power, &ctx.model.aux.step_hist);
+    *slot = check_one_lgl_burn(
+        p.power_h_burn,
+        sh.power_h_burn_old,
+        p.power_he_burn.max(p.power_z_burn),
+        ts.lgl_h_burn_relative_limit,
+        ts.delta_lgl_h_limit,
+        ts.delta_lgl_h_hard_limit,
+        ts.lgl_h_burn_min,
+        ts.lgl_h_drop_factor,
+        ts.time_delta_coeff,
+        ts.timestep_dt_factor,
+        "check_lgL_H_change",
+        ctx.skip,
+    )?;
+    Ok(())
+}
 
-    // `check_lgL_nuc_cat_change` (`star/private/timestep.f90:1169-1258`)
-    if (ts.delta_lgl_nuc_cat_limit > 0.0
-        || ts.delta_lgl_nuc_cat_hard_limit > 0.0)
-        && model.lum_by_category_start.len() == model.nz
-    {
-        let cat_burn_min = flexmesa_math::exp10(ts.lgl_nuc_cat_burn_min);
-        let lum_cat = eval_lum_by_category_erg_s(model);
-        let mut max_diff = 0.0_f64;
-        let mut bdy = 0_usize;
-        for k in 0..model.nz {
-            bdy = binary_search_1based(mix_bdy_q, model.q[k], bdy);
-            if bdy > 0
-                && (model.q[k] - mix_bdy_q[bdy - 1]).abs()
-                    < ts.lgl_nuc_mix_dist_limit
-            {
-                continue;
-            }
-            for cat_j in 0..19 {
-                let l_now = lum_cat[k][cat_j];
-                let l_beg = model.lum_by_category_start[k][cat_j];
-                if l_now >= cat_burn_min && l_beg >= cat_burn_min {
-                    let abs_diff = (l_now - l_beg).abs();
-                    if abs_diff > max_diff {
-                        max_diff = abs_diff;
-                    }
-                }
-            }
-        }
-        if max_diff > 0.0 {
-            let max_lgl_diff = flexmesa_math::log10(max_diff / L_SUN);
-            ratio = ratio.max(check_change(
-                max_lgl_diff,
-                ts.delta_lgl_nuc_cat_limit,
-                ts.delta_lgl_nuc_cat_hard_limit,
-                coeff,
-                "delta_lgL_nuc_cat",
-                skip_hard_limit,
-            )?);
-        }
-    }
+/// `check_lgL_He_change` (`star/private/timestep.f90:1128-1135`).
+pub(crate) fn check_lgl_he_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let ts = &ctx.model.controls.ts_stop;
+    let (p, sh) = (&ctx.power, &ctx.model.aux.step_hist);
+    *slot = check_one_lgl_burn(
+        p.power_he_burn,
+        sh.power_he_burn_old,
+        p.power_h_burn.max(p.power_z_burn),
+        ts.lgl_he_burn_relative_limit,
+        ts.delta_lgl_he_limit,
+        ts.delta_lgl_he_hard_limit,
+        ts.lgl_he_burn_min,
+        ts.lgl_he_drop_factor,
+        ts.time_delta_coeff,
+        ts.timestep_dt_factor,
+        "check_lgL_He_change",
+        ctx.skip,
+    )?;
+    Ok(())
+}
 
-    for (nl, ol, max_other, rel_lim, lim, hard, lmin, df, msg) in [
-        (
-            p.power_h_burn,
-            sh.power_h_burn_old,
-            p.power_he_burn.max(p.power_z_burn),
-            ts.lgl_h_burn_relative_limit,
-            ts.delta_lgl_h_limit,
-            ts.delta_lgl_h_hard_limit,
-            ts.lgl_h_burn_min,
-            ts.lgl_h_drop_factor,
-            "check_lgL_H_change",
-        ),
-        (
-            p.power_he_burn,
-            sh.power_he_burn_old,
-            p.power_h_burn.max(p.power_z_burn),
-            ts.lgl_he_burn_relative_limit,
-            ts.delta_lgl_he_limit,
-            ts.delta_lgl_he_hard_limit,
-            ts.lgl_he_burn_min,
-            ts.lgl_he_drop_factor,
-            "check_lgL_He_change",
-        ),
-        (
-            p.power_z_burn,
-            sh.power_z_burn_old,
-            p.power_h_burn.max(p.power_he_burn),
-            ts.lgl_z_burn_relative_limit,
-            ts.delta_lgl_z_limit,
-            ts.delta_lgl_z_hard_limit,
-            ts.lgl_z_burn_min,
-            ts.lgl_z_drop_factor,
-            "check_lgL_z_change",
-        ),
-    ] {
-        ratio = ratio.max(check_one_lgl_burn(
-            nl,
-            ol,
-            max_other,
-            rel_lim,
-            lim,
-            hard,
-            lmin,
-            df,
-            coeff,
-            dtf,
-            msg,
-            skip_hard_limit,
-        )?);
-    }
+/// `check_lgL_z_change` (`star/private/timestep.f90:1138-1145`).
+pub(crate) fn check_lgl_z_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let ts = &ctx.model.controls.ts_stop;
+    let (p, sh) = (&ctx.power, &ctx.model.aux.step_hist);
+    *slot = check_one_lgl_burn(
+        p.power_z_burn,
+        sh.power_z_burn_old,
+        p.power_h_burn.max(p.power_he_burn),
+        ts.lgl_z_burn_relative_limit,
+        ts.delta_lgl_z_limit,
+        ts.delta_lgl_z_hard_limit,
+        ts.lgl_z_burn_min,
+        ts.lgl_z_drop_factor,
+        ts.time_delta_coeff,
+        ts.timestep_dt_factor,
+        "check_lgL_z_change",
+        ctx.skip,
+    )?;
+    Ok(())
+}
 
-    if log_max_t >= ts.min_lgt_for_lgl_power_photo_limit {
-        ratio = ratio.max(check_one_lgl_burn(
+/// `check_lgL_power_photo_change` (`star/private/timestep.f90:1148-1155`).
+pub(crate) fn check_lgl_power_photo_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let ts = &ctx.model.controls.ts_stop;
+    let (p, sh) = (&ctx.power, &ctx.model.aux.step_hist);
+    if ctx.log_max_t >= ts.min_lgt_for_lgl_power_photo_limit {
+        *slot = check_one_lgl_burn(
             p.power_photo.abs(),
             sh.power_photo_old.abs(),
             0.0,
@@ -1042,16 +804,25 @@ pub(crate) fn check_luminosity_and_hr_limits(
             ts.delta_lgl_power_photo_hard_limit,
             ts.lgl_power_photo_burn_min,
             ts.lgl_power_photo_drop_factor,
-            coeff,
-            dtf,
+            ts.time_delta_coeff,
+            ts.timestep_dt_factor,
             "check_lgL_power_photo_change",
-            skip_hard_limit,
-        )?);
+            ctx.skip,
+        )?;
     }
+    Ok(())
+}
 
-    if log_max_t <= ts.max_lgt_for_lgl_nuc_limit {
+/// `check_lgL_nuc_change` (`star/private/timestep.f90:1158-1166`).
+pub(crate) fn check_lgl_nuc_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let ts = &ctx.model.controls.ts_stop;
+    let (p, sh) = (&ctx.power, &ctx.model.aux.step_hist);
+    if ctx.log_max_t <= ts.max_lgt_for_lgl_nuc_limit {
         let (nuc_lim, nuc_hard) =
-            if log_max_t > ts.delta_lgl_nuc_at_high_t_limit_lgt_min {
+            if ctx.log_max_t > ts.delta_lgl_nuc_at_high_t_limit_lgt_min {
                 (
                     ts.delta_lgl_nuc_at_high_t_limit,
                     ts.delta_lgl_nuc_at_high_t_hard_limit,
@@ -1059,7 +830,7 @@ pub(crate) fn check_luminosity_and_hr_limits(
             } else {
                 (ts.delta_lgl_nuc_limit, ts.delta_lgl_nuc_hard_limit)
             };
-        ratio = ratio.max(check_one_lgl_burn(
+        *slot = check_one_lgl_burn(
             p.power_nuc_burn,
             sh.power_nuc_burn_old,
             0.0,
@@ -1068,47 +839,763 @@ pub(crate) fn check_luminosity_and_hr_limits(
             nuc_hard,
             ts.lgl_nuc_burn_min,
             ts.lgl_nuc_drop_factor,
-            coeff,
-            dtf,
+            ts.time_delta_coeff,
+            ts.timestep_dt_factor,
             "check_lgL_nuc_change",
-            skip_hard_limit,
-        )?);
+            ctx.skip,
+        )?;
     }
+    Ok(())
+}
 
-    let l_surf = model.surface_l_lsun();
-    if !model.aux.doing_relax {
-        if model.teff > 0.0 && sh.teff_old > 0.0 {
-            let dt_eff = flexmesa_math::safe_log10(model.teff / sh.teff_old);
-            ratio = ratio.max(check_change(
-                dt_eff,
-                ts.delta_lgteff_limit,
-                ts.delta_lgteff_hard_limit,
-                coeff,
-                "delta_lgTeff",
-                skip_hard_limit,
-            )?);
-        }
-        let dlgl = if l_surf < ts.delta_lgl_limit_l_min
-            || l_surf <= 0.0
-            || sh.l_surf_old <= 0.0
+/// `check_dlgTeff_change` (`star/private/timestep.f90:1261-1278`).
+pub(crate) fn check_dlg_teff_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let sh = &model.aux.step_hist;
+    if !model.aux.doing_relax && model.teff > 0.0 && sh.teff_old > 0.0 {
+        let dt_eff = flexmesa_math::safe_log10(model.teff / sh.teff_old);
+        check_change(
+            dt_eff,
+            ts.delta_lgteff_limit,
+            ts.delta_lgteff_hard_limit,
+            ts.time_delta_coeff,
+            "delta_lgTeff",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dlgRho_cntr_change` (`star/private/timestep.f90:1415-1435`).
+pub(crate) fn check_dlg_rho_cntr_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax && nz > 0 && m.lnd_start.len() == nz {
+        check_change(
+            (m.lnd[nz - 1] - m.lnd_start[nz - 1]) / LN_10,
+            ts.delta_lgrho_cntr_limit,
+            ts.delta_lgrho_cntr_hard_limit,
+            ts.time_delta_coeff,
+            "delta_lgRho_cntr",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dlgP_cntr_change` (`star/private/timestep.f90:1394-1412`).
+pub(crate) fn check_dlg_p_cntr_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax && nz > 0 && m.ln_peos_start.len() == nz {
+        check_change(
+            (m.ln_peos[nz - 1] - m.ln_peos_start[nz - 1]) / LN_10,
+            ts.delta_lgp_cntr_limit,
+            ts.delta_lgp_cntr_hard_limit,
+            ts.time_delta_coeff,
+            "delta_lgP_cntr",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dlgT_cntr_change` (`star/private/timestep.f90:1369-1391`).
+pub(crate) fn check_dlg_t_cntr_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax
+        && nz > 0
+        && m.ln_t_start.len() == nz
+        && !(ts.delta_lgt_cntr_limit_only_after_near_zams
+            && ctx.before_near_zams())
+    {
+        check_change(
+            (m.ln_t[nz - 1] - m.ln_t_start[nz - 1]) / LN_10,
+            ts.delta_lgt_cntr_limit,
+            ts.delta_lgt_cntr_hard_limit,
+            ts.time_delta_coeff,
+            "delta_lgT_cntr",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+fn max_ln_t(v: &[f64]) -> f64 {
+    v.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+}
+
+/// `check_dlgT_max_change` (`star/private/timestep.f90:1311-1339`).
+pub(crate) fn check_dlg_t_max_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax && nz > 0 && m.ln_t_start.len() == nz {
+        let lnt_max = max_ln_t(&m.ln_t);
+        if ts.delta_lgt_max_limit_lgt_min >= 0.0
+            && !(ts.delta_lgt_max_limit_only_after_near_zams
+                && ctx.before_near_zams())
+            && lnt_max >= ts.delta_lgt_max_limit_lgt_min * LN_10
         {
-            0.0
-        } else {
-            flexmesa_math::log10(l_surf / sh.l_surf_old)
-        };
-        ratio = ratio.max(check_change(
-            dlgl,
-            ts.delta_lgl_limit,
-            ts.delta_lgl_hard_limit,
-            coeff,
-            "delta_lgL",
-            skip_hard_limit,
-        )?);
+            check_change(
+                (lnt_max - max_ln_t(&m.ln_t_start)) / LN_10,
+                ts.delta_lgt_max_limit,
+                ts.delta_lgt_max_hard_limit,
+                ts.time_delta_coeff,
+                "delta_lgT_max",
+                ctx.skip,
+                slot,
+            )?;
+        }
     }
+    Ok(())
+}
 
-    // `check_delta_HR` (`star/private/timestep.f90:1990-2020`, ungated by
-    // `doing_relax` or `delta_lgL_limit_L_min`, using `L_phot` for the
-    // current step; `sh.l_surf_old` stands in for `L_phot_old`).
+/// `check_dlgT_max_at_high_T_change` (`star/private/timestep.f90:1342-1366`).
+pub(crate) fn check_dlg_t_max_at_high_t_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax && nz > 0 && m.ln_t_start.len() == nz {
+        let lnt_max = max_ln_t(&m.ln_t);
+        if ts.delta_lgt_max_at_high_t_limit_lgt_min >= 0.0
+            && lnt_max >= ts.delta_lgt_max_at_high_t_limit_lgt_min * LN_10
+        {
+            check_change(
+                (lnt_max - max_ln_t(&m.ln_t_start)) / LN_10,
+                ts.delta_lgt_max_at_high_t_limit,
+                ts.delta_lgt_max_at_high_t_hard_limit,
+                ts.time_delta_coeff,
+                "delta_lgT_max_at_high_T",
+                ctx.skip,
+                slot,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// `check_dYe_highT_change` (`star/private/timestep.f90:1281-1308`).
+pub(crate) fn check_dye_hight_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (m, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = m.nz;
+    if !m.aux.doing_relax && nz > 0 && m.ye_start.len() == nz {
+        let t_lim = ts.mint_for_hight_ye_limit;
+        let mut max_ye_diff = 0.0_f64;
+        for k in 0..nz {
+            if m.t[k] >= t_lim {
+                max_ye_diff = max_ye_diff.max((m.ye[k] - m.ye_start[k]).abs());
+            }
+        }
+        check_change(
+            max_ye_diff,
+            ts.delta_ye_hight_limit,
+            ts.delta_ye_hight_hard_limit,
+            ts.time_delta_coeff,
+            "delta_Ye_highT",
+            false,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dlog_eps_nuc_change` (`star/private/timestep.f90:1438-1481`).
+pub(crate) fn check_dlog_eps_nuc_change(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (model, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let nz = model.nz;
+    if nz > 0
+        && model.eps_nuc_start.len() == nz
+        && (ts.delta_log_eps_nuc_limit > 0.0
+            || ts.delta_log_eps_nuc_hard_limit > 0.0)
+    {
+        let conv_bdy_locs = collect_conv_boundary_locs(model);
+        // `star/private/timestep.f90:1449-1450`.
+        let limit_ratio = flexmesa_math::exp10(ts.delta_log_eps_nuc_limit);
+        let mut max_eps_ratio = limit_ratio;
+        let mut found_eps = false;
+        'zoneloop: for k in 0..nz {
+            if model.eps_nuc_start[k] < 1.0 {
+                continue;
+            }
+            let r_eps = model.eps_nuc[k] / model.eps_nuc_start[k];
+            let k_next = (k + 1).min(nz - 1);
+            if model.mixing_type[k] != MixingType::ConvectiveMixing
+                && model.mixing_type[k_next] != MixingType::ConvectiveMixing
+                && r_eps > max_eps_ratio
+            {
+                for &b_loc in &conv_bdy_locs {
+                    if (model.r[b_loc] - model.r[k]).abs()
+                        <= model.scale_height[k]
+                    {
+                        continue 'zoneloop;
+                    }
+                }
+                max_eps_ratio = r_eps;
+                found_eps = true;
+            }
+        }
+        let delta_eps = if found_eps {
+            flexmesa_math::log10(max_eps_ratio)
+        } else {
+            0.0
+        };
+        check_change(
+            delta_eps,
+            ts.delta_log_eps_nuc_limit,
+            ts.delta_log_eps_nuc_hard_limit,
+            ts.time_delta_coeff,
+            "delta_log_eps_nuc",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// Index of the center zone when the center-abundance checks run
+/// (`mix_factor == 0 .and. dxdt_nuc_factor == 0` returns early upstream).
+fn cntr_base(model: &StarModel) -> Option<usize> {
+    let c = &model.controls;
+    let (nz, sp) = (model.nz, model.species);
+    if nz == 0
+        || sp == 0
+        || model.xa_old.len() != nz * sp
+        || (c.mix_factor == 0.0 && c.dxdt_nuc_factor == 0.0)
+    {
+        None
+    } else {
+        Some((nz - 1) * sp)
+    }
+}
+
+fn find_iso(model: &StarModel, name: &str) -> Option<usize> {
+    model
+        .iso_names
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case(name))
+}
+
+/// `check_dX_div_X_cntr` (`star/private/timestep.f90:1484-1516`).
+pub(crate) fn check_dx_div_x_cntr(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let (model, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let Some(base) = cntr_base(model) else {
+        return Ok(());
+    };
+    let mut max_abs_dxx = -1.0_f64;
+    for j in 0..model.species {
+        let x = model.xa[base + j];
+        if x > ts.delta_dx_div_x_cntr_max
+            || x < ts.delta_dx_div_x_cntr_min
+            || x <= 0.0
+        {
+            continue;
+        }
+        let dx = x - model.xa_old[base + j];
+        if ts.delta_dx_div_x_drop_only && dx > 0.0 {
+            continue;
+        }
+        let abs_dxx = (dx / x).abs();
+        if abs_dxx > max_abs_dxx {
+            max_abs_dxx = abs_dxx;
+        }
+    }
+    if max_abs_dxx > 0.0 {
+        check_change(
+            max_abs_dxx,
+            ts.delta_dx_div_x_cntr_limit,
+            ts.delta_dx_div_x_cntr_hard_limit,
+            ts.time_delta_coeff,
+            "delta_dX_div_X_cntr",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// Which center abundances `check_lg_X*_cntr` compares against
+/// (`star/private/timestep.f90:1519-1725`): the isotope itself, then the
+/// lighter fuels whose abundance must not exceed it.
+#[derive(Clone, Copy)]
+enum LgX {
+    H,
+    He,
+    C,
+    Ne,
+    O,
+    Si,
+}
+
+/// Body of `check_lg_X{H,He,C,Ne,O,Si}_cntr`
+/// (`star/private/timestep.f90:1519-1725`).
+fn check_lg_x_cntr(
+    ctx: &LimitCtx<'_>,
+    which: LgX,
+    slot: &mut f64,
+) -> CheckResult {
+    let (model, ts) = (ctx.model, &ctx.model.controls.ts_stop);
+    let Some(base) = cntr_base(model) else {
+        return Ok(());
+    };
+    let x_of =
+        |name: &str| find_iso(model, name).map(|i| (i, model.xa[base + i]));
+    let Some((ih1, xh1)) = x_of("h1") else {
+        return Ok(());
+    };
+    // (isotope index, lower bound on X, controls, message)
+    let (iso, min_x, lg_min, lg_max, lim, hard, drop_only, msg) = match which {
+        LgX::H => (
+            ih1,
+            1.0e-10,
+            ts.delta_lg_xh_cntr_min,
+            ts.delta_lg_xh_cntr_max,
+            ts.delta_lg_xh_cntr_limit,
+            ts.delta_lg_xh_cntr_hard_limit,
+            ts.delta_lg_xh_drop_only,
+            "delta_lg_XH_cntr",
+        ),
+        LgX::He => {
+            let Some((i, _)) = x_of("he4") else {
+                return Ok(());
+            };
+            (
+                i,
+                xh1.max(1.0e-10),
+                ts.delta_lg_xhe_cntr_min,
+                ts.delta_lg_xhe_cntr_max,
+                ts.delta_lg_xhe_cntr_limit,
+                ts.delta_lg_xhe_cntr_hard_limit,
+                ts.delta_lg_xhe_drop_only,
+                "delta_lg_XHe_cntr",
+            )
+        }
+        LgX::C | LgX::Ne | LgX::O | LgX::Si => {
+            let (Some((_, xhe4)), Some((ic12, xc12))) =
+                (x_of("he4"), x_of("c12"))
+            else {
+                return Ok(());
+            };
+            let min_h_he = xh1.max(xhe4).max(1.0e-10);
+            match which {
+                LgX::C => (
+                    ic12,
+                    min_h_he,
+                    ts.delta_lg_xc_cntr_min,
+                    ts.delta_lg_xc_cntr_max,
+                    ts.delta_lg_xc_cntr_limit,
+                    ts.delta_lg_xc_cntr_hard_limit,
+                    ts.delta_lg_xc_drop_only,
+                    "delta_lg_XC_cntr",
+                ),
+                LgX::Ne => {
+                    let Some((i, _)) = x_of("ne20") else {
+                        return Ok(());
+                    };
+                    (
+                        i,
+                        min_h_he.max(xc12),
+                        ts.delta_lg_xne_cntr_min,
+                        ts.delta_lg_xne_cntr_max,
+                        ts.delta_lg_xne_cntr_limit,
+                        ts.delta_lg_xne_cntr_hard_limit,
+                        ts.delta_lg_xne_drop_only,
+                        "delta_lg_XNe_cntr",
+                    )
+                }
+                LgX::O => {
+                    let Some((i, _)) = x_of("o16") else {
+                        return Ok(());
+                    };
+                    (
+                        i,
+                        min_h_he.max(xc12),
+                        ts.delta_lg_xo_cntr_min,
+                        ts.delta_lg_xo_cntr_max,
+                        ts.delta_lg_xo_cntr_limit,
+                        ts.delta_lg_xo_cntr_hard_limit,
+                        ts.delta_lg_xo_drop_only,
+                        "delta_lg_XO_cntr",
+                    )
+                }
+                _ => {
+                    let Some((i, _)) = x_of("si28") else {
+                        return Ok(());
+                    };
+                    (
+                        i,
+                        min_h_he.max(xc12),
+                        ts.delta_lg_xsi_cntr_min,
+                        ts.delta_lg_xsi_cntr_max,
+                        ts.delta_lg_xsi_cntr_limit,
+                        ts.delta_lg_xsi_cntr_hard_limit,
+                        ts.delta_lg_xsi_drop_only,
+                        "delta_lg_XSi_cntr",
+                    )
+                }
+            }
+        }
+    };
+    let x = model.xa[base + iso];
+    if x < min_x || x < 1.0e-10 {
+        return Ok(());
+    }
+    let lg_x = flexmesa_math::log10(x);
+    if lg_x > lg_max || lg_x < lg_min {
+        return Ok(());
+    }
+    let lg_old = flexmesa_math::log10(model.xa_old[base + iso].max(1.0e-99));
+    if drop_only && lg_x >= lg_old {
+        return Ok(());
+    }
+    check_change(
+        lg_x - lg_old,
+        lim,
+        hard,
+        ts.time_delta_coeff,
+        msg,
+        ctx.skip,
+        slot,
+    )?;
+    Ok(())
+}
+
+macro_rules! lg_x_check {
+    ($name:ident, $which:expr, $up:literal) => {
+        #[doc = concat!(
+            "`check_lg_", $up, "_cntr` (`star/private/timestep.f90:1519-1725`)."
+        )]
+        pub(crate) fn $name(
+            ctx: &LimitCtx<'_>,
+            slot: &mut f64,
+        ) -> CheckResult {
+            check_lg_x_cntr(ctx, $which, slot)
+        }
+    };
+}
+lg_x_check!(check_lg_xh_cntr, LgX::H, "XH");
+lg_x_check!(check_lg_xhe_cntr, LgX::He, "XHe");
+lg_x_check!(check_lg_xc_cntr, LgX::C, "XC");
+lg_x_check!(check_lg_xne_cntr, LgX::Ne, "XNe");
+lg_x_check!(check_lg_xo_cntr, LgX::O, "XO");
+lg_x_check!(check_lg_xsi_cntr, LgX::Si, "XSi");
+
+/// Body of `check_X{H,He,C,Ne,O,Si}_cntr`
+/// (`star/private/timestep.f90:1728-1881`).
+fn check_x_cntr(
+    ctx: &LimitCtx<'_>,
+    name: &str,
+    lim: f64,
+    hard: f64,
+    drop_only: bool,
+    msg: &str,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let Some(base) = cntr_base(model) else {
+        return Ok(());
+    };
+    if let Some(iso) = find_iso(model, name) {
+        let x = model.xa[base + iso];
+        let x_old = model.xa_old[base + iso];
+        if !(drop_only && x >= x_old) {
+            check_change(
+                x - x_old,
+                lim,
+                hard,
+                model.controls.ts_stop.time_delta_coeff,
+                msg,
+                ctx.skip,
+                slot,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+macro_rules! x_check {
+    ($name:ident, $iso:literal, $lim:ident, $hard:ident, $drop:ident,
+     $msg:literal, $up:literal) => {
+        #[doc = concat!(
+            "`check_", $up, "_cntr` (`star/private/timestep.f90:1728-1881`)."
+        )]
+        pub(crate) fn $name(
+            ctx: &LimitCtx<'_>,
+            slot: &mut f64,
+        ) -> CheckResult {
+            let ts = &ctx.model.controls.ts_stop;
+            check_x_cntr(
+                ctx, $iso, ts.$lim, ts.$hard, ts.$drop, $msg, slot,
+            )
+        }
+    };
+}
+x_check!(
+    check_xh_cntr,
+    "h1",
+    delta_xh_cntr_limit,
+    delta_xh_cntr_hard_limit,
+    delta_xh_drop_only,
+    "delta_XH_cntr",
+    "XH"
+);
+x_check!(
+    check_xhe_cntr,
+    "he4",
+    delta_xhe_cntr_limit,
+    delta_xhe_cntr_hard_limit,
+    delta_xhe_drop_only,
+    "delta_XHe_cntr",
+    "XHe"
+);
+x_check!(
+    check_xc_cntr,
+    "c12",
+    delta_xc_cntr_limit,
+    delta_xc_cntr_hard_limit,
+    delta_xc_drop_only,
+    "delta_XC_cntr",
+    "XC"
+);
+x_check!(
+    check_xne_cntr,
+    "ne20",
+    delta_xne_cntr_limit,
+    delta_xne_cntr_hard_limit,
+    delta_xne_drop_only,
+    "delta_XNe_cntr",
+    "XNe"
+);
+x_check!(
+    check_xo_cntr,
+    "o16",
+    delta_xo_cntr_limit,
+    delta_xo_cntr_hard_limit,
+    delta_xo_drop_only,
+    "delta_XO_cntr",
+    "XO"
+);
+x_check!(
+    check_xsi_cntr,
+    "si28",
+    delta_xsi_cntr_limit,
+    delta_xsi_cntr_hard_limit,
+    delta_xsi_drop_only,
+    "delta_XSi_cntr",
+    "XSi"
+);
+
+/// `check_delta_mstar` (`star/private/timestep.f90:1915-1938`).
+pub(crate) fn check_delta_mstar(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    if model.mstar > 0.0 && model.mstar_old > 0.0 {
+        check_change(
+            flexmesa_math::log10(model.mstar / model.mstar_old).abs(),
+            ts.delta_lg_star_mass_limit,
+            ts.delta_lg_star_mass_hard_limit,
+            ts.time_delta_coeff,
+            "delta_lg_star_mass_hard_limit",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_delta_mdot` (`star/private/timestep.f90:1884-1912`).
+pub(crate) fn check_delta_mdot(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let c = &model.controls;
+    let mw = &c.mix_wind;
+    let coeff = c.ts_stop.time_delta_coeff;
+    let (mdot, mdot_old) = (model.mstar_dot, model.aux.step_hist.mstar_dot_old);
+    // Evaluate `star/private/timestep.f90:1893-1911` without a `denom > 0.0`
+    // guard: `0.0 / 0.0` yields `NaN` (`delta_mdot == 0` is false,
+    // `delta_mdot > hard_lim` is false, and `r_mdot <= 1.0` is false so `NaN`
+    // remains in `*slot`), while `x / 0.0` yields `+inf` (triggering retry if
+    // `hard_lim > 0.0 && !ctx.skip`, else writing `+inf` when `lim > 0.0`).
+    let denom = (mw.delta_mdot_atol * M_SUN) / SECYER
+        + mw.delta_mdot_rtol * mdot.abs().max(mdot_old.abs());
+    let delta_mdot = (mdot - mdot_old).abs() / denom;
+    if delta_mdot == 0.0 {
+        return Ok(());
+    }
+    let lim = mw.delta_mdot_limit * coeff;
+    let hard_lim = mw.delta_mdot_hard_limit * coeff;
+    if hard_lim > 0.0 && !ctx.skip && delta_mdot > hard_lim {
+        return Err(CheckFailure::Retry(String::from("delta_mdot_hard_limit")));
+    }
+    if lim <= 0.0 {
+        return Ok(());
+    }
+    let r_mdot = delta_mdot / lim;
+    *slot = if r_mdot <= 1.0 { 0.0 } else { r_mdot };
+    Ok(())
+}
+
+/// `check_adjust_J_q` (`star/private/timestep.f90:1941-1958`).
+pub(crate) fn check_adjust_j_q(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let (c, ts) = (&model.controls, &model.controls.ts_stop);
+    if !model.aux.doing_relax
+        && c.rotation_flag
+        && c.mix_wind.do_adjust_j_lost
+        && model.mstar_dot < 0.0
+    {
+        check_change(
+            1.0 - model.adjust_j_q,
+            1.0 - ts.adjust_j_q_limit,
+            1.0 - ts.adjust_j_q_hard_limit,
+            ts.time_delta_coeff,
+            "check_adjust_J_q",
+            false,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_delta_lgL` (`star/private/timestep.f90:1961-1987`).
+pub(crate) fn check_delta_lgl(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let sh = &model.aux.step_hist;
+    if model.aux.doing_relax {
+        return Ok(());
+    }
+    let l_surf = model.surface_l_lsun();
+    *slot = 0.0;
+    let dlgl = if l_surf < ts.delta_lgl_limit_l_min || sh.l_surf_old <= 0.0 {
+        0.0
+    } else {
+        flexmesa_math::log10(l_surf / sh.l_surf_old)
+    };
+    // Upstream stops with `mesa_error` on a non-finite `dlgL`
+    // (`timestep.f90:1972-1976`), e.g. `L_surf <= 0` above a negative
+    // `delta_lgL_limit_L_min`.
+    if !dlgl.is_finite() {
+        return Err(CheckFailure::Fatal(StarError::InvalidInput(format!(
+            "check_delta_lgL: dlgL is not finite (L_surf = {l_surf}, \
+             L_surf_old = {})",
+            sh.l_surf_old
+        ))));
+    }
+    check_change(
+        dlgl,
+        ts.delta_lgl_limit,
+        ts.delta_lgl_hard_limit,
+        ts.time_delta_coeff,
+        "delta_lgL",
+        ctx.skip,
+        slot,
+    )?;
+    Ok(())
+}
+
+/// `check_dt_div_dt_cell_collapse` (`star/private/timestep.f90:2046-2068`).
+pub(crate) fn check_dt_div_dt_cell_collapse(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    if model.aux.doing_relax {
+        return Ok(());
+    }
+    let dt_coll = eval_min_cell_collapse_time(model);
+    if dt_coll >= 1.0e-30 {
+        check_change(
+            model.dt / dt_coll,
+            ts.dt_div_dt_cell_collapse_limit,
+            ts.dt_div_dt_cell_collapse_hard_limit,
+            ts.time_delta_coeff,
+            "dt_div_dt_cell_collapse",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dt_div_min_dr_div_cs` (`star/private/timestep.f90:2071-2097`).
+pub(crate) fn check_dt_div_min_dr_div_cs(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    if model.aux.doing_relax || ts.dt_div_min_dr_div_cs_limit <= 0.0 {
+        return Ok(());
+    }
+    let (dt_x, _) = eval_min_dr_div_cs(model);
+    if dt_x > 0.0 {
+        check_change(
+            model.dt / dt_x,
+            ts.dt_div_min_dr_div_cs_limit,
+            ts.dt_div_min_dr_div_cs_hard_limit,
+            ts.time_delta_coeff,
+            "dt_div_min_dr_div_cs",
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_delta_HR` (`star/private/timestep.f90:1990-2020`), ungated by
+/// `doing_relax`, using `L_phot` for the current step; `l_surf_old` stands
+/// in for `L_phot_old`.
+pub(crate) fn check_delta_hr(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let sh = &model.aux.step_hist;
     let l_phot = crate::report_utils::eval_photosphere_info(model).l_lsun;
     if l_phot > 0.0
         && sh.l_surf_old > 0.0
@@ -1120,15 +1607,196 @@ pub(crate) fn check_luminosity_and_hr_limits(
         let dhr = (flexmesa_math::pow2(ts.delta_hr_ds_l * dlgl)
             + flexmesa_math::pow2(ts.delta_hr_ds_teff * dlgteff))
         .sqrt();
-        ratio = ratio.max(check_change(
+        check_change(
             dhr,
             ts.delta_hr_limit,
             ts.delta_hr_hard_limit,
-            coeff,
+            ts.time_delta_coeff,
             "delta_HR",
-            skip_hard_limit,
-        )?);
+            ctx.skip,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_rel_error_in_energy` (`star/private/timestep.f90:2023-2043`).
+pub(crate) fn check_rel_error_in_energy(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    let model = ctx.model;
+    let ts = &model.controls.ts_stop;
+    let sh = &model.aux.step_hist;
+    if !model.aux.doing_relax && sh.total_energy_end.abs() > 1.0e-30 {
+        check_change(
+            (sh.error_in_energy_conservation / sh.total_energy_end).abs(),
+            ts.limit_for_rel_error_in_energy_conservation,
+            ts.hard_limit_for_rel_error_in_energy_conservation,
+            ts.time_delta_coeff,
+            "hard_limit_for_rel_error_in_energy_conservation",
+            false,
+            slot,
+        )?;
+    }
+    Ok(())
+}
+
+/// `check_dX_nuc_drop` (`star/private/timestep.f90:2100-2241`).
+pub(crate) fn check_dx_nuc_drop(
+    ctx: &LimitCtx<'_>,
+    slot: &mut f64,
+) -> CheckResult {
+    *slot = check_dx_nuc_drop_full(ctx.model, ctx.skip, ctx.log_max_t)
+        .map_err(CheckFailure::Retry)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controls::StarControls;
+    use crate::job_controls::StarJobControls;
+
+    fn delta_mdot_model(
+        mdot: f64,
+        mdot_old: f64,
+        atol: f64,
+        rtol: f64,
+        lim: f64,
+        hard_lim: f64,
+    ) -> StarModel {
+        let mut controls = StarControls::default();
+        controls.ts_stop.time_delta_coeff = 1.0;
+        controls.mix_wind.delta_mdot_atol = atol;
+        controls.mix_wind.delta_mdot_rtol = rtol;
+        controls.mix_wind.delta_mdot_limit = lim;
+        controls.mix_wind.delta_mdot_hard_limit = hard_lim;
+        let mut model =
+            StarModel::new(0, vec![1], StarJobControls::default(), controls);
+        model.mstar_dot = mdot;
+        model.aux.step_hist.mstar_dot_old = mdot_old;
+        model
     }
 
-    Ok(ratio)
+    #[test]
+    fn test_check_change_non_finite_delta_is_fatal_not_retry() {
+        let mut slot = 0.0;
+        let r = check_change(f64::NAN, 1.0, 2.0, 1.0, "x", false, &mut slot);
+        assert!(matches!(r, Err(CheckFailure::Fatal(_))));
+    }
+
+    #[test]
+    fn test_check_change_overflowed_ratio_is_fatal() {
+        let mut slot = 0.0;
+        let r =
+            check_change(1.0e300, 1.0e-300, 0.0, 1.0, "x", false, &mut slot);
+        assert!(matches!(r, Err(CheckFailure::Fatal(_))));
+    }
+
+    #[test]
+    fn test_check_change_hard_limit_retries_and_soft_ratio_is_zeroed_below_one()
+    {
+        let mut slot = 7.0;
+        let r = check_change(3.0, 1.0, 2.0, 1.0, "x", false, &mut slot);
+        assert!(matches!(r, Err(CheckFailure::Retry(_))));
+        let r = check_change(0.5, 1.0, 2.0, 1.0, "x", false, &mut slot);
+        assert!(r.is_ok());
+        assert_eq!(slot, 0.0);
+        let r = check_change(1.5, 1.0, 2.0, 1.0, "x", false, &mut slot);
+        assert!(r.is_ok());
+        assert_eq!(slot, 1.5);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_zero_over_zero_leaves_nan_in_slot() {
+        let model = delta_mdot_model(0.0, 0.0, 0.0, 0.0, 0.1, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 0.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert!(slot.is_nan());
+    }
+
+    #[test]
+    fn test_check_delta_mdot_nonzero_over_zero_retries_or_writes_infinity() {
+        let mdot = -1.0e-5 * M_SUN / SECYER;
+        let m_retry = delta_mdot_model(mdot, 0.0, 0.0, 0.0, 0.1, 0.2);
+        let ctx_retry = LimitCtx::new(&m_retry, false);
+        let mut slot = 0.0;
+        let err = check_delta_mdot(&ctx_retry, &mut slot).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckFailure::Retry(ref msg) if msg == "delta_mdot_hard_limit"
+        ));
+
+        let ctx_skip = LimitCtx::new(&m_retry, true);
+        let mut slot_skip = 0.0;
+        assert!(check_delta_mdot(&ctx_skip, &mut slot_skip).is_ok());
+        assert_eq!(slot_skip, f64::INFINITY);
+
+        let m_nohard = delta_mdot_model(mdot, 0.0, 0.0, 0.0, 0.1, -1.0);
+        let ctx_nohard = LimitCtx::new(&m_nohard, false);
+        let mut slot_nohard = 0.0;
+        assert!(check_delta_mdot(&ctx_nohard, &mut slot_nohard).is_ok());
+        assert_eq!(slot_nohard, f64::INFINITY);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_negative_denom_clamps_ratio_to_zero() {
+        let mdot = -2.0e-3 * M_SUN / SECYER;
+        let model = delta_mdot_model(mdot, 0.0, -1.0e-3, 0.0, 0.5, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 7.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert_eq!(slot, 0.0);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_equal_mdot_positive_denom_preserves_slot() {
+        let mdot = -1.0e-5 * M_SUN / SECYER;
+        let model = delta_mdot_model(mdot, mdot, 1.0e-3, 0.5, 0.1, 0.2);
+        let ctx = LimitCtx::new(&model, false);
+        let mut slot = 7.0;
+        assert!(check_delta_mdot(&ctx, &mut slot).is_ok());
+        assert_eq!(slot, 7.0);
+    }
+
+    #[test]
+    fn test_check_delta_mdot_positive_denom_soft_and_hard_limits() {
+        let atol = 1.0e-3;
+        let rtol = 0.5;
+        let mdot_old = -1.0e-3 * M_SUN / SECYER;
+        let mdot = -2.0e-3 * M_SUN / SECYER;
+        let expected_denom =
+            (atol * M_SUN) / SECYER + rtol * mdot.abs().max(mdot_old.abs());
+        let expected_delta = (mdot - mdot_old).abs() / expected_denom;
+
+        // Soft ratio <= 1.0 clamps to 0.0.
+        let m_low = delta_mdot_model(mdot, mdot_old, atol, rtol, 1.0, -1.0);
+        let ctx_low = LimitCtx::new(&m_low, false);
+        let mut slot_low = 7.0;
+        assert!(check_delta_mdot(&ctx_low, &mut slot_low).is_ok());
+        assert_eq!(slot_low, 0.0);
+
+        // Soft ratio > 1.0 reports `delta_mdot / lim`.
+        let m_soft = delta_mdot_model(mdot, mdot_old, atol, rtol, 0.25, -1.0);
+        let ctx_soft = LimitCtx::new(&m_soft, false);
+        let mut slot_soft = 0.0;
+        assert!(check_delta_mdot(&ctx_soft, &mut slot_soft).is_ok());
+        assert_eq!(slot_soft, expected_delta / 0.25);
+
+        // Hard limit exceeded triggers retry unless skipped.
+        let m_hard = delta_mdot_model(mdot, mdot_old, atol, rtol, 0.25, 0.4);
+        let ctx_hard = LimitCtx::new(&m_hard, false);
+        let mut slot_hard = 0.0;
+        let err = check_delta_mdot(&ctx_hard, &mut slot_hard).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckFailure::Retry(ref msg) if msg == "delta_mdot_hard_limit"
+        ));
+
+        let ctx_skip = LimitCtx::new(&m_hard, true);
+        assert!(check_delta_mdot(&ctx_skip, &mut slot_hard).is_ok());
+        assert_eq!(slot_hard, expected_delta / 0.25);
+    }
 }

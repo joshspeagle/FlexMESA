@@ -58,14 +58,27 @@ use crate::star_py::PyStarModel;
 #[pyclass(module = "flexmesa._rust")]
 pub struct PyRspBuildContext {
     bundle: InlistBundle,
+    output_dir: Option<PathBuf>,
 }
 
 impl PyRspBuildContext {
-    /// Constructs a [`PyRspBuildContext`] from an already-loaded [`InlistBundle`].
+    /// Constructs a [`PyRspBuildContext`] from an already-loaded
+    /// [`InlistBundle`].
     #[must_use]
     pub fn from_bundle(bundle: &InlistBundle) -> Self {
+        Self::from_bundle_with_output_dir(bundle, None)
+    }
+
+    /// Constructs a [`PyRspBuildContext`] from an already-loaded
+    /// [`InlistBundle`] and optional run output directory.
+    #[must_use]
+    pub fn from_bundle_with_output_dir(
+        bundle: &InlistBundle,
+        output_dir: Option<PathBuf>,
+    ) -> Self {
         Self {
             bundle: bundle.clone(),
+            output_dir,
         }
     }
 }
@@ -76,6 +89,23 @@ impl PyRspBuildContext {
     #[getter]
     pub fn case_dir(&self) -> String {
         self.bundle.case_dir.to_string_lossy().into_owned()
+    }
+
+    /// Output directory path for auxiliary `RSP` outputs, falling back to
+    /// `case_dir` when no separate output directory was configured.
+    #[getter]
+    pub fn output_dir(&self) -> String {
+        self.output_dir
+            .as_deref()
+            .unwrap_or(self.bundle.case_dir.as_path())
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Alias for [`Self::output_dir`].
+    #[getter]
+    pub fn work_dir(&self) -> String {
+        self.output_dir()
     }
 
     /// Envelope total mass (`RSP_mass`, $M_\odot$).
@@ -481,6 +511,7 @@ fn lock_unpoisoned<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Default)]
 struct PyAdapterState {
     staged_case_dir: Mutex<Option<(PathBuf, String)>>,
+    output_dir: Mutex<Option<PathBuf>>,
     pending_err: Mutex<Option<String>>,
 }
 
@@ -489,6 +520,14 @@ impl PyAdapterState {
         let s = case_dir.to_string_lossy().into_owned();
         *lock_unpoisoned(&self.staged_case_dir) =
             Some((case_dir.to_path_buf(), s));
+    }
+
+    fn set_output_dir(&self, output_dir: Option<&Path>) {
+        *lock_unpoisoned(&self.output_dir) = output_dir.map(Path::to_path_buf);
+    }
+
+    fn output_dir_path(&self) -> Option<PathBuf> {
+        lock_unpoisoned(&self.output_dir).clone()
     }
 
     fn staged_dir_string(&self) -> String {
@@ -838,6 +877,20 @@ fn eval_total_angular_momentum_old(model: &StarModel) -> f64 {
         .sum()
 }
 
+fn set_star_center_scalars(
+    d: &Bound<'_, PyDict>,
+    model: &StarModel,
+) -> PyResult<()> {
+    for (key, iso) in [
+        ("center_h1", "h1"),
+        ("center_he4", "he4"),
+        ("center_c12", "c12"),
+    ] {
+        d.set_item(key, center_avg_x_by_name(model, iso).map_err(to_py_err)?)?;
+    }
+    Ok(())
+}
+
 fn set_star_report_scalars(
     py: Python<'_>,
     d: &Bound<'_, PyDict>,
@@ -852,9 +905,7 @@ fn set_star_report_scalars(
     let mix = eval_conv_and_mx_summary(model);
     let surf_rot = eval_surf_avg_rotation_info(model);
 
-    d.set_item("center_h1", center_avg_x_by_name(model, "h1"))?;
-    d.set_item("center_he4", center_avg_x_by_name(model, "he4"))?;
-    d.set_item("center_c12", center_avg_x_by_name(model, "c12"))?;
+    set_star_center_scalars(d, model)?;
     d.set_item("he_core_mass", cores.he_core_mass)?;
     d.set_item("co_core_mass", cores.co_core_mass)?;
     d.set_item("one_core_mass", cores.one_core_mass)?;
@@ -880,12 +931,14 @@ fn set_star_report_scalars(
     d.set_item("w_div_w_crit_avg_surf", surf_rot.w_div_w_crit)?;
     d.set_item("omega_avg_surf", surf_rot.omega)?;
     d.set_item("v_rot_avg_surf", surf_rot.v_rot_cm_s)?;
-    d.set_item(
-        "log_center_temperature",
-        center_value(model, &model.ln_t) / LN10,
-    )?;
-    d.set_item("log_center_density", center_value(model, &model.lnd) / LN10)?;
-    d.set_item("center_omega", center_value(model, &model.omega))?;
+    for (key, arr, div_ln10) in [
+        ("log_center_temperature", &model.ln_t[..], true),
+        ("log_center_density", &model.lnd[..], true),
+        ("center_omega", &model.omega[..], false),
+    ] {
+        let v = center_value(model, arr).map_err(to_py_err)?;
+        d.set_item(key, if div_ln10 { v / LN10 } else { v })?;
+    }
     d.set_item("log_dt", safe_log10(model.dt / SECYER))?;
     d.set_item("log_l", safe_log10(model.surface_l_lsun()))?;
     d.set_item("log_teff", safe_log10(model.teff))?;
@@ -1263,6 +1316,7 @@ fn build_star_snapshot<'py>(
     d.set_item("mstar", model.mstar)?;
     d.set_item("m_center", model.m_center)?;
     d.set_item("xmstar", model.xmstar)?;
+    d.set_item("l_center", model.l_center)?;
     d.set_item("num_conv_boundaries", model.aux.mixing.conv_bdy_loc.len())?;
     d.set_item(
         "conv_bdy_loc",
@@ -1423,10 +1477,24 @@ fn apply_star_job_or_overshoot_update(
     Ok(true)
 }
 
+#[allow(clippy::too_many_lines)]
 fn apply_star_updates(
     model: &mut StarModel,
     updates: &Bound<'_, PyDict>,
 ) -> PyResult<()> {
+    let mut center_changed = false;
+    let mut v_flag_changed = false;
+    // Apply `v_flag` first so velocity layout updates match upstream
+    // (`star_set_v_flag` before scalar edits in `extras_start_step`).
+    if let Some(val) = updates.get_item("v_flag")? {
+        let flag = val.extract::<bool>()?;
+        if model.controls.v_flag != flag {
+            model
+                .set_v_flag(flag)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            v_flag_changed = true;
+        }
+    }
     for (key_obj, val) in updates.iter() {
         let key: String = key_obj.extract()?;
         if apply_user_ctrl_update(model, &key, &val)?
@@ -1509,12 +1577,28 @@ fn apply_star_updates(
                     val.extract::<f64>()?;
             }
             "mstar_dot" => model.mstar_dot = val.extract::<f64>()?,
+            "v_flag" => {}
+            "m_center" => {
+                model.m_center = val.extract::<f64>()?;
+                center_changed = true;
+            }
+            "xmstar" => {
+                model.xmstar = val.extract::<f64>()?;
+                center_changed = true;
+            }
+            "l_center" => {
+                model.l_center = val.extract::<f64>()?;
+                center_changed = true;
+            }
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unsupported star extras update key '{other}'"
                 )));
             }
         }
+    }
+    if center_changed || v_flag_changed {
+        model.aux.need_to_setvars = true;
     }
     Ok(())
 }
@@ -1619,24 +1703,122 @@ fn apply_rsp_linear_analysis_result(
     Ok(true)
 }
 
+const VALID_XTRA_TERMINATION_SLOTS: [&str; 9] = [
+    "t_xtra1", "t_xtra2", "t_xtra3", "t_xtra4", "t_xtra5", "t_xtra6",
+    "t_xtra7", "t_xtra8", "t_xtra9",
+];
+
+fn extract_optional_non_none<'py>(
+    d: &Bound<'py, PyDict>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Some(obj) = d.get_item(key)? else {
+        return Ok(None);
+    };
+    if obj.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(obj))
+}
+
+fn extract_str_field(obj: &Bound<'_, PyAny>, key: &str) -> PyResult<String> {
+    obj.extract().map_err(|e| {
+        let ty = obj
+            .get_type()
+            .name()
+            .map_or_else(|_| String::from("?"), |n| n.to_string());
+        PyValueError::new_err(format!(
+            "hook returned '{key}' of type {ty}; expected str: {e}"
+        ))
+    })
+}
+
+fn extract_xtra_termination_code(
+    d: &Bound<'_, PyDict>,
+    allow_xtra_slots: bool,
+) -> PyResult<Option<String>> {
+    if extract_optional_non_none(d, "termination_code")?.is_some() {
+        return Err(PyValueError::new_err(
+            "free-form 'termination_code' is unsupported; specify \
+             'termination_code_slot' ('t_xtra1'..'t_xtra9') and \
+             'termination_code_str' (DECISIONS #77)",
+        ));
+    }
+    let slot_obj = extract_optional_non_none(d, "termination_code_slot")?;
+    let str_obj = extract_optional_non_none(d, "termination_code_str")?;
+    if !allow_xtra_slots && (slot_obj.is_some() || str_obj.is_some()) {
+        return Err(PyValueError::new_err(
+            "t_xtra termination_code_slot is only supported by \
+             extras_start_step, extras_check_model, and extras_finish_step \
+             (DECISIONS #77)",
+        ));
+    }
+    let Some(slot_val) = slot_obj else {
+        if str_obj.is_some() {
+            return Err(PyValueError::new_err(
+                "'termination_code_str' requires 'termination_code_slot' \
+                 ('t_xtra1'..'t_xtra9')",
+            ));
+        }
+        return Ok(None);
+    };
+    let slot_raw = extract_str_field(&slot_val, "termination_code_slot")?;
+    let slot = slot_raw.as_str();
+    if !VALID_XTRA_TERMINATION_SLOTS.contains(&slot) {
+        return Err(PyValueError::new_err(format!(
+            "invalid termination_code_slot '{slot}'; expected one of \
+             't_xtra1'..'t_xtra9'"
+        )));
+    }
+    let Some(str_val) = str_obj else {
+        return Ok(Some(format!(
+            "customize by setting termination_code_str({slot})"
+        )));
+    };
+    let msg_raw = extract_str_field(&str_val, "termination_code_str")?;
+    // Fortran `trim()` and `character(len=128)` equality strip trailing
+    // blanks while preserving leading spaces (`run_star_support.f90:837-838`,
+    // `run_star_support.f90:872`). Blank strings (`len_trim == 0`) are
+    // rejected loudly: `star_private_def.f90:225-236` requires non-empty init
+    // strings and `ExtrasDirective::Terminate("")` collides with
+    // `s% termination_code == 0` in `termination_code_string_okay`
+    // (`run_star_support.f90:831`, `DECISIONS #77`).
+    let trimmed = msg_raw.trim_end();
+    if trimmed.is_empty() {
+        return Err(PyValueError::new_err(
+            "hook returned empty or whitespace-only 'termination_code_str'",
+        ));
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
 /// Converts a star hook's return value into an [`ExtrasDirective`].
 ///
-/// A hook cannot choose its termination code: upstream sets it from the hook
-/// that returned `terminate` (`star/job/standard_run_star_extras.inc:83`
+/// By default the termination code is `default_terminate_code` (the hook's
+/// upstream name: `star/job/standard_run_star_extras.inc:83`
 /// `t_extras_check_model`, `:228` `t_extras_finish_step`; strings at
-/// `star/private/star_private_def.f90:212-213`). `default_terminate_code` is
-/// that hook's upstream name and is always the code. A message supplied with
-/// `terminate` is diagnostic only (upstream hooks `write(*,*)` theirs) and
-/// goes to stderr. An unrecognised directive string is an error.
+/// `star/private/star_private_def.f90:212-213`). When `allow_xtra_slots` is
+/// `true` (`extras_start_step`, `extras_check_model`, `extras_finish_step`), a
+/// hook returning `"action": "terminate"` may select an upstream `t_xtra` slot
+/// (`"termination_code_slot"` in `"t_xtra1".."t_xtra9"`,
+/// `star_data/public/star_data_def.inc:238-246`) and optional non-empty
+/// `"termination_code_str"` (`star/private/star_private_def.f90:215-223`;
+/// `DECISIONS #77`), defaulting to MESA's `"customize by setting
+/// termination_code_str(t_xtraN)"`. Trailing whitespace is stripped and blank
+/// strings are rejected (`star/job/run_star_support.f90:831-842,872`). A
+/// message supplied via `"message"` or `("terminate", msg)` remains diagnostic
+/// only and goes to stderr.
 fn parse_star_directive(
     res: &Bound<'_, PyAny>,
     default_terminate_code: &str,
+    allow_xtra_slots: bool,
     model: &mut StarModel,
 ) -> PyResult<ExtrasDirective> {
     if res.is_none() {
         return Ok(ExtrasDirective::KeepGoing);
     }
     let mut dict_msg: Option<String> = None;
+    let mut custom_code: Option<String> = None;
     let directive_str: String = if let Ok(tup) = res.cast::<PyTuple>() {
         if tup.len() != 2 {
             return Err(PyValueError::new_err(
@@ -1663,6 +1845,18 @@ fn parse_star_directive(
             first
         }
     } else if let Ok(d) = res.cast::<PyDict>() {
+        custom_code = extract_xtra_termination_code(d, allow_xtra_slots)?;
+        let act_str = if let Some(act) = d.get_item("action")? {
+            act.extract::<String>()?
+        } else {
+            String::from("keep_going")
+        };
+        if custom_code.is_some() && act_str != "terminate" {
+            return Err(PyValueError::new_err(format!(
+                "'termination_code_slot' is only valid when \
+                 action == 'terminate', got '{act_str}'"
+            )));
+        }
         if let Some(updates) = d.get_item("updates")? {
             if let Ok(udict) = updates.cast::<PyDict>() {
                 apply_star_updates(model, udict)?;
@@ -1678,11 +1872,7 @@ fn parse_star_directive(
                 dict_msg = Some(msg_obj.extract::<String>()?);
             }
         }
-        if let Some(act) = d.get_item("action")? {
-            act.extract::<String>()?
-        } else {
-            String::from("keep_going")
-        }
+        act_str
     } else {
         res.extract::<String>()?
     };
@@ -1698,9 +1888,9 @@ fn parse_star_directive(
             if let Some(msg) = dict_msg {
                 eprintln!("{default_terminate_code}: {msg}");
             }
-            Ok(ExtrasDirective::Terminate(
-                default_terminate_code.to_string(),
-            ))
+            let code = custom_code
+                .unwrap_or_else(|| default_terminate_code.to_string());
+            Ok(ExtrasDirective::Terminate(code))
         }
         other => Err(PyValueError::new_err(format!(
             "unrecognised directive '{other}' returned by \
@@ -2216,10 +2406,11 @@ fn parse_timestep_limit_result(
         } else {
             0.0
         };
-        let dir = parse_star_directive(res, "other_timestep_limit", model)?;
+        let dir =
+            parse_star_directive(res, "other_timestep_limit", false, model)?;
         return Ok((dir, ratio));
     }
-    let dir = parse_star_directive(res, "other_timestep_limit", model)?;
+    let dir = parse_star_directive(res, "other_timestep_limit", false, model)?;
     Ok((dir, 0.0))
 }
 
@@ -2366,13 +2557,15 @@ impl PyStarExtrasAdapter {
                 }
             };
             match self.py_obj.bind(py).call_method1(method, (snap,)) {
-                Ok(res) => parse_star_directive(&res, default_terminate, model)
-                    .unwrap_or_else(|e| {
-                        ExtrasDirective::Error(format!(
-                            "{method}: {}",
-                            format_py_err(py, &e)
-                        ))
-                    }),
+                Ok(res) => {
+                    parse_star_directive(&res, default_terminate, true, model)
+                        .unwrap_or_else(|e| {
+                            ExtrasDirective::Error(format!(
+                                "{method}: {}",
+                                format_py_err(py, &e)
+                            ))
+                        })
+                }
                 Err(e) => ExtrasDirective::Error(format!(
                     "{method}: {}",
                     format_py_err(py, &e)
@@ -2450,6 +2643,10 @@ impl PyStarExtrasAdapter {
 impl StarExtras for PyStarExtrasAdapter {
     fn set_staged_case_dir(&mut self, case_dir: &Path) {
         self.state.set_staged_case_dir(case_dir);
+    }
+
+    fn set_output_dir(&mut self, output_dir: Option<&Path>) {
+        self.state.set_output_dir(output_dir);
     }
 
     fn extras_controls(
@@ -2789,7 +2986,10 @@ impl StarExtras for PyStarExtrasAdapter {
             return Ok(None);
         }
         Python::attach(|py| {
-            let ctx = PyRspBuildContext::from_bundle(bundle);
+            let ctx = PyRspBuildContext::from_bundle_with_output_dir(
+                bundle,
+                self.state.output_dir_path(),
+            );
             let py_ctx = Py::new(py, ctx)
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
             let res = self
@@ -2825,6 +3025,7 @@ impl StarExtras for PyStarExtrasAdapter {
                 return match tag.as_str() {
                     "terminate" => {
                         eprintln!("other_rsp_build_model: {msg}");
+                        println!(" failed in other_rsp_build_model");
                         Ok(Some(RspBuildOutcome::Terminate(String::from(
                             "other_rsp_build_model",
                         ))))
@@ -2842,6 +3043,7 @@ impl StarExtras for PyStarExtrasAdapter {
                          other_rsp_build_model"
                     )));
                 }
+                println!(" failed in other_rsp_build_model");
                 return Ok(Some(RspBuildOutcome::Terminate(String::from(
                     "other_rsp_build_model",
                 ))));
@@ -3049,15 +3251,15 @@ fn set_binary_star_scalars(
     d.set_item(format!("{prefix}_mstar_dot"), star.mstar_dot)?;
     d.set_item(
         format!("{prefix}_center_h1"),
-        center_avg_x_by_name(star, "h1"),
+        center_avg_x_by_name(star, "h1").map_err(to_py_err)?,
     )?;
     d.set_item(
         format!("{prefix}_center_he4"),
-        center_avg_x_by_name(star, "he4"),
+        center_avg_x_by_name(star, "he4").map_err(to_py_err)?,
     )?;
     d.set_item(
         format!("{prefix}_center_c12"),
-        center_avg_x_by_name(star, "c12"),
+        center_avg_x_by_name(star, "c12").map_err(to_py_err)?,
     )?;
     if let Some(y) = surface_iso_frac(star, "he4") {
         d.set_item(format!("{prefix}_surface_he4"), y)?;
@@ -3220,10 +3422,9 @@ fn apply_binary_updates(
 
 /// Converts a binary hook's return value into a [`BinaryExtrasAction`].
 ///
-/// Same contract as [`parse_star_directive`]: the termination code is always
-/// `default_terminate_code` (the hook's upstream name), a message supplied
-/// with `terminate` is printed to stderr, and an unrecognised action string
-/// is an error.
+/// Binary hooks always use `default_terminate_code` (the hook's upstream
+/// name), a message supplied with `terminate` is printed to stderr, and an
+/// unrecognised action string is an error.
 fn parse_binary_action(
     res: &Bound<'_, PyAny>,
     default_terminate_code: &str,

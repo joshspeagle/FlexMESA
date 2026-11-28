@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! PyO3 adapter for an `astero` case's own `set_param` and
-//! `set_constraint_value` (its `run_star_extras.f90`), supplied by test-side
-//! extras.
+//! PyO3 adapter for an `astero` case's `set_param`,
+//! `set_constraint_value`, and optional `extras_after_evolve`
+//! (`run_star_extras.f90`), supplied by test-side extras.
 //!
 //! The Python object implements
 //! `set_param(snapshot: dict, name: str, val: float) -> dict | None`. The
@@ -15,19 +15,27 @@
 //! `surface_he3`, `surface_he4`, `mixing_type`, `r`, `Rsun`,
 //! `Z_div_X_solar`). Returning the string `"star_get_history_output"` asks for
 //! `star_get_history_output(s, name, ierr)`, the routine's `case default`.
+//!
+//! It may also implement `extras_after_evolve(snapshot: dict)`, receiving
+//! `best_chi2` and surface/scalar model fields and returning `None`, a
+//! custom termination code string (`"xtra1"`..`"xtra9"` or `"t_xtra1"`..
+//! `"t_xtra9"`), or a dictionary with `"termination_code"` /
+//! `"termination_code_slot"` and optional `"termination_code_str"`.
 
 use flexmesa_astero::{AsteroCaseHooks, AsteroSearchControls};
 use flexmesa_star::controls::StarError;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::model::StarModel;
-use flexmesa_star::report_utils::surface_avg_x_slot;
+use flexmesa_star::report_utils::{surface_avg_x_by_name, surface_avg_x_slot};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-/// Wraps a Python object exposing `set_param(snapshot, name, val)`.
+/// Wraps a Python object exposing `set_param(snapshot, name, val)` and
+/// `set_constraint_value(snapshot, name)`, plus optional `extras_after_evolve`.
 pub struct PyAsteroCaseHooksAdapter {
     py_obj: Py<PyAny>,
+    has_after_evolve: bool,
 }
 
 impl PyAsteroCaseHooksAdapter {
@@ -43,7 +51,11 @@ impl PyAsteroCaseHooksAdapter {
                  and set_constraint_value(snapshot, name)",
             ));
         }
-        Ok(Self { py_obj: obj })
+        let has_after_evolve = o.hasattr("extras_after_evolve")?;
+        Ok(Self {
+            py_obj: obj,
+            has_after_evolve,
+        })
     }
 }
 
@@ -157,6 +169,145 @@ fn build_constraint_snapshot<'py>(
     Ok(snap)
 }
 
+fn normalize_xtra_termination_code(raw: &str) -> Result<String, StarError> {
+    let trimmed = raw.trim();
+    let code = trimmed.strip_prefix("t_").unwrap_or(trimmed);
+    let valid = code
+        .strip_prefix("xtra")
+        .and_then(|s| s.parse::<u8>().ok())
+        .is_some_and(|n| (1..=9).contains(&n));
+    if !valid {
+        return Err(StarError::InvalidInput(format!(
+            "extras_after_evolve: unsupported termination code '{raw}'; \
+             expected 'xtra1'..'xtra9' or 't_xtra1'..'t_xtra9'"
+        )));
+    }
+    Ok(code.to_string())
+}
+
+fn build_after_evolve_snapshot<'py>(
+    py: Python<'py>,
+    model: &StarModel,
+    best_chi2: f64,
+) -> PyResult<Bound<'py, PyDict>> {
+    let snap = PyDict::new(py);
+    let photosphere_r = if model.nz > 0 {
+        model.r[0] / flexmesa_const::R_SUN
+    } else {
+        0.0
+    };
+    let photosphere_l = if model.nz > 0 {
+        model.lum[0] / flexmesa_const::L_SUN
+    } else {
+        0.0
+    };
+    snap.set_item("best_chi2", best_chi2)?;
+    snap.set_item("model_number", model.model_number)?;
+    snap.set_item("star_age", model.star_age)?;
+    snap.set_item("star_mass", model.mstar / flexmesa_const::M_SUN)?;
+    snap.set_item("teff", model.teff)?;
+    snap.set_item("photosphere_r", photosphere_r)?;
+    snap.set_item("photosphere_l", photosphere_l)?;
+    snap.set_item("surface_h1", surface_avg_x_by_name(model, "h1"))?;
+    snap.set_item("surface_he3", surface_avg_x_by_name(model, "he3"))?;
+    snap.set_item("surface_he4", surface_avg_x_by_name(model, "he4"))?;
+    Ok(snap)
+}
+
+fn parse_after_evolve_result(
+    res: &Bound<'_, PyAny>,
+) -> Result<Option<String>, StarError> {
+    if res.is_none() {
+        return Ok(None);
+    }
+    if let Ok(raw) = res.extract::<String>() {
+        return normalize_xtra_termination_code(&raw).map(Some);
+    }
+    let Ok(dict) = res.cast::<PyDict>() else {
+        let ty = res
+            .get_type()
+            .name()
+            .map_or_else(|_| String::from("unknown"), |n| n.to_string());
+        return Err(StarError::InvalidInput(format!(
+            "extras_after_evolve: expected None, str, or dict, got {ty}"
+        )));
+    };
+    for (key_obj, _) in dict.iter() {
+        let key: String = key_obj.extract().map_err(|_| {
+            StarError::InvalidInput(String::from(
+                "extras_after_evolve: dict keys must be strings",
+            ))
+        })?;
+        match key.as_str() {
+            "termination_code"
+            | "termination_code_slot"
+            | "termination_code_str" => {}
+            other => {
+                return Err(StarError::InvalidInput(format!(
+                    "extras_after_evolve: unknown return dict key '{other}'"
+                )));
+            }
+        }
+    }
+    let label = if let Some(v) =
+        dict.get_item("termination_code_str").map_err(|e| {
+            StarError::InvalidInput(format!("extras_after_evolve: {e}"))
+        })? {
+        if v.is_none() {
+            None
+        } else {
+            let s: String = v.extract().map_err(|_| {
+                StarError::InvalidInput(String::from(
+                    "extras_after_evolve: 'termination_code_str' must be a str",
+                ))
+            })?;
+            if s.trim().is_empty() {
+                return Err(StarError::InvalidInput(String::from(
+                    "extras_after_evolve: 'termination_code_str' \
+                     must not be empty",
+                )));
+            }
+            Some(s)
+        }
+    } else {
+        None
+    };
+
+    let mut chosen: Option<String> = None;
+    for key in ["termination_code_slot", "termination_code"] {
+        if let Some(v) = dict.get_item(key).map_err(|e| {
+            StarError::InvalidInput(format!("extras_after_evolve: {e}"))
+        })? {
+            if v.is_none() {
+                continue;
+            }
+            let raw: String = v.extract().map_err(|_| {
+                StarError::InvalidInput(format!(
+                    "extras_after_evolve: '{key}' must be a str"
+                ))
+            })?;
+            let norm = normalize_xtra_termination_code(&raw)?;
+            if let Some(ref prev) = chosen {
+                if *prev != norm {
+                    return Err(StarError::InvalidInput(format!(
+                        "extras_after_evolve: conflicting termination codes \
+                         '{prev}' vs '{norm}'"
+                    )));
+                }
+            } else {
+                chosen = Some(norm);
+            }
+        }
+    }
+    if chosen.is_none() && label.is_some() {
+        return Err(StarError::InvalidInput(String::from(
+            "extras_after_evolve: 'termination_code_str' requires \
+             'termination_code' or 'termination_code_slot'",
+        )));
+    }
+    Ok(chosen)
+}
+
 impl AsteroCaseHooks for PyAsteroCaseHooksAdapter {
     fn set_constraint_value(
         &mut self,
@@ -225,6 +376,32 @@ impl AsteroCaseHooks for PyAsteroCaseHooksAdapter {
                 )));
             }
             Ok(())
+        })
+    }
+
+    fn extras_after_evolve(
+        &mut self,
+        model: &StarModel,
+        best_chi2: f64,
+    ) -> Result<Option<String>, StarError> {
+        if !self.has_after_evolve {
+            return Ok(None);
+        }
+        Python::attach(|py| {
+            let to_err = |e: &PyErr| {
+                StarError::InvalidInput(format!(
+                    "extras_after_evolve: {}",
+                    format_py_err(py, e)
+                ))
+            };
+            let snap = build_after_evolve_snapshot(py, model, best_chi2)
+                .map_err(|e| to_err(&e))?;
+            let res = self
+                .py_obj
+                .bind(py)
+                .call_method1("extras_after_evolve", (snap,))
+                .map_err(|e| to_err(&e))?;
+            parse_after_evolve_result(&res)
         })
     }
 }

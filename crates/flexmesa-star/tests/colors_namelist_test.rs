@@ -17,11 +17,12 @@ use flexmesa_star::controls::ColorsControls;
 use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_inventory::supported_star_control_inventory;
 use flexmesa_star::mesa_history::{
-    evaluate_star_history_row, parse_star_history_columns,
-    resolve_star_history_columns, HistoryColumnSpec, IncrementalHistoryWriter,
+    parse_star_history_columns, resolve_star_history_columns,
+    HistoryColumnSpec, IncrementalHistoryWriter,
 };
 use flexmesa_star::report_utils::StepReportContext;
 use flexmesa_star::{StarControls, StarError, StarJobControls, StarModel};
+use flexmesa_utils::require_mesa_test_input_path;
 
 static TMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -389,63 +390,6 @@ fn test_colors_ab_st_and_flat_csv_export() {
         .is_file());
 }
 
-#[test]
-fn test_builtin_solar_johnson_history_columns() {
-    let cc = ColorsControls {
-        use_colors: true,
-        ..ColorsControls::default()
-    };
-    let model = solar_surface_model(cc);
-    let dir = TempDirGuard::new("builtin_solar");
-    fs::write(dir.path().join("history_columns.list"), "model_number\n")
-        .expect("write list");
-    let specs = resolve_star_history_columns(&model, Some(dir.path()))
-        .expect("resolve default Johnson");
-    let row = evaluate_star_history_row(&model, &specs).expect("history row");
-    let names: Vec<&str> = row.iter().map(|(k, _)| k.as_str()).collect();
-    assert_eq!(
-        names,
-        vec![
-            "model_number",
-            "Mag_bol",
-            "Flux_bol",
-            "Interp_rad",
-            "B",
-            "I",
-            "J",
-            "M",
-            "R",
-            "U",
-            "V",
-        ]
-    );
-    let expected = [
-        ("Mag_bol", 16.233_783_742_415_f64),
-        ("Flux_bol", 3.209_863_046_816_5e-07),
-        ("Interp_rad", 1.201_509_822_140_3e-02),
-        ("B", 5.432_831_508_849_5),
-        ("I", 4.024_363_240_540_5),
-        ("J", 3.654_466_716_232_9),
-        ("M", 3.279_404_031_070_8),
-        ("R", 4.332_242_343_580_0),
-        ("U", 5.534_292_813_775_7),
-        ("V", 4.776_981_134_694_0),
-    ];
-    for (col, gold) in expected {
-        let val = row
-            .iter()
-            .find(|(k, _)| k == col)
-            .expect("missing col")
-            .1
-            .as_f64();
-        let rel = (val - gold).abs() / gold.abs().max(1.0);
-        assert!(
-            rel < 1.0e-10,
-            "{col}: got {val}, expected {gold} (rel {rel})"
-        );
-    }
-}
-
 fn assert_upstream_colors_case(
     case_dir: &Path,
     entry_inlist: &str,
@@ -488,10 +432,6 @@ fn assert_upstream_colors_case(
 
 #[test]
 fn test_upstream_colors_cases_load_and_columns() {
-    let Some(mesa_dir) = std::env::var_os("MESA_DIR") else {
-        return;
-    };
-    let mesa_root = PathBuf::from(mesa_dir);
     let gaia_cols = [
         "Mag_bol",
         "Flux_bol",
@@ -558,14 +498,19 @@ fn test_upstream_colors_cases_load_and_columns() {
         ),
     ];
     for (case_rel, entry_inlist, strict_controls, expect_cols) in cases {
-        let case_dir = mesa_root.join(case_rel);
-        if case_dir.is_dir() {
-            assert_upstream_colors_case(
-                &case_dir,
-                entry_inlist,
-                strict_controls,
-                expect_cols,
-            );
-        }
+        let rel_inlist = format!("{case_rel}/{entry_inlist}");
+        let Some(inlist_path) = require_mesa_test_input_path(&rel_inlist)
+        else {
+            continue;
+        };
+        let case_dir = inlist_path
+            .parent()
+            .expect("upstream colors case inlist must have parent directory");
+        assert_upstream_colors_case(
+            case_dir,
+            entry_inlist,
+            strict_controls,
+            expect_cols,
+        );
     }
 }

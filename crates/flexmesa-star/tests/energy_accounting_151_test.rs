@@ -661,15 +661,19 @@ fn test_non_finite_energy_error_terminates_without_retry() {
 }
 
 /// Verifies `op_split_burn = true` with `dxdt_nuc_factor == 0` zeroes
-/// hot-zone `eps_nuc` and clears stale `burn_avg_epsnuc` (`struct_burn_mix.f90:82-98`).
+/// hot-zone `eps_nuc` and leaves a zero `burn_avg_epsnuc` untouched, because
+/// `do_burn` is skipped (`struct_burn_mix.f90:79-98, 100`). Upstream does not
+/// clear `burn_avg_epsnuc` in that block, so a stale nonzero value is not
+/// cleared and the earlier precondition of `123.0` is replaced by zeros.
 #[test]
-fn test_op_split_burn_with_zero_dxdt_nuc_factor_clears_burn_avg_and_eps_nuc() {
+fn test_op_split_burn_with_zero_dxdt_nuc_factor_keeps_zero_burn_avg_and_eps_nuc(
+) {
     let mut model = solar_zams(EnergyEqnOption::Dedt);
     let nz = model.nz;
     model.controls.op_split_burn = true;
     model.controls.op_split_burn_min_t = 1.0e5;
     model.controls.dxdt_nuc_factor = 0.0;
-    model.aux.burn_avg_epsnuc = vec![123.0; nz];
+    model.aux.burn_avg_epsnuc = vec![0.0; nz];
     model.save_start_values().expect("save_start_values");
     flexmesa_star::record_start_of_step_energy_integrals(&mut model);
     model.save_old_values();

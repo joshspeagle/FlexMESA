@@ -467,7 +467,7 @@ class RustStarModel:
     def step_struct_burn_mix(self, dt: float, op_split_burn: bool = False, use_bcyclic: bool = True, overshoot_f: float = 0.0, overshoot_f0: float = 0.004) -> tuple[bool, int, float, float, float, float]: ...  # noqa: E501
     def apply_wind_and_adjust_mass(self, scheme: str = "Dutch", eta: float = 1.0, dt: float = 0.0) -> float: ...  # noqa: E501
     def adjust_mesh(self) -> tuple[int, int]: ...
-    def pick_next_timestep(self, max_timestep_factor: float = 1.2, min_timestep_factor: float = 0.5, dx_nuc_drop_limit: float = 1.0e-2) -> tuple[float, float, float]: ...  # noqa: E501
+    def pick_next_timestep(self, max_timestep_factor: float = 1.2, min_timestep_factor: float = 0.5) -> tuple[float, float, float]: ...  # noqa: E501
     def evolve_step(self, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> tuple[int, float, float, float, int, int, int, int, float, bool]: ...  # noqa: E501
     def evolve(self, max_steps: int, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True, max_age: float | None = None) -> list[tuple[int, float, float, float, int, int, int, int, float, bool]]: ...  # noqa: E501
     def history_tuple(self) -> tuple[tuple[int, int, int, int], list[float]]: ...  # noqa: E501
@@ -674,6 +674,8 @@ def w5_eval_astero_seism(nz: int) -> float: ...
 
 class PyRspBuildContext:
     case_dir: str
+    output_dir: str
+    work_dir: str
     rsp_mass: float
     rsp_x: float
     rsp_z: float

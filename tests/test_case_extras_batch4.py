@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from flexmesa import _rust, constants
+from flexmesa import _rust, astero, constants, star
 from flexmesa.data import fetch
 from flexmesa.testing import harness_runner
 from tests import case_extras
@@ -1143,3 +1143,138 @@ def test_surface_effects_live_strict_and_mesa_mode_oracles(
             assert order_got == order_ref
             assert freq_got == pytest.approx(freq_ref, rel=1.0e-5)
             assert inertia_got == pytest.approx(inertia_ref, rel=1.0e-4)
+
+
+def test_example_astero_extras_after_evolve_branches(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`ExampleAsteroExtras.extras_after_evolve` matches MESA chi2 gates."""
+    ex = astero_extras.ExampleAsteroExtras()
+    assert ex.unported_routines == ()
+
+    res_ok = ex.extras_after_evolve({"best_chi2": 2.800488})
+    assert res_ok == {
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "good chi^2",
+    }
+    assert ex.best_chi2 == pytest.approx(2.800488)
+    assert ex.termination_code_str == "good chi^2"
+    assert ex.testhub_extras == {"chi2": pytest.approx(2.800488)}
+    assert "chi square within limit" in capsys.readouterr().out
+
+    for bad_nonpos in (-1.0, 0.0):
+        assert ex.extras_after_evolve({"best_chi2": bad_nonpos}) is None
+        assert ex.termination_code_str is None
+        assert ex.testhub_extras == {"chi2": bad_nonpos}
+        assert "ERROR: failed to evaluate chi square" in capsys.readouterr().out
+
+    for small in (0.5, 1.0):
+        assert ex.extras_after_evolve({"best_chi2": small}) is None
+        assert ex.termination_code_str is None
+        assert "bogus chi square ???  value too small??" in (
+            capsys.readouterr().out
+        )
+
+    for large in (15.0, 1.0e5, float("nan")):
+        assert ex.extras_after_evolve({"best_chi2": large}) is None
+        assert ex.termination_code_str is None
+        assert "ERROR: chi square too large" in capsys.readouterr().out
+
+
+def test_example_astero_relocation_and_other_search_cases(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`ExampleAsteroExtras` matches by digest regardless of directory name."""
+    raw_ex = harness_runner.resolve_case_dir("astero", "example_astero")
+    relocated = tmp_path / "renamed_astero_copy"
+    shutil.copytree(raw_ex, relocated)
+
+    matched = case_extras.match_case_extras("astero", relocated)
+    resolved = case_extras.resolve_case_extras("astero", relocated)
+    assert isinstance(matched, astero_extras.ExampleAsteroExtras)
+    assert isinstance(resolved, astero_extras.ExampleAsteroExtras)
+    assert matched.unported_routines == ()
+    assert case_extras.classify_case_extras("astero", relocated) == "ported"
+
+    newuoa_dir = harness_runner.resolve_case_dir("astero", "fast_newuoa")
+    newuoa = case_extras.match_case_extras("astero", newuoa_dir)
+    assert type(newuoa) is astero_extras.SearchAsteroExtras
+    assert case_extras.classify_case_extras("astero", newuoa_dir) == "ported"
+
+    for still_unported in ("fast_scan_grid", "fast_simplex", "fast_from_file"):
+        cdir = harness_runner.resolve_case_dir("astero", still_unported)
+        handler = case_extras.match_case_extras("astero", cdir)
+        assert handler is not None
+        assert handler.unported_routines
+        assert case_extras.classify_case_extras("astero", cdir) == "unported"
+
+
+def test_astero_after_evolve_pyo3_hook_and_validation(
+    tmp_path: pathlib.Path,
+) -> None:
+    """PyO3 `extras_after_evolve` passes `best_chi2` and validates returns."""
+    raw_ast = harness_runner.resolve_case_dir("astero", "example_astero")
+    clean_ast = tmp_path / "example_astero"
+    star.copy_cleaned_case(raw_ast, clean_ast, suite="astero")
+
+    base = astero_extras.ExampleAsteroExtras()
+    captured: list[dict[str, Any]] = []
+
+    class _Xtra1Hooks:
+        def set_param(
+            self, snap: dict[str, Any], name: str, val: float
+        ) -> dict[str, Any]:
+            return base.set_param(snap, name, val)
+
+        def set_constraint_value(self, snap: dict[str, Any], name: str) -> Any:
+            return base.set_constraint_value(snap, name)
+
+        def extras_after_evolve(self, snap: dict[str, Any]) -> dict[str, str]:
+            captured.append(dict(snap))
+            return {
+                "termination_code_slot": "t_xtra1",
+                "termination_code_str": "good chi^2",
+            }
+
+    rep = astero.run_astero_test_suite_case(
+        clean_ast,
+        max_steps_per_stage=2,
+        verify_restart=False,
+        extras=_Xtra1Hooks(),
+    )
+    assert len(captured) == 1
+    snap = captured[0]
+    for key in (
+        "best_chi2",
+        "model_number",
+        "star_age",
+        "star_mass",
+        "teff",
+        "photosphere_r",
+        "photosphere_l",
+        "surface_h1",
+        "surface_he3",
+        "surface_he4",
+    ):
+        assert key in snap
+    assert snap["model_number"] >= 2
+    assert snap["best_chi2"] == -1.0
+    assert (
+        rep["termination_code"]
+        == "astero_use_first_values_samples=1_best_chi2=1.000000e99_term=xtra1"
+    )
+    assert rep["stages"][0]["model_number"] == snap["model_number"]
+    assert rep["stages"][0]["termination_code"] == "xtra1"
+    assert rep["termination_code"].endswith("_term=xtra1")
+
+    class _BadAfterEvolveHooks(_Xtra1Hooks):
+        def extras_after_evolve(self, snap: dict[str, Any]) -> Any:
+            return {"unknown_key": "xtra1"}
+
+    with pytest.raises((ValueError, RuntimeError), match="unknown return dict"):
+        astero.run_astero_test_suite_case(
+            clean_ast,
+            max_steps_per_stage=2,
+            verify_restart=False,
+            extras=_BadAfterEvolveHooks(),
+        )

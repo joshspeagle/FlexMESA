@@ -516,6 +516,11 @@ impl StarModel {
             &self.csound,
             &self.mlt_vc,
         );
+        // `s% Pvsc_start(k) = -1d99` (`star/private/struct_burn_mix.f90:313`).
+        self.aux.pvsc_start.clear();
+        self.aux
+            .pvsc_start
+            .resize(self.nz, crate::hydro_state::PVSC_START_UNSET);
         if self.sig.iter().all(|&s| s == 0.0) {
             crate::hydro_vars::update_sig_from_d_mix(self)?;
         }

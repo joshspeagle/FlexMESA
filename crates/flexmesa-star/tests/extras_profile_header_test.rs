@@ -262,11 +262,8 @@ impl StarExtras for RecordingProfileHeaderExtras {
 }
 
 fn write_minimal_two_step_case(case_dir: &Path) {
-    fs::write(
-        case_dir.join("rn"),
-        "#!/bin/bash\ndo_one inlist_test final.mod\n",
-    )
-    .expect("write rn");
+    fs::write(case_dir.join("rn"), "#!/bin/bash\ndo_one inlist_test\n")
+        .expect("write rn");
     fs::write(
         case_dir.join("inlist_test"),
         "\

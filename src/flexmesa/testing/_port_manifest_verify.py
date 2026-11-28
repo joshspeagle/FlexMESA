@@ -8,9 +8,29 @@ import hashlib
 import json
 import pathlib
 import subprocess
+import tomllib
 from typing import Any
 
-from flexmesa.testing import _port_parsers, port_manifest
+from flexmesa.testing import (
+    _port_parsers,
+    port_manifest,
+    routine_gate,
+    routine_inventory,
+)
+
+# Independent routine-map review records that evidence a raise from
+# ``absent`` to ``partial`` without a change to the implementing files
+# (`DECISIONS #79`).
+REVIEW_RECORD_DIR = "notes/audit/routine_map_reviews/"
+_REVIEW_INT_KEYS = (
+    "seed",
+    "sample_full",
+    "sample_partial",
+    "over_claims",
+    "under_claims",
+    "wrong_target",
+    "not_ported",
+)
 
 
 def _artifact_has_provenance(path: pathlib.Path) -> bool:
@@ -83,6 +103,10 @@ def _verify_entry_flexmesa_files(
     if entry.status == port_manifest.PortStatus.ABSENT:
         if entry.flexmesa_files:
             errors.append(f"{up}: absent entry must not list flexmesa_files")
+        if entry.routine_map_partial:
+            errors.append(
+                f"{up}: absent entry must not list routine_map_partial"
+            )
         return
     if not entry.flexmesa_files:
         errors.append(
@@ -151,6 +175,12 @@ def _verify_entry_upstream_and_routines(
                 f"{up}: missing upstream source file in {mesa_dir.name}"
             )
 
+    keys = {k for k, _ in entry.routine_map}
+    for name in entry.routine_map_partial:
+        if name not in keys:
+            errors.append(
+                f"{up}: routine_map_partial[{name!r}] is not a routine_map key"
+            )
     if not entry.status.is_ported:
         return
     allowed_files = frozenset(entry.flexmesa_files)
@@ -175,11 +205,21 @@ def _verify_entry_upstream_and_routines(
                     fm_path
                 )
             avail = sym_cache[rel_fm]
-            for sym in syms_raw.split("+"):
-                clean_sym = sym.strip()
-                if not clean_sym or clean_sym not in avail:
+            for owner, clean_sym in _port_parsers.split_target_symbols(
+                syms_raw
+            ):
+                if owner is not None:
+                    found = clean_sym in _port_parsers.rust_impl_methods(
+                        _port_parsers.strip_rust_comments_and_strings(
+                            fm_path.read_text(encoding="utf-8")
+                        )
+                    ).get(owner, set())
+                else:
+                    found = bool(clean_sym) and clean_sym in avail
+                if not found:
+                    shown = f"{owner}::{clean_sym}" if owner else clean_sym
                     errors.append(
-                        f"{up}: symbol {clean_sym!r} not found in {rel_fm}"
+                        f"{up}: symbol {shown!r} not found in {rel_fm}"
                     )
 
 
@@ -270,16 +310,130 @@ def _verify_entry_evidence(
                 )
 
 
+def _review_records(
+    repo_root: pathlib.Path, changed_paths: frozenset[str]
+) -> tuple[set[str], list[str]]:
+    """Return the files covered by review records changed in this diff.
+
+    A record is a TOML file under ``REVIEW_RECORD_DIR`` changed in the pull
+    request. It must carry the integer keys in ``_REVIEW_INT_KEYS`` (sample
+    sizes positive), a ``review`` path to the committed review text under
+    ``notes/audit/``, and a ``files`` list of manifest ``upstream_path``s.
+
+    Args:
+        repo_root: Repository root.
+        changed_paths: Paths changed relative to the base ref.
+
+    Returns:
+        ``(covered, errors)``: the union of ``files`` over valid records, and
+        one message per malformed record.
+    """
+    covered: set[str] = set()
+    errors: list[str] = []
+    for rel in sorted(changed_paths):
+        if not (rel.startswith(REVIEW_RECORD_DIR) and rel.endswith(".toml")):
+            continue
+        path = repo_root / rel
+        if not path.is_file():
+            continue
+        try:
+            rec = tomllib.loads(path.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as exc:
+            errors.append(f"{rel}: unreadable review record ({exc})")
+            continue
+        bad = [
+            k
+            for k in _REVIEW_INT_KEYS
+            if not isinstance(rec.get(k), int) or isinstance(rec.get(k), bool)
+        ]
+        if bad:
+            errors.append(f"{rel}: review record lacks integer keys {bad}")
+            continue
+        if rec["sample_full"] + rec["sample_partial"] <= 0:
+            errors.append(f"{rel}: review record has an empty sample")
+            continue
+        review = rec.get("review")
+        if not (
+            isinstance(review, str)
+            and review.startswith("notes/audit/")
+            and (repo_root / review).is_file()
+        ):
+            errors.append(
+                f"{rel}: review record must name its committed review text "
+                "under notes/audit/"
+            )
+            continue
+        files = rec.get("files")
+        if not isinstance(files, list) or not all(
+            isinstance(f, str) for f in files
+        ):
+            errors.append(f"{rel}: review record needs a files list")
+            continue
+        covered.update(files)
+    return covered, errors
+
+
+def _reviewed_partial_raise_problem(
+    entry: port_manifest.PortManifestEntry,
+    covered: set[str],
+    gate_failures: set[str],
+) -> str | None:
+    """Return why a reviewed ``absent`` -> ``partial`` raise is not allowed.
+
+    Args:
+        entry: The raised manifest entry.
+        covered: ``upstream_path``s listed by valid review records.
+        gate_failures: ``upstream_path``s with any ``routine_gate`` violation.
+
+    Returns:
+        ``None`` when the raise is evidenced, otherwise the reason.
+    """
+    if not entry.routine_map:
+        return "no routine_map"
+    if entry.upstream_path in gate_failures:
+        return "routine_map fails routine_gate"
+    if entry.upstream_path not in covered:
+        return f"not listed in a review record under {REVIEW_RECORD_DIR}"
+    return None
+
+
+def _load_review_state(
+    manifest: port_manifest.PortManifest,
+    repo_root: pathlib.Path,
+    changed_paths: frozenset[str],
+    errors: list[str],
+) -> tuple[set[str], set[str]]:
+    """Return review-covered paths and paths failing ``routine_gate``.
+
+    Allow-listed ``routine_gate`` violations are not exempted here: a file
+    raised under the reviewed-map exception must pass both checks outright.
+    """
+    covered, record_errors = _review_records(repo_root, changed_paths)
+    errors.extend(record_errors)
+    inv_path = repo_root / routine_inventory.INVENTORY_RELPATH
+    if not inv_path.is_file():
+        errors.append(f"{routine_inventory.INVENTORY_RELPATH}: missing")
+        return covered, {e.upstream_path for e in manifest.entries}
+    inventory = routine_inventory.load_inventory(inv_path)
+    failures = {
+        v.upstream_path
+        for v in routine_gate.collect_violations(manifest, inventory, repo_root)
+    }
+    return covered, failures
+
+
 def _verify_base_diff_and_immutability(
     manifest: port_manifest.PortManifest,
     base_manifest: port_manifest.PortManifest,
     seen_paths: set[str],
     changed_paths: frozenset[str] | None,
+    repo_root: pathlib.Path,
     errors: list[str],
 ) -> None:
     st = port_manifest.PortStatus
     base_by_path = base_manifest.by_upstream_path()
     same_commit = manifest.upstream_commit == base_manifest.upstream_commit
+    review_state: tuple[set[str], set[str]] | None = None
     if same_commit and set(base_by_path) != seen_paths:
         errors.append(
             "upstream_path inventory differs from base_manifest while "
@@ -324,12 +478,31 @@ def _verify_base_diff_and_immutability(
                     "adding or updating case evidence in PR"
                 )
         else:
-            if not (changed_paths & set(entry.flexmesa_files)):
-                errors.append(
-                    f"{entry.upstream_path}: status raised from "
-                    f"{prev.status.value} to {entry.status.value} without "
-                    "modifying implementing flexmesa_files in PR"
+            if changed_paths & set(entry.flexmesa_files):
+                continue
+            if prev.status == st.ABSENT and entry.status == st.PARTIAL:
+                # `DECISIONS #79`: an independent review record may stand
+                # in for a code change, for this raise only.
+                if review_state is None:
+                    review_state = _load_review_state(
+                        manifest, repo_root, changed_paths, errors
+                    )
+                problem = _reviewed_partial_raise_problem(
+                    entry, review_state[0], review_state[1]
                 )
+                if problem is None:
+                    continue
+                errors.append(
+                    f"{entry.upstream_path}: status raised from absent to "
+                    "partial without modifying implementing flexmesa_files "
+                    f"in PR, and the reviewed-map exception fails: {problem}"
+                )
+                continue
+            errors.append(
+                f"{entry.upstream_path}: status raised from "
+                f"{prev.status.value} to {entry.status.value} without "
+                "modifying implementing flexmesa_files in PR"
+            )
 
 
 def verify_port_manifest_impl(
@@ -369,9 +542,9 @@ def verify_port_manifest_impl(
             baseline_harness_json.read_text(encoding="utf-8")
         )
         for rec in payload.get("cases", payload.get("results", [])):
-            if (
-                rec.get("verdict") == "pass"
-                and rec.get("reference_status") == "mesa_26_4_1"
+            if rec.get("verdict") == "pass" and rec.get("reference_status") in (
+                "mesa_26_4_1",
+                "mesa_26_4_1_artifact",
             ):
                 passing_cases.add(f"{rec.get('suite')}/{rec.get('case')}")
 
@@ -419,6 +592,11 @@ def verify_port_manifest_impl(
 
     if base_manifest is not None:
         _verify_base_diff_and_immutability(
-            manifest, base_manifest, seen_paths, changed_paths, errors
+            manifest,
+            base_manifest,
+            seen_paths,
+            changed_paths,
+            repo_root,
+            errors,
         )
     return errors

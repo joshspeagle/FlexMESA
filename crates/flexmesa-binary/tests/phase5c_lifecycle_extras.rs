@@ -13,7 +13,7 @@ use flexmesa_binary::{
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
     StarControls, StarError, StarJobControls, StarModel,
-    apply_step_pre_physics, do_struct_burn_mix,
+    apply_step_pre_physics, compute_convection_sigmas, do_struct_burn_mix,
     load_zams_model, set_hydro_vars,
     solve_henyey_step, star_evolve_step, sync_post_henyey_rotation,
     update_rotation_distortion_factors,
@@ -43,6 +43,19 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     }
     update_rotation_distortion_factors(&mut star);
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
+    // `star/private/hydro_vars.f90` never assigns `s% sig`; upstream sets it
+    // from `D_mix` in `struct_burn_mix` before the solver
+    // (`get_convection_sigmas`, `star/private/struct_burn_mix.f90:128-137`).
+    // The standalone solves below skip `struct_burn_mix`, so set `sig` here
+    // from the spun-up ZAMS mixing state.
+    let mix_factor = if star.controls.do_mix {
+        star.controls.mix_factor
+    } else {
+        0.0
+    };
+    let (dt0, sig_term_limit) = (star.dt, star.controls.sig_term_limit);
+    compute_convection_sigmas(&mut star, dt0, mix_factor, sig_term_limit)
+        .expect("get_convection_sigmas");
     star.d_mix.fill(1.0e16);
     star.mixing_type
         .fill(flexmesa_const::MixingType::ConvectiveMixing);

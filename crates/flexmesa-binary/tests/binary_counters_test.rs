@@ -209,7 +209,11 @@ fn test_binary_star_limit_redo_halves_dt_without_burning_retries() {
         sys.donor.controls.max_age = age_after_1 + 500.0;
         sys.donor.controls.ts_stop.when_to_stop_atol = 1.0;
         sys.donor.controls.ts_stop.when_to_stop_rtol = 0.0;
-        sys.donor.controls.ts_stop.redo_limit = 5;
+        // `#619`: MESA `run_binary_support.f90:585-603` +
+        // `evolve.f90:2160-2168` counts implicit RLOF redos toward
+        // `redo_limit` (here `max_tries_to_achieve = 20`).
+        sys.donor.controls.ts_stop.redo_limit =
+            if max_tries > 0 { 30 } else { 5 };
 
         let _ = sys
             .try_step_with_extras(1.0e3 * SECYER, &mut DefaultBinaryExtras)

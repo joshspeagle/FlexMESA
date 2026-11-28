@@ -10,7 +10,7 @@ use flexmesa_math::exp10;
 use flexmesa_math::Quad;
 use flexmesa_net::derivs::{eval_net_with_work, with_thread_local_work};
 use flexmesa_net::types::NUM_RVS;
-use flexmesa_net::NetGeneralInfo;
+use flexmesa_net::{NetGeneralInfo, NetWorkOutputs};
 use flexmesa_utils::is_bad;
 use rayon::prelude::*;
 
@@ -178,17 +178,16 @@ pub(crate) fn eval_zone_eps_nuc_categories(
         } else {
             raw_eps
         };
-        let raw_cats = if net_info.doing_approx21 {
-            &w.direct_eps_nuc_categories
-        } else {
-            &w.eps_nuc_categories
+        let (raw_cats, direct) = match w.outputs() {
+            NetWorkOutputs::DirectCgs {
+                eps_nuc_categories, ..
+            } => (eps_nuc_categories, true),
+            NetWorkOutputs::Molar {
+                eps_nuc_categories_mev,
+                ..
+            } => (eps_nuc_categories_mev, false),
         };
-        Ok(scale_eps_nuc_categories(
-            raw_cats,
-            eps_val,
-            eps_fac,
-            net_info.doing_approx21,
-        ))
+        Ok(scale_eps_nuc_categories(raw_cats, eps_val, eps_fac, direct))
     })
 }
 
@@ -468,19 +467,6 @@ fn do_net_inner(
                         deps_dt = 0.0;
                     }
 
-                    let direct = net_info.doing_approx21;
-                    let raw_cats = if direct {
-                        &w.direct_eps_nuc_categories
-                    } else {
-                        &w.eps_nuc_categories
-                    };
-                    *cats_k = scale_eps_nuc_categories(
-                        raw_cats,
-                        eps_val,
-                        eps_fac,
-                        direct,
-                    );
-
                     *eps_k = eps_val * eps_fac;
                     *deps_d_k = deps_drho * rho_k * eps_fac;
                     *deps_t_k = deps_dt * t_k * eps_fac;
@@ -488,71 +474,135 @@ fn do_net_inner(
                     // is not multiplied by `eps_nuc_factor`.
                     *neu_k = raw_neu;
 
-                    for i in 0..species {
-                        let mut dxdt_i = if direct {
-                            w.direct_dxdt[i]
-                        } else {
-                            (Quad::from_f64(aion[i]) * dydt[i][0]).to_f64()
-                        };
-                        if dxdt_fac != 1.0 {
-                            dxdt_i *= dxdt_fac;
-                        }
-                        dxdt_k[i] = dxdt_i;
-                    }
-                    if skip_jacobian {
-                        deps_x_k.fill(0.0);
-                        ddxdt_d_k.fill(0.0);
-                        ddxdt_t_k.fill(0.0);
-                        ddxdt_x_k.fill(0.0);
-                    } else {
-                        for i in 0..species {
-                            let a_i = aion[i];
-                            deps_x_k[i] = if clamped_eps {
-                                0.0
-                            } else {
-                                let mut val = if direct {
-                                    w.direct_d_eps_nuc_dx[i]
-                                } else {
-                                    QCONV * w.d_eps_nuc_dy[i] / a_i
-                                };
-                                if eps_fac != 1.0 {
-                                    val *= eps_fac;
+                    match w.outputs() {
+                        NetWorkOutputs::DirectCgs {
+                            eps_nuc_categories,
+                            d_eps_nuc_dx,
+                            dxdt,
+                            d_dxdt_dt,
+                            d_dxdt_drho,
+                            d_dxdt_dx,
+                        } => {
+                            *cats_k = scale_eps_nuc_categories(
+                                eps_nuc_categories,
+                                eps_val,
+                                eps_fac,
+                                true,
+                            );
+                            for i in 0..species {
+                                let mut dxdt_i = dxdt[i];
+                                if dxdt_fac != 1.0 {
+                                    dxdt_i *= dxdt_fac;
                                 }
-                                val
-                            };
-                            let mut d_rho = if direct {
-                                w.direct_d_dxdt_drho[i]
-                            } else {
-                                (Quad::from_f64(a_i) * dydt[i][2]).to_f64()
-                            };
-                            if dxdt_fac != 1.0 {
-                                d_rho *= dxdt_fac;
+                                dxdt_k[i] = dxdt_i;
                             }
-                            ddxdt_d_k[i] = d_rho * rho_k;
-                            ddxdt_t_k[i] = if clipped_t {
-                                0.0
+                            if skip_jacobian {
+                                deps_x_k.fill(0.0);
+                                ddxdt_d_k.fill(0.0);
+                                ddxdt_t_k.fill(0.0);
+                                ddxdt_x_k.fill(0.0);
                             } else {
-                                let mut d_t = if direct {
-                                    w.direct_d_dxdt_dt[i]
-                                } else {
-                                    (Quad::from_f64(a_i) * dydt[i][1]).to_f64()
-                                };
-                                if dxdt_fac != 1.0 {
-                                    d_t *= dxdt_fac;
+                                for i in 0..species {
+                                    deps_x_k[i] = if clamped_eps {
+                                        0.0
+                                    } else if eps_fac != 1.0 {
+                                        d_eps_nuc_dx[i] * eps_fac
+                                    } else {
+                                        d_eps_nuc_dx[i]
+                                    };
+                                    let mut d_rho = d_dxdt_drho[i];
+                                    if dxdt_fac != 1.0 {
+                                        d_rho *= dxdt_fac;
+                                    }
+                                    ddxdt_d_k[i] = d_rho * rho_k;
+                                    ddxdt_t_k[i] = if clipped_t {
+                                        0.0
+                                    } else {
+                                        let mut d_t = d_dxdt_dt[i];
+                                        if dxdt_fac != 1.0 {
+                                            d_t *= dxdt_fac;
+                                        }
+                                        d_t * t_k
+                                    };
+                                    let row_off = i * species;
+                                    for j in 0..species {
+                                        let mut jac = d_dxdt_dx[row_off + j];
+                                        if dxdt_fac != 1.0 {
+                                            jac *= dxdt_fac;
+                                        }
+                                        ddxdt_x_k[row_off + j] = jac;
+                                    }
                                 }
-                                d_t * t_k
-                            };
-                            let row_off = i * species;
-                            for j in 0..species {
-                                let mut jac = if direct {
-                                    w.direct_d_dxdt_dx[row_off + j]
-                                } else {
-                                    w.d_dydt_dy[row_off + j] * a_i / aion[j]
-                                };
+                            }
+                        }
+                        NetWorkOutputs::Molar {
+                            eps_nuc_categories_mev,
+                            d_eps_nuc_dy,
+                            d_dydt_dy,
+                            ..
+                        } => {
+                            *cats_k = scale_eps_nuc_categories(
+                                eps_nuc_categories_mev,
+                                eps_val,
+                                eps_fac,
+                                false,
+                            );
+                            for i in 0..species {
+                                let mut dxdt_i = (Quad::from_f64(aion[i])
+                                    * dydt[i][0])
+                                    .to_f64();
                                 if dxdt_fac != 1.0 {
-                                    jac *= dxdt_fac;
+                                    dxdt_i *= dxdt_fac;
                                 }
-                                ddxdt_x_k[row_off + j] = jac;
+                                dxdt_k[i] = dxdt_i;
+                            }
+                            if skip_jacobian {
+                                deps_x_k.fill(0.0);
+                                ddxdt_d_k.fill(0.0);
+                                ddxdt_t_k.fill(0.0);
+                                ddxdt_x_k.fill(0.0);
+                            } else {
+                                for i in 0..species {
+                                    let a_i = aion[i];
+                                    deps_x_k[i] = if clamped_eps {
+                                        0.0
+                                    } else {
+                                        let mut val =
+                                            QCONV * d_eps_nuc_dy[i] / a_i;
+                                        if eps_fac != 1.0 {
+                                            val *= eps_fac;
+                                        }
+                                        val
+                                    };
+                                    let mut d_rho = (Quad::from_f64(a_i)
+                                        * dydt[i][2])
+                                        .to_f64();
+                                    if dxdt_fac != 1.0 {
+                                        d_rho *= dxdt_fac;
+                                    }
+                                    ddxdt_d_k[i] = d_rho * rho_k;
+                                    ddxdt_t_k[i] = if clipped_t {
+                                        0.0
+                                    } else {
+                                        let mut d_t = (Quad::from_f64(a_i)
+                                            * dydt[i][1])
+                                            .to_f64();
+                                        if dxdt_fac != 1.0 {
+                                            d_t *= dxdt_fac;
+                                        }
+                                        d_t * t_k
+                                    };
+                                    let row_off = i * species;
+                                    for j in 0..species {
+                                        let mut jac = d_dydt_dy[row_off + j]
+                                            * a_i
+                                            / aion[j];
+                                        if dxdt_fac != 1.0 {
+                                            jac *= dxdt_fac;
+                                        }
+                                        ddxdt_x_k[row_off + j] = jac;
+                                    }
+                                }
                             }
                         }
                     }

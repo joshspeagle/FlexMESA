@@ -474,7 +474,9 @@ fn test_redo_limit_terminates_and_delta_mdot_hard_limit_retries() {
         ),
         "expected Terminated(redo_limit), got {redo_err:?}"
     );
-    assert_eq!(redo_model.num_redos, 3);
+    // `redo_limit = 2` executes 2 redos and abandons on the 3rd request without
+    // incrementing `num_redos`, matching `LimitCheckOutcome::Redo` & `retry_limit`.
+    assert_eq!(redo_model.num_redos, 2);
 
     // Verify `check_delta_mdot` moved into `timestep_controller`.
     let mut mdot_model = load_zams_model(
@@ -565,11 +567,16 @@ fn test_timestep_checks_match_177_and_253() {
     assert!((rep_z.dt_next - 100.0 / 3.0).abs() <= 1.0e-12);
 
     // Verify `#253` out-of-bounds guard when matching species index `j >= 100`.
+    // `check_varcontrol_limit` runs first (`star/private/timestep.f90:128`,
+    // ahead of `check_dX` at `:156`), and `eval_varcontrol` needs an `xh_old`
+    // snapshot (`timestep.f90:2314-2316`) and `nz >= 3` (`2339-2343` read
+    // zones `k - 1:k + 1` around `k = 2` and `k = nz - 1`), so the model has
+    // three zones and saved old values for `check_dX` to be reached.
     let cat = NuclideCatalog::builtin_ref();
     let chem_ids_101: Vec<usize> = (1..=101).collect();
     let iso_101 = cat.get_by_id(101).expect("chem_id 101").name.clone();
     let mut big_net = StarModel::new(
-        2,
+        3,
         chem_ids_101,
         StarJobControls::default(),
         StarControls {
@@ -579,7 +586,7 @@ fn test_timestep_checks_match_177_and_253() {
     );
     big_net.doing_first_model_of_run = false;
     big_net.xa[100] = 0.05;
-    big_net.xa_old.clone_from(&big_net.xa);
+    big_net.save_old_values();
     big_net.xa[100] = 0.06;
     big_net.controls.ts_stop.dx_limit_species[0] = iso_101;
     big_net.controls.ts_stop.dx_limit[0] = 0.001;
@@ -945,4 +952,37 @@ fn test_gold_solver_iters_timestep_limit_overrides_relax_limit() {
         "expected dt_next = 100/1.95, got {}",
         rep_gold.dt_next
     );
+}
+
+/// Upstream tests `iter >= max_tries` only after iteration 1 has run
+/// (`star_solver.f90:511`), so `solver_max_tries_before_reject = 0` still
+/// performs one iteration before giving up.
+#[test]
+fn test_zero_max_tries_runs_one_iteration_before_failing() {
+    let mut m = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            solver_max_tries_before_reject: 0,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
+    m.doing_first_model_of_run = false;
+    set_hydro_vars(&mut m, false, false).expect("hydro");
+    m.save_start_values().expect("start");
+    flexmesa_star::record_start_of_step_energy_integrals(&mut m);
+    m.lnd[3] += 0.2;
+    m.pack_xh();
+
+    match solve_henyey_step(&mut m, true, true) {
+        Err(StarError::StepFailure(info)) => {
+            assert_eq!(info.iterations, 1, "{info}");
+            assert!(info.detail.contains("did not converge"), "{info}");
+        }
+        other => {
+            panic!("expected a step failure after one iteration: {other:?}")
+        }
+    }
 }

@@ -34,11 +34,15 @@ MODES = ("harness", "trace", "compare")
 # Time added to the case budget for the build artifact download, the data
 # fetch and the post-step uploads (CLAUDE.md: at least 45 minutes headroom).
 HEADROOM_MIN = 45
-MAX_TIMEOUT_SEC = 18000
+# One hosted job is 330 minutes; less the headroom above leaves 17100 s.
+MAX_TIMEOUT_SEC = (330 - HEADROOM_MIN) * 60
 MAX_RSS_LIMIT_GB = 14.0
 WINDOWS_BUNDLE = "mesa_stepdump_windows"
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]*")
 _WINDOW_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+# <case>_s<stage>_k<occurrence>_m<first model>_n<models>; the case name may
+# itself contain underscores, so the four trailing fields anchor the match.
+_WINDOW_FIELDS_RE = re.compile(r"_s(\d+)_k(\d+)_m(\d+)_n(\d+)")
 
 
 class InputError(ValueError):
@@ -55,6 +59,28 @@ def manifest_keys(root: pathlib.Path) -> set[tuple[str, str]]:
     with path.open("rb") as fh:
         data = tomllib.load(fh)
     return {(str(c["suite"]), str(c["case"])) for c in data["cases"]}
+
+
+def case_budget_table(root: pathlib.Path) -> dict[tuple[str, str], int]:
+    """Returns the generated per-case budgets in seconds (``s``).
+
+    Args:
+        root: Repository root.
+
+    Raises:
+        InputError: If a budget exceeds what one hosted job holds.
+    """
+    path = root / "benchmarks" / "history_harness" / "case_budgets.toml"
+    with path.open("rb") as fh:
+        data = tomllib.load(fh)
+    out = {
+        (str(c["suite"]), str(c["case"])): int(c["budget_sec"])
+        for c in data["cases"]
+    }
+    too_long = sorted(k for k, v in out.items() if v > MAX_TIMEOUT_SEC)
+    if too_long:
+        raise InputError(f"budgets beyond one hosted job: {too_long}")
+    return out
 
 
 def declared_bundles(root: pathlib.Path) -> set[str]:
@@ -112,7 +138,8 @@ def plan(env: Mapping[str, str], root: pathlib.Path) -> dict[str, str]:
 
     Args:
         env: Mapping with ``CASES``, ``MODE``, ``WINDOW``, ``TIMEOUT_SEC``
-            and ``MAX_RSS_GB``.
+            (empty: the per-case budget of ``case_budgets.toml``) and
+            ``MAX_RSS_GB``.
         root: Repository root of the checked-out ref.
 
     Returns:
@@ -136,21 +163,40 @@ def plan(env: Mapping[str, str], root: pathlib.Path) -> dict[str, str]:
                 f"window given, but the {WINDOWS_BUNDLE} bundle is not "
                 "declared on this ref"
             )
+    raw_timeout = env.get("TIMEOUT_SEC", "").strip()
     try:
-        timeout = int(env.get("TIMEOUT_SEC", ""))
+        override = int(raw_timeout) if raw_timeout else None
         rss = float(env.get("MAX_RSS_GB", ""))
     except ValueError as exc:
         raise InputError(f"bad number: {exc}") from exc
-    if not 1 <= timeout <= MAX_TIMEOUT_SEC:
+    if override is not None and not 1 <= override <= MAX_TIMEOUT_SEC:
         raise InputError(f"timeout_sec must be in 1..{MAX_TIMEOUT_SEC}")
     if not (math.isfinite(rss) and 0.5 <= rss <= MAX_RSS_LIMIT_GB):
         raise InputError(f"max_rss_gb must be in 0.5..{MAX_RSS_LIMIT_GB}")
-    matrix = {
-        "include": [{"suite": s, "case": c, "id": f"{s}-{c}"} for s, c in cases]
-    }
+    budgets = case_budget_table(root) if override is None else {}
+    include = []
+    for suite, case in cases:
+        timeout = (
+            override if override is not None else budgets.get((suite, case))
+        )
+        if timeout is None:
+            raise InputError(
+                f"{suite}/{case} has no row in case_budgets.toml; give "
+                "timeout_sec"
+            )
+        include.append(
+            {
+                "suite": suite,
+                "case": case,
+                "id": f"{suite}-{case}",
+                "timeout_sec": timeout,
+                "job_minutes": math.ceil(timeout / 60) + HEADROOM_MIN,
+            }
+        )
+    matrix = {"include": include}
     return {
         "matrix": json.dumps(matrix, separators=(",", ":")),
-        "job_minutes": str(math.ceil(timeout / 60) + HEADROOM_MIN),
+        "job_minutes": str(max(int(m["job_minutes"]) for m in include)),
     }
 
 
@@ -186,6 +232,36 @@ def resolve_dump(
     return path
 
 
+def window_trace_args(window: str) -> list[str]:
+    """Returns the ``flexmesa trace`` options that select a window.
+
+    Args:
+        window: Window id ``<case>_s<S>_k<K>_m<M>_n<N>`` (stage, occurrence,
+            first model, models), or empty for the first window of the run.
+
+    Returns:
+        ``--stage S`` when ``S > 1`` and ``--occurrence K`` when ``K > 1``;
+        empty for the default window.
+
+    Raises:
+        InputError: If a non-empty id has no such fields.
+    """
+    if not window:
+        return []
+    found = _WINDOW_FIELDS_RE.search(window)
+    if found is None or found.end() != len(window):
+        raise InputError(
+            f"window id has no _s<S>_k<K>_m<M>_n<N> fields: {window!r}"
+        )
+    stage, occ = int(found.group(1)), int(found.group(2))
+    args: list[str] = []
+    if stage > 1:
+        args += ["--stage", str(stage)]
+    if occ > 1:
+        args += ["--occurrence", str(occ)]
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     """Runs the ``plan`` or ``dump`` subcommand."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -197,10 +273,14 @@ def main(argv: list[str] | None = None) -> int:
     p_dump.add_argument("--case", required=True)
     p_dump.add_argument("--window", default="")
     p_dump.add_argument("--mesa-dir", type=pathlib.Path, required=True)
+    p_args = sub.add_parser("window-args")
+    p_args.add_argument("--window", default="")
     ns = parser.parse_args(argv)
     root = pathlib.Path.cwd()
     try:
-        if ns.cmd == "plan":
+        if ns.cmd == "window-args":
+            print(" ".join(window_trace_args(ns.window)))
+        elif ns.cmd == "plan":
             outputs = plan(os.environ, root)
             with ns.github_output.open("a", encoding="utf-8") as fh:
                 for key, val in outputs.items():

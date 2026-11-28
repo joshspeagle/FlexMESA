@@ -185,7 +185,7 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
         ast_case = root / "ast_case"
         ast_case.mkdir()
         (ast_case / "rn").write_text(
-            "#!/bin/sh\ndo_one inlist final.mod\n",
+            "#!/bin/sh\ndo_one inlist\n",
             encoding="utf-8",
         )
         (ast_case / "inlist").write_text(

@@ -25,6 +25,7 @@ use flexmesa_const::{
     MixingType, AMU, BOLTZM, CLIGHT, CRAD, ONE_THIRD, PI, QE,
 };
 use flexmesa_math::{exp, log, pow, pow2, pow3, pow4};
+use flexmesa_mtx::lapack::lu::dgesvx;
 
 use crate::{TurbError, TurbOutput, TurbResult, TurbScalar};
 
@@ -343,10 +344,15 @@ fn analytical_estimate_th(
 }
 
 /// 2D Newton-Raphson solver for Brown et al. (2013) eqs. 19-20 (`NR` in
-/// `thermohaline.f90`).
+/// `thermohaline.f90:276-361`).
 ///
-/// Iterates up to 20 steps to Euclidean step norm $\le 10^{-13}$, aborting and
-/// restoring the initial guess if the step norm grows after iteration 5.
+/// Solves each step's $2 \times 2$ Jacobian system $J\,\Delta x = f$ using
+/// Reference LAPACK `dgesvx` (`fact = b'E'`, `trans = b'N'`), treating any
+/// `info != 0` (singular diagonal `U(i, i) == 0` or ill-conditioned
+/// `rcond < eps`, `info = n + 1 = 3`) or solver error as a failed step
+/// matching upstream `ierr /= 0`. Iterates up to 20 steps to Euclidean step
+/// norm $\le 10^{-13}$, aborting and restoring the initial guess if the step
+/// norm grows after iteration 5.
 fn nr_solve(xrk: &mut [f64; 2], prandtl: f64, diffratio: f64, r0: f64) -> bool {
     const ACY: f64 = 1.0e-13;
     const NITER: usize = 20;
@@ -357,20 +363,29 @@ fn nr_solve(xrk: &mut [f64; 2], prandtl: f64, diffratio: f64, r0: f64) -> bool {
 
     while err > ACY && iter < NITER {
         let (f, j) = thermohaline_rhs(*xrk, prandtl, diffratio, r0);
-        let det = j[0][0] * j[1][1] - j[0][1] * j[1][0];
-        if det == 0.0 || !det.is_finite() {
+        // Upstream `A = j` passes a Fortran column-major 2x2 matrix:
+        // `[j(1,1), j(2,1), j(1,2), j(2,2)]`.
+        let mut a = [j[0][0], j[1][0], j[0][1], j[1][1]];
+        let mut af = [0.0_f64; 4];
+        let mut ipiv = [0_usize; 2];
+        let mut b = [f[0], f[1]];
+        let mut x = [0.0_f64; 2];
+        let Ok(out) = dgesvx(
+            b'E', b'N', 2, 1, &mut a, &mut af, &mut ipiv, &mut b, &mut x,
+        ) else {
+            return false;
+        };
+        if out.info != 0 {
             return false;
         }
-        let dx0 = (j[1][1] * f[0] - j[0][1] * f[1]) / det;
-        let dx1 = (-j[1][0] * f[0] + j[0][0] * f[1]) / det;
         iter += 1;
-        err = (dx0 * dx0 + dx1 * dx1).sqrt();
+        err = (x[0] * x[0] + x[1] * x[1]).sqrt();
         if iter > 5 && err > errold {
             *xrk = sav;
             return false;
         }
-        xrk[0] -= dx0;
-        xrk[1] -= dx1;
+        xrk[0] -= x[0];
+        xrk[1] -= x[1];
         errold = err;
     }
     err <= ACY
@@ -418,30 +433,129 @@ fn thermohaline_rhs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flexmesa_math::{with_numerics_mode, NumericsMode};
 
     #[test]
     fn numu_solves_brown13_eqs_and_falls_back_cleanly_when_negative_root() {
-        let pr = 1.0e-3;
-        let tau = 1.0e-3;
-        let r0 = 100.0;
-        let r_th = (r0 - 1.0) / (1.0 / tau - 1.0);
-        let (maxl_est, lam_est) = analytical_estimate_th(r_th, pr, tau);
-        let mut vars = [maxl_est, lam_est];
-        assert!(nr_solve(&mut vars, pr, tau, r0));
-        assert!(vars[1] > 0.0);
-        let (res, _) = thermohaline_rhs(vars, pr, tau, r0);
-        assert!(res[0].abs() < 1.0e-12);
-        assert!(res[1].abs() < 1.0e-12);
+        with_numerics_mode(NumericsMode::Strict, || {
+            let pr = 1.0e-3;
+            let tau = 1.0e-3;
+            let r0 = 100.0;
+            let r_th = (r0 - 1.0) / (1.0 / tau - 1.0);
+            let (maxl_est, lam_est) = analytical_estimate_th(r_th, pr, tau);
+            let mut vars = [maxl_est, lam_est];
+            assert!(nr_solve(&mut vars, pr, tau, r0));
+            assert!(vars[1] > 0.0);
+            // Bit-exact parity against gfortran (`-ffp-contract=off` + `math_lib`
+            // `pow`) + Reference LAPACK `dgesvx`.
+            assert_eq!(vars[0].to_bits(), 0x3FE9_00F4_2586_7328);
+            assert_eq!(vars[1].to_bits(), 0x3F5E_2124_40A1_A408);
+            let (res, _) = thermohaline_rhs(vars, pr, tau, r0);
+            assert!(res[0].abs() < 1.0e-12);
+            assert!(res[1].abs() < 1.0e-12);
 
-        // When `R0 > 1 / tau`, eq. (20) has `b0, b1, b2 > 0`, so no non-negative
-        // root `lambda >= 0` exists across any perturbed retry `(r0 / scale)`,
-        // exercising the 200-step retry loop and fallback to `(maxl_est,
-        // lambda_est)` (`turb/private/thermohaline.f90:172-194`).
-        let (est_l, est_lam) = analytical_estimate_th(0.4, pr, tau);
-        let expected_fallback = 1.0
-            + 49.0 * est_lam * est_lam
-                / (tau * est_l * est_l * (est_lam + tau * est_l * est_l));
-        let got = numu(10.0 / tau, 0.4, pr, tau);
-        assert_eq!(got.to_bits(), expected_fallback.to_bits());
+            // When `R0 > 1 / tau`, eq. (20) has `b0, b1, b2 > 0`, so no
+            // non-negative root `lambda >= 0` exists across any perturbed retry
+            // `(r0 / scale)`, exercising the 200-step retry loop and fallback
+            // to `(maxl_est, lambda_est)` (`turb/private/thermohaline.f90:172-194`).
+            let (est_l, est_lam) = analytical_estimate_th(0.4, pr, tau);
+            let expected_fallback = 1.0
+                + 49.0 * est_lam * est_lam
+                    / (tau * est_l * est_l * (est_lam + tau * est_l * est_l));
+            let got = numu(10.0 / tau, 0.4, pr, tau);
+            assert_eq!(got.to_bits(), expected_fallback.to_bits());
+        });
+    }
+
+    #[test]
+    fn nr_solve_and_bgs13_match_mesa_dgesvx_oracle_zero_ulp() {
+        // Inputs matching `turb_155_bd_parity_test::test_thermohaline_prescriptions_0_ulp_scalar_and_ad`.
+        with_numerics_mode(NumericsMode::Strict, || {
+            let grada = 0.39;
+            let gradr = 0.24;
+            let t = 2.5e7;
+            let opacity = 0.42;
+            let rho = 15.0;
+            let cp = 3.8e8;
+            let gradl_comp = -0.05;
+            let xh1 = 0.68;
+            let coeff = 2.0;
+
+            let k_therm = 4.0 * CRAD * CLIGHT * pow3(t) / (3.0 * opacity * rho);
+            let (k_t, k_mu, nu) = get_diff_coeffs(
+                k_therm,
+                cp,
+                rho,
+                t,
+                opacity,
+                DrivingSpecies::he3(),
+                xh1,
+            );
+            let r0 = (gradr - grada) / gradl_comp;
+            let pr = nu / k_t;
+            let tau = k_mu / k_t;
+            let r_th = (r0 - 1.0) / (1.0 / tau - 1.0);
+            assert_eq!(pr.to_bits(), 0x3EC8_0B9D_3D8B_7567);
+            assert_eq!(tau.to_bits(), 0x3E92_7CFE_6DDF_CF16);
+            assert_eq!(r0.to_bits(), 0x4008_0000_0000_0001);
+            assert_eq!(r_th.to_bits(), 0x3EA2_7CFE_C354_045D);
+
+            // Verify step-1 `dgesvx` equilibration (`equed = 'C'`) and step bits.
+            let (est_l, est_lam) = analytical_estimate_th(r_th, pr, tau);
+            let mut vars = [est_l, est_lam];
+            let (f, j) = thermohaline_rhs(vars, pr, tau, r0);
+            let mut a = [j[0][0], j[1][0], j[0][1], j[1][1]];
+            let mut af = [0.0_f64; 4];
+            let mut ipiv = [0_usize; 2];
+            let mut b = [f[0], f[1]];
+            let mut x = [0.0_f64; 2];
+            let step1 = dgesvx(
+                b'E', b'N', 2, 1, &mut a, &mut af, &mut ipiv, &mut b, &mut x,
+            )
+            .expect("step 1 dgesvx");
+            assert_eq!(step1.info, 0);
+            assert_eq!(step1.equed, b'C');
+            assert_eq!(x[0].to_bits(), 0xBF32_F297_DC87_1BB5);
+            assert_eq!(x[1].to_bits(), 0x3F42_7E18_C78F_22F3);
+            assert_eq!(step1.rcond.to_bits(), 0x3FD0_46CA_CC5E_686A);
+
+            // Verify converged `NR` and `get_d_thermohaline` match MESA `26.4.1` at 0 ULP.
+            assert!(nr_solve(&mut vars, pr, tau, r0));
+            assert_eq!(vars[0].to_bits(), 0x3FEF_4120_513F_21FB);
+            assert_eq!(vars[1].to_bits(), 0x3F4F_EE9C_1906_3ACF);
+
+            let d_thrm = get_d_thermohaline(
+                ThermohalineOption::BrownGaraudStellmach13,
+                grada,
+                gradr,
+                t,
+                opacity,
+                rho,
+                cp,
+                gradl_comp,
+                DrivingSpecies::he3(),
+                xh1,
+                coeff,
+            );
+            assert_eq!(d_thrm.to_bits(), 0x4169_1E8F_A6D3_0D2A);
+        });
+    }
+
+    #[test]
+    fn nr_solve_rejects_near_singular_jacobian_even_when_det_nonzero() {
+        // At `(pr = 2, tau = 1, xrk = [1, 0])`, `J(r0 = 1)` is `[[12, 5], [24, 10]]`.
+        // Perturbing `r0 = 1 + 2*EPS` gives non-zero finite `det` so Cramer's rule
+        // would proceed, whereas LAPACK `dgesvx` returns `info = 3` (`rcond < eps`)
+        // and `nr_solve` fails cleanly leaving `xrk` unchanged.
+        let pr = 2.0;
+        let tau = 1.0;
+        let r0 = 1.0 + 2.0 * f64::EPSILON;
+        let mut xrk = [1.0, 0.0];
+        let (_, j) = thermohaline_rhs(xrk, pr, tau, r0);
+        let det = j[0][0] * j[1][1] - j[0][1] * j[1][0];
+        assert!(det != 0.0 && det.is_finite());
+        assert!(!nr_solve(&mut xrk, pr, tau, r0));
+        assert_eq!(xrk[0].to_bits(), 1.0_f64.to_bits());
+        assert_eq!(xrk[1].to_bits(), 0.0_f64.to_bits());
     }
 }

@@ -1088,9 +1088,11 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
     let mut probe = zams_model(2.0);
     probe.dt = 1.0e5 * SECYER;
     probe.dt_next = probe.dt;
-    let h1_init = flexmesa_star::center_avg_x_by_name(&probe, "h1");
+    let h1_init =
+        flexmesa_star::center_avg_x_by_name(&probe, "h1").expect("center h1");
     star_evolve_step(&mut probe, false, false, true).expect("probe step");
-    let h1_after_full = flexmesa_star::center_avg_x_by_name(&probe, "h1");
+    let h1_after_full =
+        flexmesa_star::center_avg_x_by_name(&probe, "h1").expect("center h1");
     let drop = h1_init - h1_after_full;
     assert!(
         drop > 0.0,
@@ -1124,7 +1126,8 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
         m_redo.aux.step_hist.timestep_hold, 0,
         "limit-hitting redo must not engage timestep_hold"
     );
-    let h1_final = flexmesa_star::center_avg_x_by_name(&m_redo, "h1");
+    let h1_final =
+        flexmesa_star::center_avg_x_by_name(&m_redo, "h1").expect("center h1");
     assert!(
         (h1_final - target_h1).abs() <= 0.15 * drop + 1.0e-15
             || h1_final > target_h1,

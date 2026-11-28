@@ -223,9 +223,7 @@ fn eval_dlnpdm_qhse(
     k: usize,
 ) -> (StarAdOrder1, StarAdOrder1) {
     let (grav, area) = expected_hse_grav_and_area(model, k);
-    let using_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old);
+    let using_tc = model.controls.using_velocity_time_centering;
 
     let mut p00 = wrap_peos_00(model, k);
     if using_tc {

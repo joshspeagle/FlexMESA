@@ -265,6 +265,11 @@ pub trait StarExtras {
     /// so caller-supplied extras write auxiliary outputs inside the staged copy.
     fn set_staged_case_dir(&mut self, _case_dir: &Path) {}
 
+    /// Receives the optional stage output directory (`output_root`, or parent
+    /// of `explicit_history_file`) before stage execution so caller-supplied
+    /// extras write auxiliary artifacts outside shared test-suite inputs.
+    fn set_output_dir(&mut self, _output_dir: Option<&Path>) {}
+
     /// Optional custom convective overshooting scheme handle installed onto
     /// `model.aux.other_overshooting_scheme` (`other_overshooting_scheme` in
     /// `star/other/other_overshooting_scheme.f90`).
@@ -539,19 +544,19 @@ fn write_photo_to_case_dir(
     Ok(Some(out_path))
 }
 
-fn write_mod_if_missing(
+/// Writes `model` in MESA `.mod` format to `out_path` unconditionally
+/// (`do_saves`, `star/job/run_star_support.f90:1270-1274`).
+fn write_mod_to_path(
     model: &StarModel,
     out_path: &Path,
 ) -> Result<(), StarError> {
-    if !out_path.exists() || model.controls.rsp_flag {
-        let mod_text = write_mod_string(model)?;
-        fs::write(out_path, mod_text).map_err(|e| {
-            StarError::IoError(format!(
-                "failed to write {}: {e}",
-                out_path.display()
-            ))
-        })?;
-    }
+    let mod_text = write_mod_string(model)?;
+    fs::write(out_path, mod_text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to write {}: {e}",
+            out_path.display()
+        ))
+    })?;
     Ok(())
 }
 
@@ -921,6 +926,11 @@ fn run_inlist_stage_with_logs_inner(
         }
     } else {
         for _ in 0..cap {
+            // Step dump with a selected stage: stop once its window is done.
+            if crate::stepdump::stop_after_window() {
+                termination_code = String::from("stepdump_window_done");
+                break;
+            }
             // `before_step_loop` (`star/job/run_star_support.f90:567-577`)
             // runs before `extras_start_step` (`:191-194`).
             if model.job.enable_adaptive_network {
@@ -1137,9 +1147,14 @@ fn run_inlist_stage_with_logs_inner(
         }
     }
 
+    // A step-capped smoke stage takes the same `do_saves` path as a normal
+    // termination so later stages can reload the handoff model.
+    let is_capped_smoke =
+        max_steps_cap.is_some() && termination_code == "max_steps_cap";
+
     // Termination model save (`star/job/run_star_support.f90:791-792,823,1270-1274`).
     if !abnormal_termination
-        && term_str_ok
+        && (term_str_ok || is_capped_smoke)
         && model.job.save_model_when_terminate
         && !model.job.save_model_filename.is_empty()
         && !model
@@ -1148,7 +1163,7 @@ fn run_inlist_stage_with_logs_inner(
             .eq_ignore_ascii_case("undefined")
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
-        write_mod_if_missing(model, &out_path)?;
+        write_mod_to_path(model, &out_path)?;
     }
 
     // Termination pulsation data save (`star/job/run_star_support.f90:793-794,1283-1290`).
@@ -1365,6 +1380,13 @@ pub fn run_test_suite_case_with_extras(
     let case_dir = staging.staged_dir.as_path();
     let _net_dir_guard = crate::micro::NetSearchDirGuard::new(case_dir);
     extras.set_staged_case_dir(case_dir);
+    let output_dir = logs_opts.output_root.or_else(|| {
+        logs_opts
+            .explicit_history_file
+            .and_then(Path::parent)
+            .filter(|p| !p.as_os_str().is_empty())
+    });
+    extras.set_output_dir(output_dir);
     let case_name = case_dir
         .file_name()
         .and_then(|s| s.to_str())
@@ -1373,7 +1395,11 @@ pub fn run_test_suite_case_with_extras(
 
     let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
 
-    let mut current_model: Option<StarModel> = None;
+    // Each `do_one` is a separate MESA process: nothing but files in the
+    // work directory crosses a stage boundary, so the model of a finished
+    // stage is kept only for the end-of-case assertions and never handed to
+    // the next stage (`star/job/run_star_support.f90:do_load1_star`).
+    let mut last_stage_model: Option<StarModel> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
     let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
@@ -1384,7 +1410,7 @@ pub fn run_test_suite_case_with_extras(
     for stage in &rn_stages {
         match stage {
             RnStage::CopyCheckpoint { src_mod, dst_mod } => {
-                current_model = None;
+                last_stage_model = None;
                 last_stage_terminated_by_extras = false;
                 let (src, dst) =
                     (case_dir.join(src_mod), case_dir.join(dst_mod));
@@ -1408,30 +1434,28 @@ pub fn run_test_suite_case_with_extras(
                 output_mod,
                 logs_dir,
             } => {
+                crate::stepdump::begin_stage();
                 let bundle = InlistBundle::from_file_in_case_dir_with_options(
                     case_dir, inlist, load_opts,
                 )?;
                 // Remove stale stage output `.mod` before execution so a
                 // `required_termination_code_string` mismatch cannot mask a
-                // withheld save (`star/test_suite/test_suite_helpers:22`).
-                if bundle.job.save_model_when_terminate {
-                    if let Some(out_name) = output_mod {
-                        let out_path = case_dir.join(out_name);
-                        if out_path.is_file() {
-                            fs::remove_file(&out_path).map_err(|e| {
-                                StarError::IoError(format!(
-                                    "failed to remove stale {}: {e}",
-                                    out_path.display()
-                                ))
-                            })?;
-                        }
+                // withheld save, and missing stage output fails loudly
+                // (`star/test_suite/test_suite_helpers:22`).
+                if let Some(out_name) = output_mod {
+                    let out_path = case_dir.join(out_name);
+                    if out_path.is_file() {
+                        fs::remove_file(&out_path).map_err(|e| {
+                            StarError::IoError(format!(
+                                "failed to remove stale {}: {e}",
+                                out_path.display()
+                            ))
+                        })?;
                     }
                 }
 
                 let mut model = match init_or_update_model_from_bundle_outcome(
-                    &bundle,
-                    current_model.take(),
-                    extras,
+                    &bundle, None, extras,
                 )? {
                     InitModelOutcome::Model(m) => *m,
                     InitModelOutcome::Terminate(reason) => {
@@ -1490,18 +1514,36 @@ pub fn run_test_suite_case_with_extras(
                     let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
                     photo_restart_verified = c1 == c2;
                 }
-                if !stage_abnormal && !stage_term_mismatch {
+                if !stage_abnormal && !stage_term_mismatch && !is_capped_smoke {
                     if let Some(out_name) = output_mod {
                         let out_path = case_dir.join(out_name);
-                        write_mod_if_missing(&model, &out_path)?;
+                        if !out_path.is_file() {
+                            return Err(StarError::IoError(format!(
+                                "failed to create {} when running {} \
+                                 (`star/test_suite/test_suite_helpers:32-43`)",
+                                out_path.display(),
+                                inlist
+                            )));
+                        }
                     }
                 }
                 total_steps += rep.steps_taken;
                 total_newton += rep.total_newton_iterations;
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
-                current_model = Some(model);
-                if stage_abnormal || stage_term_mismatch {
+                last_stage_model = Some(model);
+                let capped_missing_handoff = is_capped_smoke
+                    && output_mod.as_ref().is_some_and(|out_name| {
+                        !case_dir.join(out_name).is_file()
+                    });
+                if stage_abnormal
+                    || stage_term_mismatch
+                    || capped_missing_handoff
+                {
+                    break;
+                }
+                // A selected step-dump stage is the last one that matters.
+                if crate::stepdump::selected_stage_ended() {
                     break;
                 }
             }
@@ -1510,13 +1552,13 @@ pub fn run_test_suite_case_with_extras(
 
     let runtime_sec = t0.elapsed().as_secs_f64();
     let assertions_passed = terminated_in_init
-        || current_model
+        || last_stage_model
             .as_ref()
             .is_some_and(|m| m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0);
     let final_hr = stage_reports
         .last()
         .map(|s| s.final_history)
-        .or_else(|| current_model.as_ref().map(extract_history_row));
+        .or_else(|| last_stage_model.as_ref().map(extract_history_row));
     let termination_code = stage_reports.last().map_or_else(
         || String::from("no_stages_executed"),
         |s| s.termination_code.clone(),

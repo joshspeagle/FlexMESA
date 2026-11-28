@@ -62,6 +62,7 @@ def _write_mini_repo(tmp_path: pathlib.Path) -> pathlib.Path:
     ).write_text(
         "// SPDX-License-Identifier: GPL-3.0-or-later\n"
         "//! @test-kind: oracle\n"
+        "use flexmesa_turb::calc_mlt;\n"
         "#[test]\n"
         "fn matches_mesa_hex() {\n"
         "    let got = f64::from_bits(0x3ff0_0000_0000_0000);\n"
@@ -504,10 +505,12 @@ def test_taxonomy_detects_inline_markers_and_invalid_routines(
         "// SPDX-License-Identifier: GPL-3.0-or-later\n"
         "//! @test-kind: oracle\n"
         "// Comment mentions set_MLT and set_mlt\n"
+        "use flexmesa_turb::set_mlt;\n"
         "#[test]\n"
         "fn test_set_mlt_and_set_MLT_in_name_only() {\n"
         '    let _tag = "set_MLT";\n'
-        "    let got = f64::from_bits(0x3ff0_0000_0000_0000);\n"
+        "    let z_dummy = (0.0_f64,);\n"
+        "    let got = f64::from_bits(0x3ff0_0000_0000_0000) + z_dummy.0;\n"
         "    assert_eq!(got, 1.0);\n"
         "}\n",
         encoding="utf-8",
@@ -540,7 +543,482 @@ def test_taxonomy_detects_inline_markers_and_invalid_routines(
     )
     sym_errs = test_taxonomy.verify_test_taxonomy(repo)
     assert len(sym_errs) == 1
-    assert "not found in non-comment test code" in sym_errs[0]
+    assert "not called in non-comment test code" in sym_errs[0]
+
+
+def test_taxonomy_enforces_call_sites_and_rust_imports(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Reject field reads, missing crate refs, and JAX-only Python."""
+    repo = _write_mini_repo(tmp_path)
+    man_path = repo / "benchmarks" / "dashboard" / "port_manifest.toml"
+    man_text = man_path.read_text(encoding="utf-8") + (
+        "\n"
+        "[[files]]\n"
+        'upstream_path = "turb/private/mlt_meth.f90"\n'
+        'module = "turb"\n'
+        "upstream_lines = 10\n"
+        f'upstream_sha256 = "{"2" * 64}"\n'
+        'status = "ported_unverified"\n'
+        'notes = "method fixture"\n'
+        "[files.routine_map]\n"
+        'run_MLT = "crates/flexmesa-turb/src/mlt.rs::run_mlt"\n'
+        'mod_MLT = "crates/flexmesa-turb/src/mlt.rs::mod_mlt"\n'
+        "\n"
+        "[[files]]\n"
+        'upstream_path = "auto_diff/private/o1.f90"\n'
+        'module = "auto_diff"\n'
+        "upstream_lines = 10\n"
+        f'upstream_sha256 = "{"1" * 64}"\n'
+        'status = "ported_unverified"\n'
+        'notes = "fixture"\n'
+        "[files.routine_map]\n"
+        'diff1 = "crates/flexmesa-autodiff/src/order1.rs::d1val1"\n'
+        'fn_ref_op = "crates/flexmesa-turb/src/mlt.rs::eval_mlt_ref"\n'
+    )
+    man_path.write_text(man_text, encoding="utf-8")
+    turb_src = repo / "crates" / "flexmesa-turb" / "src"
+    turb_src.mkdir(parents=True)
+    (turb_src / "mlt.rs").write_text(
+        "pub struct MltSolver;\n"
+        "impl MltSolver {\n"
+        "    pub fn new() -> Self { Self }\n"
+        "    pub fn run_mlt(&self) {}\n"
+        "}\n"
+        "pub fn mod_mlt(x: f64) -> f64 { x }\n"
+        "pub fn eval_mlt_ref(x: f64) -> f64 { x }\n",
+        encoding="utf-8",
+    )
+
+    # 1. Rust field read & missing crate fail; fn-item passes.
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_turb::{calc_mlt, eval_mlt_ref};\n"
+        "#[test]\n"
+        "fn field_and_fn_item() {\n"
+        "    let got = eval3(eval_mlt_ref) + z.d1val1;\n"
+        "    let _ = calc_mlt(got);\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    # 2. Python without `flexmesa._rust` import + attr read fails.
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "def test_jax_only(obj: object) -> None:\n"
+        "    _ = obj.set_mlt\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    tax_path = repo / test_taxonomy.DEFAULT_TAXONOMY_REL
+    tax = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+                language="rust",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt.f90::calc_MLT",
+                    "auto_diff/private/o1.f90::fn_ref_op",
+                    "auto_diff/private/o1.f90::diff1",
+                ),
+            ),
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=("turb/private/mlt.f90::set_MLT",),
+            ),
+        ),
+    )
+    tax_path.write_text(test_taxonomy.dump_test_taxonomy(tax), encoding="utf-8")
+    errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any("targets crate 'flexmesa_autodiff'" in e for e in errs)
+    assert any("diff1" in e and "not called" in e for e in errs)
+    assert not any("fn_ref_op" in e for e in errs)
+    assert any("must import `flexmesa._rust`" in e for e in errs)
+    assert any("set_MLT" in e and "not called" in e for e in errs)
+
+    # 3. Importing `flexmesa._rust` + calling `_rust.set_mlt` passes.
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "from flexmesa import _rust\n"
+        "def test_pyo3_call() -> None:\n"
+        "    _ = _rust.set_mlt(1.0)\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    tax_ok = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+                language="rust",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt.f90::calc_MLT",
+                    "auto_diff/private/o1.f90::fn_ref_op",
+                ),
+            ),
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=("turb/private/mlt.f90::set_MLT",),
+            ),
+        ),
+    )
+    tax_path.write_text(
+        test_taxonomy.dump_test_taxonomy(tax_ok), encoding="utf-8"
+    )
+    assert test_taxonomy.verify_test_taxonomy(repo) == []
+
+    # 4. Crate `use ... as alias` + qualified `alias::sym` passes.
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_turb as t;\n"
+        "#[test]\n"
+        "fn alias_qualified_call_and_fn_item() {\n"
+        "    let got = eval3(t::eval_mlt_ref);\n"
+        "    let _ = t::calc_mlt(got);\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert test_taxonomy.verify_test_taxonomy(repo) == []
+
+    # 5. Reject unrelated `.sym()`, local `fn sym`, cross-crate calls, and
+    #    method calls without target type/constructor (#605 review).
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_math::calc_mlt;\n"
+        "use flexmesa_turb::eval_mlt_ref;\n"
+        "fn mod_mlt(x: f64) -> f64 { x }\n"
+        "#[test]\n"
+        "fn false_accept_patterns() {\n"
+        "    let _ = calc_mlt(1.0);\n"
+        "    let _ = mod_mlt(1.0);\n"
+        "    let _ = eval3(eval_mlt_ref);\n"
+        "    let _ = other_obj.set_mlt();\n"
+        "    let _ = bogus_obj.run_mlt();\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    # Reject Python `jax_twin.set_mlt()` even when `_rust` is imported.
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "from flexmesa import _rust\n"
+        "class JaxMock:\n"
+        "    def set_mlt(self, x: float) -> float:\n"
+        "        return x\n"
+        "def test_jax_alongside_rust() -> None:\n"
+        "    _ = _rust.other_helper(1.0)\n"
+        "    jax_twin = JaxMock()\n"
+        "    _ = jax_twin.set_mlt(1.0)\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    tax_strict = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+                language="rust",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt.f90::calc_MLT",
+                    "turb/private/mlt.f90::set_MLT",
+                    "turb/private/mlt_meth.f90::run_MLT",
+                    "turb/private/mlt_meth.f90::mod_MLT",
+                    "auto_diff/private/o1.f90::fn_ref_op",
+                ),
+            ),
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=("turb/private/mlt.f90::set_MLT",),
+            ),
+        ),
+    )
+    tax_path.write_text(
+        test_taxonomy.dump_test_taxonomy(tax_strict), encoding="utf-8"
+    )
+    strict_errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any("calc_MLT" in e and "not called" in e for e in strict_errs)
+    assert any("set_MLT" in e and "not called" in e for e in strict_errs)
+    assert any("run_MLT" in e and "not called" in e for e in strict_errs)
+    assert any("mod_MLT" in e and "not called" in e for e in strict_errs)
+    assert not any("fn_ref_op" in e for e in strict_errs)
+    assert any(
+        e.startswith("tests/test_turb_invariants.py:") and "set_MLT" in e
+        for e in strict_errs
+    )
+    assert not any("must import `flexmesa._rust`" in e for e in strict_errs)
+
+    # 6. Accept symbol alias, module glob + target-type method call, and
+    #    direct `from flexmesa._rust import sym as alias` in Python.
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_turb::mlt::calc_mlt as run_c;\n"
+        "use flexmesa_turb::mlt::*;\n"
+        "use flexmesa_turb::MltSolver;\n"
+        "use flexmesa_turb::set_mlt;\n"
+        "#[test]\n"
+        "fn valid_aliases_globs_and_methods() {\n"
+        "    let got = eval3(eval_mlt_ref);\n"
+        "    let _ = run_c(got);\n"
+        "    let _ = mod_mlt(got);\n"
+        "    let _ = set_mlt(got);\n"
+        "    let solver = MltSolver::new();\n"
+        "    solver.run_mlt();\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "from flexmesa._rust import set_mlt as rust_set_mlt\n"
+        "def test_direct_pyo3_alias_call() -> None:\n"
+        "    _ = rust_set_mlt(1.0)\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    assert test_taxonomy.verify_test_taxonomy(repo) == []
+
+    # Reject local `fn` shadowing even under valid glob, and wrong glob module.
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_turb::mlt::*;\n"
+        "use flexmesa_turb::other::*;\n"
+        "fn mod_mlt(x: f64) -> f64 { x }\n"
+        "#[test]\n"
+        "fn local_shadow_and_wrong_glob() {\n"
+        "    let _ = mod_mlt(1.0);\n"
+        "    let _ = eval3(set_mlt);\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    tax_glob = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+                language="rust",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt_meth.f90::mod_MLT",
+                    "turb/private/mlt.f90::set_MLT",
+                ),
+            ),
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=("turb/private/mlt.f90::set_MLT",),
+            ),
+        ),
+    )
+    tax_path.write_text(
+        test_taxonomy.dump_test_taxonomy(tax_glob), encoding="utf-8"
+    )
+    glob_errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any("mod_MLT" in e and "not called" in e for e in glob_errs)
+    assert any("set_MLT" in e and "not called" in e for e in glob_errs)
+
+
+def test_call_site_gate_followup_skips_let_shadows_and_flexmesa_rust(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Reject let-bound shadows and skipped tests; accept flexmesa._rust."""
+    repo = _write_mini_repo(tmp_path)
+    man_path = repo / "benchmarks" / "dashboard" / "port_manifest.toml"
+    man_path.write_text(
+        man_path.read_text(encoding="utf-8")
+        + 'eval3 = "crates/flexmesa-turb/src/mlt.rs::eval3"\n'
+        + 'eval_mlt_ref = "crates/flexmesa-turb/src/mlt.rs::eval_mlt_ref"\n'
+        + 'fn_disabled = "crates/flexmesa-turb/src/mlt.rs::fn_disabled"\n',
+        encoding="utf-8",
+    )
+    turb_src = repo / "crates" / "flexmesa-turb" / "src"
+    turb_src.mkdir(parents=True)
+    (turb_src / "mlt.rs").write_text(
+        "pub fn eval3(f: fn(f64) -> f64) -> f64 { f(1.0) }\n"
+        "pub fn eval_mlt_ref(x: f64) -> f64 { x }\n"
+        "pub fn fn_disabled(x: f64) -> f64 { x }\n"
+        "pub fn calc_mlt(x: f64) -> f64 { x }\n"
+        "pub fn set_mlt(x: f64) -> f64 { x }\n",
+        encoding="utf-8",
+    )
+    tax_path = repo / "benchmarks" / "dashboard" / "test_taxonomy.toml"
+
+    # 1. `let sym = |x| x; sym(1.0)` must not satisfy `set_mlt`.
+    # 2. `#[ignore]` and `#[cfg(any())]` calls must not satisfy `calc_mlt`
+    #    or `fn_disabled`.
+    # 3. Active test calling `eval3(eval_mlt_ref)` still satisfies `eval3`
+    #    and `eval_mlt_ref`.
+    (
+        repo / "crates" / "flexmesa-turb" / "tests" / "mlt_oracle_test.rs"
+    ).write_text(
+        "// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        "//! @test-kind: oracle\n"
+        "use flexmesa_turb::mlt::{\n"
+        "    calc_mlt, eval3, eval_mlt_ref, fn_disabled, set_mlt,\n"
+        "};\n"
+        "#[test]\n"
+        "fn let_shadow_and_active_call() {\n"
+        "    let set_mlt = |x: f64| x;\n"
+        "    let _ = set_mlt(1.0);\n"
+        "    let _ = eval3(eval_mlt_ref);\n"
+        "    let _ = 0x3ff0_0000_0000_0000_u64;\n"
+        "}\n"
+        "#[test]\n"
+        '#[ignore = "not ready"]\n'
+        "fn ignored_test() {\n"
+        "    let _ = calc_mlt(1.0);\n"
+        "}\n"
+        "#[cfg(any())]\n"
+        "mod disabled_mod {\n"
+        "    pub fn run() {\n"
+        "        let _ = fn_disabled(2.0);\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    # 4. Python `@pytest.mark.skip` calls must not satisfy; `import flexmesa;
+    #    flexmesa._rust.sym()` in an active test must pass!
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "import flexmesa\n"
+        "import pytest\n"
+        "@pytest.mark.skip(reason='disabled')\n"
+        "def test_skipped_rust_call() -> None:\n"
+        "    _ = flexmesa._rust.calc_mlt(1.0)\n"
+        "@pytest.mark.skip\n"
+        "class TestSkippedClass:\n"
+        "    def test_in_skipped_cls(self) -> None:\n"
+        "        _ = flexmesa._rust.calc_mlt(2.0)\n"
+        "def test_active_attr_call() -> None:\n"
+        "    _ = flexmesa._rust.set_mlt(1.0)\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    tax = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="crates/flexmesa-turb/tests/mlt_oracle_test.rs",
+                language="rust",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt.f90::eval3",
+                    "turb/private/mlt.f90::eval_mlt_ref",
+                    "turb/private/mlt.f90::set_MLT",
+                    "turb/private/mlt.f90::calc_MLT",
+                    "turb/private/mlt.f90::fn_disabled",
+                ),
+            ),
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=(
+                    "turb/private/mlt.f90::set_MLT",
+                    "turb/private/mlt.f90::calc_MLT",
+                ),
+            ),
+        ),
+    )
+    tax_path.write_text(test_taxonomy.dump_test_taxonomy(tax), encoding="utf-8")
+    errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any(
+        "mlt_oracle_test.rs" in e and "set_MLT" in e and "not called" in e
+        for e in errs
+    )
+    assert any(
+        "mlt_oracle_test.rs" in e and "calc_MLT" in e and "not called" in e
+        for e in errs
+    )
+    assert any(
+        "mlt_oracle_test.rs" in e and "fn_disabled" in e and "not called" in e
+        for e in errs
+    )
+    assert not any("eval3" in e for e in errs)
+    assert not any("eval_mlt_ref" in e for e in errs)
+    assert any(
+        "test_turb_invariants.py" in e and "calc_MLT" in e and "not called" in e
+        for e in errs
+    )
+    assert not any(
+        "test_turb_invariants.py" in e and "set_MLT" in e for e in errs
+    )
+    assert not any("must import `flexmesa._rust`" in e for e in errs)
+
+    # `import flexmesa` with only `flexmesa.other()` must fail `_rust` import.
+    (repo / "tests" / "test_turb_invariants.py").write_text(
+        "import flexmesa\n"
+        "def test_non_rust_flexmesa_attr() -> None:\n"
+        "    _ = flexmesa.other()\n"
+        "    golden_output = 0x3ff0_0000_0000_0000\n"
+        "    assert golden_output > 0\n",
+        encoding="utf-8",
+    )
+    tax_other = test_taxonomy.TestTaxonomy(
+        schema_version=1,
+        entries=(
+            test_taxonomy.TestFileRecord(
+                path="tests/test_turb_invariants.py",
+                language="python",
+                module="turb",
+                kind="oracle",
+                provenance="MESA 26.4.1 turb/private/mlt.f90 IEEE-754 hex",
+                routines=("turb/private/mlt.f90::set_MLT",),
+            ),
+        ),
+    )
+    tax_path.write_text(
+        test_taxonomy.dump_test_taxonomy(tax_other), encoding="utf-8"
+    )
+    other_errs = test_taxonomy.verify_test_taxonomy(repo)
+    assert any("must import `flexmesa._rust`" in e for e in other_errs)
 
 
 def test_dashboard_and_cli_report_file_only_taxonomy_labels(

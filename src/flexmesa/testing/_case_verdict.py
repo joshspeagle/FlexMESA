@@ -66,6 +66,14 @@ class TraceRunOutcome:
         stage_steps: Model number at the end of each ``star`` stage the run
             completed (empty when not reported), compared with MESA's stage
             by stage (``DECISIONS #69``).
+        stages_total: Number of ``do_one`` stages the ``rn`` script runs under
+            the harness (``0`` when not a multi-stage ``star`` run).
+        stage_reached: 1-based stage the run ended in, or ``None`` when the
+            run does not establish it (``stages_total > 1`` only).
+        star1_final_model_number: Final model number of star 1 of a binary
+            run, when the run report provides it.
+        star1_retries: Retry count of star 1 of a binary run, when the run
+            report provides it.
     """
 
     suite: str
@@ -85,6 +93,20 @@ class TraceRunOutcome:
     mean_iters: float | None = None
     track_history_paths: tuple[pathlib.Path, ...] = ()
     stage_steps: tuple[int, ...] = ()
+    stages_total: int = 0
+    stage_reached: int | None = None
+    star1_final_model_number: int | None = None
+    star1_retries: int | None = None
+
+    @property
+    def final_stage_reached(self) -> bool:
+        """Return whether the history is that of the final stage.
+
+        A multi-stage run that ended earlier, or that does not establish the
+        stage it ended in, holds the partial history of another stage, which
+        must not be scored against the reference of the final stage.
+        """
+        return self.stages_total <= 1 or self.stage_reached == self.stages_total
 
 
 _UNSUPPORTED_COUNT_RE = re.compile(
@@ -176,6 +198,9 @@ class CaseHarnessRecord:
     mesa_iters_rows: int = 0
     stage_steps: tuple[int, ...] = ()
     mesa_stage_steps: tuple[int, ...] = ()
+    stages_total: int = 0
+    stage_reached: int | None = None
+    star1_final_model_number: int | None = None
     artifact_comparison: artifact_compare.ArtifactComparison | None = None
 
     @property
@@ -283,11 +308,11 @@ def resolve_binary_component_reference_paths(
     return found
 
 
-def resolve_full_reference_history_path(
+def resolve_full_reference_history_paths(
     suite: str,
     case: str,
     root_dir: pathlib.Path | None = None,
-) -> pathlib.Path | None:
+) -> list[pathlib.Path]:
     """Locate the un-thinned MESA ``26.4.1`` history file in ``runs/``.
 
     Only consults the host ``mesa_histories`` cache when ``root_dir`` is
@@ -300,8 +325,10 @@ def resolve_full_reference_history_path(
         root_dir: Optional root directory override.
 
     Returns:
-        Path to the full MESA ``history.data`` or ``binary_history.data`` file
-        if available, else ``None``.
+        Paths of the full MESA history files of the final stage in model
+        order (``history.data`` then ``map_history.data`` where MESA switched
+        files, ``DECISIONS #78``), or ``binary_history.data``; ``[]`` if none
+        is available.
     """
     repo = case_manifest.repo_root()
     if root_dir is not None and root_dir.resolve() != repo.resolve():
@@ -319,7 +346,7 @@ def resolve_full_reference_history_path(
         if suite == "binary":
             cand = case_root / "binary_history.data"
             if cand.is_file():
-                return cand
+                return [cand]
             continue
         result_json = case_root / "case_result.json"
         if result_json.is_file():
@@ -329,13 +356,77 @@ def resolve_full_reference_history_path(
                 if isinstance(hfiles, list) and hfiles:
                     cand = case_root / str(hfiles[-1])
                     if cand.is_file():
-                        return cand
+                        paths = [cand]
+                        if suite == "star":
+                            extra = cand.parent / "map_history.data"
+                            if extra.is_file():
+                                paths.append(extra)
+                        return paths
             except (OSError, ValueError):
                 pass
         cand = case_root / "LOGS" / "history.data"
         if cand.is_file():
-            return cand
-    return None
+            paths = [cand]
+            extra = cand.parent / "map_history.data"
+            if suite == "star" and extra.is_file():
+                paths.append(extra)
+            return paths
+    return []
+
+
+def resolve_full_reference_history_path(
+    suite: str,
+    case: str,
+    *,
+    root_dir: pathlib.Path | None = None,
+) -> pathlib.Path | None:
+    """Return the first full MESA history file of a case, if available.
+
+    Args:
+        suite: Suite name.
+        case: Upstream test-case directory name.
+        root_dir: Optional root directory override.
+
+    Returns:
+        The first path of `resolve_full_reference_history_paths`, else
+        ``None``. Use that function for a run whose history spans files.
+    """
+    paths = resolve_full_reference_history_paths(suite, case, root_dir=root_dir)
+    return paths[0] if paths else None
+
+
+def load_full_reference_history(
+    paths: list[pathlib.Path],
+) -> history_compare.HistoryTable:
+    """Load and concatenate the history files of one MESA run in order.
+
+    Args:
+        paths: Non-empty ordered paths from
+            `resolve_full_reference_history_paths`.
+
+    Returns:
+        One table with ``float64`` columns of shape ``(n_models,)``.
+
+    Raises:
+        ValueError: If the files do not share one column set.
+    """
+    tables = [history_compare.load_history_file(p) for p in paths]
+    first = tables[0]
+    if len(tables) == 1:
+        return first
+    for tbl in tables[1:]:
+        if list(tbl.columns) != list(first.columns):
+            raise ValueError("history files of one run differ in columns")
+    cols = {
+        name: np.concatenate([t.columns[name] for t in tables])
+        for name in first.columns
+    }
+    return history_compare.HistoryTable(
+        columns=cols,
+        num_rows=sum(t.num_rows for t in tables),
+        provenance_comment=first.provenance_comment,
+        mesa_version_number=first.mesa_version_number,
+    )
 
 
 TRACK_REFERENCE_RE = re.compile(r"^track_(\d{4})\.data$")
@@ -533,13 +624,13 @@ def _augment_ref_columns(
         return ref_tbl
     if all(col in ref_tbl.columns for col in AUGMENT_REFERENCE_COLUMNS):
         return ref_tbl
-    full_path = resolve_full_reference_history_path(
+    full_paths = resolve_full_reference_history_paths(
         spec.suite, spec.case, root_dir=root_dir
     )
-    if full_path is None:
+    if not full_paths:
         return ref_tbl
     try:
-        full_tbl = history_compare.load_history_file(full_path)
+        full_tbl = load_full_reference_history(full_paths)
     except (OSError, ValueError):
         return ref_tbl
     if (
@@ -776,16 +867,32 @@ def evaluate_case_record(
     term_ok = case_manifest.termination_matches(
         spec.required_termination, outcome.termination_code
     )
+    # The history of a multi-stage run that did not reach its final stage is
+    # that of an earlier stage; the reference is the final stage's, so the
+    # two are not compared (no column verdict either way).
+    stage_ok = outcome.final_stage_reached
     comp: history_compare.HistoryComparison | None = (
         history_compare.re_evaluate_comparison(precomputed_comparison, spec)
-        if precomputed_comparison is not None
+        if precomputed_comparison is not None and stage_ok
         else None
     )
     comp_err = _sanitize_error_message(outcome.error_message)
+    if not stage_ok and has_history_reference(spec):
+        where = (
+            f"ended in stage {outcome.stage_reached} of {outcome.stages_total}"
+            if outcome.stage_reached is not None
+            else f"stage not established ({outcome.stages_total} stages)"
+        )
+        note = (
+            f"run {where}; history not compared with the final-stage "
+            "MESA reference"
+        )
+        if note not in comp_err:
+            comp_err = "; ".join(filter(None, [comp_err, note]))
     run_iters = outcome.iters
     run_mean_iters = outcome.mean_iters
 
-    if comp is None and has_history_reference(spec):
+    if comp is None and has_history_reference(spec) and stage_ok:
         ref_file = resolve_reference_history_path(
             spec.reference_path, root_dir=base
         )
@@ -940,6 +1047,10 @@ def evaluate_case_record(
             art_notes.append("artifact not compared")
         elif not artifact_comparison.ok:
             art_notes.append(artifact_comparison.message)
+        # A stored row re-judged at merge already carries these notes in
+        # its error message; append each note once so merging is idempotent.
+        present = comp_err.split("; ") if comp_err else []
+        art_notes = [n for n in art_notes if n not in present]
         if art_notes:
             comp_err = "; ".join(filter(None, [comp_err, *art_notes]))
         tol_ok = (
@@ -970,8 +1081,17 @@ def evaluate_case_record(
         and outcome.history_path is not None
     ):
         # Binary and astero reports carry no per-stage model numbers; a
-        # single-stage MESA run is compared by total steps.
-        run_stages = (outcome.steps,)
+        # single-stage MESA run is compared by total steps. A binary run
+        # whose report names star 1's final model number is compared by
+        # that, as MESA's binary suite prints star 1's count
+        # (binary/job/binary_test_suite_extras.inc:126), since star 1 can
+        # stop before the binary does.
+        run_stages = (
+            (outcome.star1_final_model_number,)
+            if spec.suite == "binary"
+            and outcome.star1_final_model_number is not None
+            else (outcome.steps,)
+        )
     step_diff = (
         first_step_difference(run_stages, mesa_stages)
         if outcome.status == "ok" and max_steps is None
@@ -1059,7 +1179,11 @@ def evaluate_case_record(
         observed_termination=outcome.termination_code,
         termination_matches=term_ok,
         steps=outcome.steps,
-        retries=outcome.retries,
+        retries=(
+            outcome.star1_retries
+            if spec.suite == "binary" and outcome.star1_retries is not None
+            else outcome.retries
+        ),
         wall_time_sec=outcome.wall_time_sec,
         peak_rss_gb=outcome.peak_rss_gb,
         known_gap_issue=gap_issue,
@@ -1077,6 +1201,9 @@ def evaluate_case_record(
         mean_iters=run_mean_iters,
         stage_steps=run_stages,
         mesa_stage_steps=mesa_stages,
+        stages_total=outcome.stages_total,
+        stage_reached=outcome.stage_reached,
+        star1_final_model_number=outcome.star1_final_model_number,
         artifact_comparison=artifact_comparison,
         mesa_steps=mesa_stats.steps if mesa_stats is not None else None,
         mesa_retries=mesa_stats.retries if mesa_stats is not None else None,

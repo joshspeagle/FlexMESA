@@ -79,6 +79,7 @@ pub use edd_wind::{
     eval_tout_wind_enhancement_orbit_averaged,
 };
 pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
+pub use inlist::ensure_no_unported_binary_driver_controls;
 pub use inlist_inventory::{
     BINARY_CONTROLS_SUPPORTED, BINARY_CONTROLS_TERMINAL_OUTPUT,
     BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED, BINARY_JOB_TERMINAL_OUTPUT,
@@ -115,16 +116,18 @@ pub use system_jdot::{
     eval_coupled_edot_breakdown, eval_gated_jdot,
 };
 pub use system_rlof::{
-    BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
-    eval_scheme_explicit_mdot, eval_scheme_explicit_mdot_with_steps,
+    BinaryStepSnapshot, CoupledMdotAccounting, MAX_NUM_ACCRETION_SPECIES,
+    blend_explicit_mdot, eval_scheme_explicit_mdot,
+    eval_scheme_explicit_mdot_with_steps,
     eval_star_intrinsic_wind_cgs_eccentric,
     eval_star_intrinsic_wind_cgs_with_extras, prepare_coupled_mdots,
-    prepare_coupled_mdots_with_extras, star_skips_hard_limits,
+    prepare_coupled_mdots_with_extras, set_accretion_composition,
+    star_skips_hard_limits,
 };
 pub use timestep::{
-    B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
-    B_TLIM_SEP, BinaryHardLimitViolation, BinaryTimestepControls,
-    binary_pick_next_timestep, check_binary_hard_limits,
+    B_NUM_TLIM, B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB,
+    B_TLIM_ROCHE, B_TLIM_SEP, BinaryHardLimitViolation, BinaryTimestepControls,
+    binary_dt_why_str, binary_pick_next_timestep, check_binary_hard_limits,
 };
 
 #[cfg(test)]

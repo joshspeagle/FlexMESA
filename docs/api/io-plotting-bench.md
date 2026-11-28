@@ -82,6 +82,10 @@ print(
 
 ::: flexmesa.testing.harness_budgets
 
+`flexmesa.testing.case_budgets` reads the committed per-case wall-time budgets, generated from measured campaign and MESA wall times by `scripts/audit/case_budgets.py` (`flexmesa harness run --case-budgets`, `#640`).
+
+::: flexmesa.testing.case_budgets
+
 ::: flexmesa.testing.early_stop
 
 ::: flexmesa.testing.stage_steps
@@ -160,7 +164,7 @@ print(
 
 ::: flexmesa.bench.kernels_wave5
 
-`flexmesa.testing.routine_inventory` reads the committed list of every subroutine and function in the upstream MESA `26.4.1` Fortran files with its line span (`benchmarks/dashboard/routine_inventory.json`, generated from the MESA source by `scripts/dashboard/build_routine_inventory.py`, `#611`). `flexmesa.testing.routine_gate` checks that every `routine_map` key in the port manifest is a routine of that upstream file and that every mapped target is an existing Rust `fn` item. `flexmesa.testing.routine_table` derives the per-module and per-file counts of mapped routines and lines (`notes/audit/routine_table.md`). `flexmesa.testing.routine_backlog` attributes unmapped routines to the declared-gap cases whose reasons name them.
+`flexmesa.testing.routine_inventory` reads the committed list of every subroutine and function in the upstream MESA `26.4.1` Fortran files with its line span (`benchmarks/dashboard/routine_inventory.json`, generated from the MESA source by `scripts/dashboard/build_routine_inventory.py`, `#611`). `flexmesa.testing.routine_gate` checks that every `routine_map` key in the port manifest is a routine of that upstream file and that every mapped target is an existing Rust `fn` item. `flexmesa.testing.routine_table` derives the per-module and per-file counts of routines and own lines mapped in full, mapped in part (`routine_map_partial` in the port manifest), declared not applicable (`flexmesa.testing.routine_na`, `benchmarks/dashboard/port_status_na.toml`), and unmapped (`notes/audit/routine_table.md`). `flexmesa.testing.routine_backlog` attributes unmapped routines to the declared-gap cases whose reasons name them.
 
 ::: flexmesa.testing.routine_inventory
 
@@ -169,6 +173,8 @@ print(
 ::: flexmesa.testing.routine_backlog
 
 ::: flexmesa.testing.routine_table
+
+::: flexmesa.testing.routine_na
 
 `flexmesa.testing.artifact_compare` judges a case that takes zero steps and writes a result file (`star/rsp_check_2nd_crossing`): it parses the file and compares every field with the committed MESA `26.4.1` copy at the precision of the upstream format statement (`DECISIONS #76`, `#606`).
 

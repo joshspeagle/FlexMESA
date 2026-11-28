@@ -29,15 +29,10 @@ _EXPECTED_UNPORTED_STAR: dict[str, type[Any]] = {
     "pisn": star_extras.PisnStarExtras,
     "ppisn": star_extras.PpisnStarExtras,
     "radiative_levitation": star_extras.RadiativeLevitationStarExtras,
-    "relax_composition_j_entropy": (
-        star_extras.RelaxCompositionJEntropyStarExtras
-    ),
-    "tzo": star_extras.TzoStarExtras,
     "wd_aic": star_extras.WdAicStarExtras,
 }
 
 _EXPECTED_UNPORTED_ASTERO: dict[str, type[Any]] = {
-    "example_astero": astero_extras.SearchAsteroExtras,
     "fast_from_file": astero_extras.FastFromFileAsteroExtras,
     "fast_scan_grid": astero_extras.SearchAsteroExtras,
     "fast_simplex": astero_extras.SearchAsteroExtras,
@@ -105,7 +100,7 @@ def _write_synthetic_sdb_case(
     """Create a 1 Msun ZAMS case with active Reimers/Blocker winds."""
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "rn").write_text(
-        "#!/usr/bin/env bash\ndo_one inlist final.mod\n",
+        "#!/usr/bin/env bash\ndo_one inlist\n",
         encoding="utf-8",
     )
     (case_dir / "inlist").write_text(
@@ -288,12 +283,30 @@ def test_accreted_material_j_multi_step_live_and_combined_branch(
     assert h.wind_switch_ok is False
 
 
-def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
+def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_controls(
     tmp_path: pathlib.Path,
 ) -> None:
-    """`RelaxCompositionJEntropyStarExtras` reads `surface_l_lsun` snapshots."""
+    """`RelaxCompositionJEntropyStarExtras` reads `surface_l_lsun`, updates
+    `initial_mass` in part 2, and attaches under `resolve_case_extras`.
+    """
+    assert (
+        "RelaxCompositionJEntropyStarExtras"
+        in case_extras.ADAPTER_SERVED_STAR_HANDLERS
+    )
+    case_dir = harness_runner.resolve_case_dir(
+        "star", "relax_composition_j_entropy"
+    )
+    assert case_extras.classify_case_extras("star", case_dir) == "ported"
+    assert isinstance(
+        case_extras.resolve_case_extras("star", case_dir),
+        star_extras.RelaxCompositionJEntropyStarExtras,
+    )
+
     h = star_extras.RelaxCompositionJEntropyStarExtras()
-    h.extras_controls({"x_integer_ctrl": [1]})
+    with pytest.raises(KeyError):
+        h.extras_controls({})
+    assert h.extras_controls({"x_integer_ctrl": [0]}) is None
+    assert h.extras_controls({"x_integer_ctrl": [1]}) is None
     p1: dict[str, Any] = {
         "x_integer_ctrl": [1],
         "case_dir": str(tmp_path),
@@ -308,12 +321,16 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
         "star_mass": 9.8,
         "surface_l_lsun": 5.0e3,
     }
-    assert h.extras_finish_step(p1) == (
-        "terminate",
-        "produced files for relax",
+    assert h.extras_finish_step(p1) == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "produced files for relax",
+    }
+    updates = h.extras_controls(
+        {"x_integer_ctrl": [2], "case_dir": str(tmp_path)}
     )
-    with pytest.raises(NotImplementedError, match="t_xtra1"):
-        h.extras_controls({"x_integer_ctrl": [2], "case_dir": str(tmp_path)})
+    assert updates is not None
+    assert math.isclose(updates["initial_mass"], 9.8, rel_tol=1.0e-12)
     assert math.isclose(h.loaded_initial_mass or 0.0, 9.8, rel_tol=1.0e-12)
     ok_res = h.extras_check_model(
         {
@@ -322,16 +339,28 @@ def test_relax_composition_j_entropy_surface_l_lsun_fallback_and_guard(
             "surface_l_lsun": 5.0e3,
         }
     )
-    assert ok_res == ("terminate", "Values for Teff and L are within tolerance")
+    assert ok_res == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "Values for Teff and L are within tolerance",
+    }
     assert math.isclose(
         _rust.log10(float(p1["surface_l_lsun"]) * constants.LSUN),
         math.log10(5.0e3 * constants.LSUN),
         rel_tol=1.0e-12,
     )
+    smoke_rep = harness_runner.run_trace_inprocess(
+        "star",
+        case_dir,
+        tmp_path / "relax_smoke_out",
+        max_steps=1,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert smoke_rep["total_steps"] == 1
 
 
 def test_wave3_ledger_counts_and_unported_audit() -> None:
-    """All 13 unported `star` and 4 `astero` cases match ledger and guards."""
+    """All 11 unported `star` and 3 `astero` cases match ledger and guards."""
     for case_name, expected_cls in _EXPECTED_UNPORTED_STAR.items():
         case_dir = harness_runner.resolve_case_dir("star", case_name)
         assert (
@@ -353,6 +382,12 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
             case_extras.classify_case_extras("astero", case_dir) == "unported"
         )
 
+    ex_dir = harness_runner.resolve_case_dir("astero", "example_astero")
+    ex_matched = case_extras.match_case_extras("astero", ex_dir)
+    assert isinstance(ex_matched, astero_extras.ExampleAsteroExtras)
+    assert ex_matched.unported_routines == ()
+    assert case_extras.classify_case_extras("astero", ex_dir) == "ported"
+
     ledger_path = (
         pathlib.Path(__file__).resolve().parents[1]
         / "benchmarks"
@@ -363,6 +398,11 @@ def test_wave3_ledger_counts_and_unported_audit() -> None:
     assert len(rows) == 106
     by_case = {(r["suite"], r["case"]): r for r in rows}
     assert by_case[("star", "make_sdb")]["status"] == "ported"
+    assert by_case[("star", "tzo")]["status"] == "ported"
+    assert by_case[("astero", "example_astero")]["status"] == "ported"
+    assert (
+        by_case[("star", "relax_composition_j_entropy")]["status"] == "ported"
+    )
     unported_star = {
         r["case"]
         for r in rows

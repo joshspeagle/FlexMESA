@@ -13,6 +13,7 @@ from flexmesa.testing import (
     routine_backlog,
     routine_gate,
     routine_inventory,
+    routine_na,
     routine_table,
 )
 
@@ -95,8 +96,8 @@ def test_oracle_level_needs_a_listed_routine_id_and_a_mapped_target(
         manifest, inv, tmp_path, oracle_ids=ids, gaps=[]
     )
     row = _row(t)
-    assert (row["routines_mapped"], row["routines_oracle"]) == (2, 1)
-    assert row["lines_in_oracle_routines"] == 10
+    assert (row["routines_full"], row["routines_oracle"]) == (2, 1)
+    assert row["lines_oracle"] == 10
     assert row["ceiling"] == "ported_unverified"
     assert t["engine"]["routines_oracle"] == 1
 
@@ -195,10 +196,10 @@ def test_committed_table_oracle_counts_do_not_exceed_mapped_counts() -> None:
     )
     t = routine_table.build_table(manifest, inv, REPO_ROOT)
     for f in t["files"]:
-        assert f["routines_oracle"] <= f["routines_mapped"], f
-        assert f["lines_in_oracle_routines"] <= f["lines_in_mapped_routines"]
+        assert f["routines_oracle"] <= f["routines_full"], f
+        assert f["lines_oracle"] <= f["lines_full"]
     for mod, m in t["modules"].items():
-        assert m["routines_oracle"] <= m["routines_mapped"], mod
+        assert m["routines_oracle"] <= m["routines_full"], mod
     ids = routine_table.oracle_routine_ids(REPO_ROOT)
     listed = {i for i in ids if i.split("::")[0] in inv["files"]}
     assert t["engine"]["routines_oracle"] <= len(listed)
@@ -289,9 +290,9 @@ def test_table_credits_only_the_qualified_contained_procedure(
         manifest, _dup_inventory(), tmp_path, oracle_ids=ids, gaps=[]
     )
     row = _row(t)
-    assert (row["routines_mapped"], row["routines_oracle"]) == (2, 1)
-    assert row["lines_in_mapped_routines"] == 4 + 20
-    assert row["lines_in_oracle_routines"] == 4
+    assert (row["routines_full"], row["routines_oracle"]) == (2, 1)
+    assert row["lines_full"] == 4 + 20
+    assert row["lines_oracle"] == 4
 
 
 def test_table_credits_nothing_for_an_ambiguous_bare_key(
@@ -302,4 +303,208 @@ def test_table_credits_nothing_for_an_ambiguous_bare_key(
     t = routine_table.build_table(
         manifest, _dup_inventory(), tmp_path, oracle_ids=set(), gaps=[]
     )
-    assert _row(t)["routines_mapped"] == 0
+    assert _row(t)["routines_full"] == 0
+
+
+def _nest_inventory() -> dict[str, Any]:
+    """A parent with a mapped and an unmapped child, plus outside lines."""
+    return {
+        "files": {
+            "star/private/x.f90": {
+                "lines": 60,
+                "outside": 10,
+                "routines": [
+                    ["parent", "subroutine", "", 11, 50],
+                    ["kid_a", "subroutine", "parent", 15, 24],
+                    ["kid_b", "subroutine", "parent", 30, 34],
+                    ["tail", "subroutine", "", 51, 60],
+                ],
+            }
+        }
+    }
+
+
+def _nest_manifest(
+    tmp_path: pathlib.Path,
+    keys: tuple[str, ...],
+    partial: tuple[str, ...] = (),
+) -> port_manifest.PortManifest:
+    (tmp_path / "crates").mkdir(exist_ok=True)
+    (tmp_path / "crates" / "a.rs").write_text(
+        "pub fn f_one() {}\n", encoding="utf-8"
+    )
+    entry = port_manifest.PortManifestEntry(
+        upstream_path="star/private/x.f90",
+        module="star",
+        upstream_lines=60,
+        upstream_sha256="0" * 64,
+        status=S.PARTIAL,
+        flexmesa_files=("crates/a.rs",),
+        routine_map=tuple((k, "crates/a.rs::f_one") for k in keys),
+        routine_map_partial=partial,
+    )
+    return port_manifest.PortManifest(
+        schema_version=1,
+        upstream_version="r26.4.1",
+        upstream_commit="c",
+        archive_md5="m",
+        entries=(entry,),
+    )
+
+
+def test_own_lines_exclude_contained_procedures() -> None:
+    """A parent's own lines are its span minus its children's spans."""
+    rows = _nest_inventory()["files"]["star/private/x.f90"]["routines"]
+    assert routine_table.own_lines(rows) == [40 - 15, 10, 5, 10]
+    assert sum(routine_table.own_lines(rows)) + 10 == 60
+
+
+def test_mapped_parent_does_not_credit_unmapped_children(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Mapping ``parent`` credits 25 lines; a child adds only its own."""
+    manifest = _nest_manifest(tmp_path, ("parent",))
+    t = routine_table.build_table(
+        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+    )
+    row = _row(t)
+    assert (row["routines_full"], row["lines_full"]) == (1, 25)
+    assert row["lines_unmapped"] == 10 + 5 + 10
+    assert row["lines_in_routines"] == 50
+    manifest = _nest_manifest(tmp_path, ("parent", "parent::kid_a"))
+    t = routine_table.build_table(
+        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+    )
+    assert _row(t)["lines_full"] == 35
+
+
+def test_partial_marker_moves_a_mapped_routine_to_its_own_level(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Partial routines are neither full nor unmapped, and cap the ceiling."""
+    manifest = _nest_manifest(tmp_path, ("tail", "solo_x"), ("tail",))
+    t = routine_table.build_table(
+        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+    )
+    row = _row(t)
+    assert (row["routines_full"], row["routines_partial"]) == (0, 1)
+    assert (row["lines_partial"], row["lines_unmapped"]) == (10, 40)
+    assert row["ceiling"] == "partial"
+    assert t["engine"]["pct_lines_partial"] == _pct(10, 60)
+    assert t["engine"]["pct_lines_full"] == 0.0
+
+
+def _pct(num: int, den: int) -> float:
+    return round(100.0 * num / den, 1)
+
+
+def test_partial_routine_blocks_the_raise_and_gets_no_oracle_credit(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A file with one partial routine is not a raise candidate."""
+    keys = ("parent", "parent::kid_a", "parent::kid_b", "tail")
+    manifest = _nest_manifest(tmp_path, keys, ("tail",))
+    ids = {"star/private/x.f90::tail"}
+    t = routine_table.build_table(
+        manifest, _nest_inventory(), tmp_path, oracle_ids=ids, gaps=[]
+    )
+    assert _row(t)["routines_oracle"] == 0
+    assert t["ceiling"]["raise_candidates"] == []
+    manifest = _nest_manifest(tmp_path, keys)
+    t = routine_table.build_table(
+        manifest, _nest_inventory(), tmp_path, oracle_ids=set(), gaps=[]
+    )
+    assert _row(t)["ceiling"] == "ported_unverified"
+    assert len(t["ceiling"]["raise_candidates"]) == 1
+
+
+def _na(routine: str, parent: str = "") -> routine_na.NotApplicable:
+    return routine_na.NotApplicable(
+        "star/private/x.f90", routine, "stub", "empty", parent=parent
+    )
+
+
+def test_na_routines_stay_in_the_denominator_and_do_not_block_the_ceiling(
+    tmp_path: pathlib.Path,
+) -> None:
+    """N/A is its own level; both fractions are reported; ceiling ignores it."""
+    manifest = _nest_manifest(tmp_path, ("parent", "parent::kid_a", "tail"))
+    na = [_na("kid_b", "parent")]
+    t = routine_table.build_table(
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=set(),
+        gaps=[],
+        na_entries=na,
+    )
+    row = _row(t)
+    assert (row["routines_na"], row["lines_na"]) == (1, 5)
+    assert (row["routines_full"], row["lines_full"]) == (3, 45)
+    assert row["ceiling"] == "ported_unverified"
+    eng = t["engine"]
+    assert eng["pct_lines_na"] == _pct(5, 60)
+    assert eng["pct_lines_full"] == _pct(45, 60)
+    assert eng["pct_lines_full_excl_na"] == _pct(45, 55)
+
+
+def test_na_routine_is_never_counted_as_mapped(tmp_path: pathlib.Path) -> None:
+    """A routine both mapped and declared N/A is reported as N/A only."""
+    manifest = _nest_manifest(tmp_path, ("tail",))
+    t = routine_table.build_table(
+        manifest,
+        _nest_inventory(),
+        tmp_path,
+        oracle_ids=set(),
+        gaps=[],
+        na_entries=[_na("tail")],
+    )
+    assert (_row(t)["routines_full"], _row(t)["routines_na"]) == (0, 1)
+
+
+def test_gate_rejects_bad_partial_names_and_na_declarations(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Partial names must be map keys; N/A must exist and not be mapped."""
+    inv = _nest_inventory()
+    manifest = _nest_manifest(tmp_path, ("tail",), ("tail", "other"))
+    errs = routine_gate.structural_errors(manifest, inv, [])
+    assert len(errs) == 1 and "'other'" in errs[0]
+    errs = routine_gate.structural_errors(
+        manifest, inv, [_na("tail"), _na("ghost"), _na("kid_a", "parent")]
+    )
+    assert any("also in routine_map" in e for e in errs)
+    assert any("'ghost' matches 0" in e for e in errs)
+    assert len(errs) == 3
+    manifest = _nest_manifest(tmp_path, ("tail",))
+    assert routine_gate.structural_errors(manifest, inv, []) == []
+
+
+def test_na_file_is_read_with_its_schema(tmp_path: pathlib.Path) -> None:
+    """Entries carry path, routine, category, reason, and optional span."""
+    path = tmp_path / "na.toml"
+    assert routine_na.load_na(path) == []
+    path.write_text(
+        '[[na]]\nupstream_path = "a.f90"\nroutine = "r"\nparent = "p"\n'
+        'first = 3\nlast = 9\ncategory = "stub"\nreason = "empty"\n',
+        encoding="utf-8",
+    )
+    (got,) = routine_na.load_na(path)
+    assert (got.key(), got.first, got.last) == ("p::r", 3, 9)
+    path.write_text('[[na]]\nroutine = "r"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="upstream_path"):
+        routine_na.load_na(path)
+
+
+def test_manifest_round_trips_and_verifies_routine_map_partial(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The key is rendered, reloaded, and checked like ``routine_map``."""
+    manifest = _nest_manifest(tmp_path, ("tail",), ("tail",))
+    path = tmp_path / "m.toml"
+    path.write_text(port_manifest.dump_port_manifest(manifest))
+    back = port_manifest.load_port_manifest(path)
+    assert back.entries[0].routine_map_partial == ("tail",)
+    bad = _nest_manifest(tmp_path, ("tail",), ("nope",))
+    errs = port_manifest.verify_port_manifest(bad, repo_root=tmp_path)
+    assert any("routine_map_partial['nope']" in e for e in errs)

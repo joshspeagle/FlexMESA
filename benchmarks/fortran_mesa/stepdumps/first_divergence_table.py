@@ -24,8 +24,10 @@ deterministic: no timings and no machine paths.
 
 A window that opens at a later model is compared with ``--max-steps`` set a
 little past its end, so the run stops once it has the window. A window whose
-header names a stage after the first or an occurrence after the first cannot
-be compared (FlexMESA's dump has no such selectors) and is listed as skipped.
+header names a stage or an occurrence after the first is compared with
+``--stage`` and ``--occurrence``: earlier stages run uncapped without
+dumping and the run stops after the window. Only the ``star`` runner marks
+stage boundaries, so a later stage of another suite is listed as skipped.
 
 Runs use ``--allow-unsupported-controls`` so that every case reaches its
 first solver call. A run that ignores controls does not do what its inlist
@@ -65,23 +67,42 @@ def parse_header(text: str) -> dict[str, str]:
     return head
 
 
-def window_skip_reason(head: dict[str, str]) -> str:
+def window_skip_reason(head: dict[str, str], suite: str = "star") -> str:
     """Returns why a dump window cannot be compared, or ``""``.
+
+    Args:
+        head: Header from `parse_header`.
+        suite: ``star``, ``binary`` or ``astero``.
+
+    Returns:
+        A reason when the window names a later stage of a suite whose
+        FlexMESA runner does not mark stage boundaries for the step dump
+        (only the ``star`` runner does), else the empty string.
+    """
+    stage = head.get("stage", "all")
+    if suite != "star" and stage not in ("all", "1"):
+        return f"stage {stage} (no stage selector for the {suite} runner)"
+    return ""
+
+
+def window_selector_args(head: dict[str, str]) -> list[str]:
+    """Returns the ``trace`` options that select the window's stage and run.
 
     Args:
         head: Header from `parse_header`.
 
     Returns:
-        A reason when the window names a stage or occurrence that FlexMESA's
-        own dump cannot select, else the empty string.
+        ``--stage S`` and ``--occurrence K`` for the values the header
+        records (``all`` and ``1`` when absent select nothing).
     """
+    args: list[str] = []
     stage = head.get("stage", "all")
-    if stage not in ("all", "1"):
-        return f"stage {stage} (FlexMESA dump has no stage selector)"
+    if stage.isdigit() and int(stage) > 0:
+        args += ["--stage", stage]
     occ = head.get("occurrence", "1")
     if occ.isdigit() and int(occ) > 1:
-        return f"occurrence {occ} (FlexMESA dump has no occurrence selector)"
-    return ""
+        args += ["--occurrence", occ]
+    return args
 
 
 def window_max_steps(head: dict[str, str]) -> int | None:
@@ -92,8 +113,12 @@ def window_max_steps(head: dict[str, str]) -> int | None:
 
     Returns:
         ``None`` for a window at the start of the run (``trace`` already caps
-        it), else a step count comfortably past the end of the window.
+        it) or in a selected stage (the run stops itself after the window and
+        earlier stages must reach their own end), else a step count
+        comfortably past the end of the window.
     """
+    if head.get("stage", "all").isdigit():
+        return None
     first = head.get("first_model", "")
     steps = head.get("steps_per_star", "")
     if not (first.isdigit() and steps.isdigit()):
@@ -130,7 +155,7 @@ def run_case(
         if head.get("first_model", "").isdigit()
         else "start of run"
     )
-    skip = window_skip_reason(head)
+    skip = window_skip_reason(head, suite)
     if skip:
         row["run"] = "skipped"
         row["first_divergence"] = "not compared"
@@ -152,6 +177,7 @@ def run_case(
         "--timeout-sec",
         str(timeout),
     ]
+    cmd += window_selector_args(head)
     max_steps = window_max_steps(head)
     if max_steps is not None:
         cmd += ["--max-steps", str(max_steps)]

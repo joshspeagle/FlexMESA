@@ -312,13 +312,11 @@ class StarModel(_arrays.StarModelArrays):
         self,
         max_timestep_factor: float = 1.2,
         min_timestep_factor: float = 0.5,
-        dx_nuc_drop_limit: float = 1.0e-2,
     ) -> tuple[float, float, float]:
         """Compute `(dt_next, varcontrol, dt_limit_ratio)` via H211 filter."""
         dt_n, vc, ratio = self._rust_model.pick_next_timestep(
             float(max_timestep_factor),
             float(min_timestep_factor),
-            float(dx_nuc_drop_limit),
         )
         return float(dt_n), float(vc), float(ratio)
 

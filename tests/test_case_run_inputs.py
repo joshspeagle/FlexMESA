@@ -77,10 +77,26 @@ def test_plan_builds_matrix_and_timeout_with_45_minute_headroom() -> None:
                 "suite": "star",
                 "case": "1.3M_ms_high_Z",
                 "id": "star-1.3M_ms_high_Z",
+                "timeout_sec": 3000,
+                "job_minutes": 95,
             }
         ]
     }
     assert out["job_minutes"] == "95"
+
+
+def test_plan_without_timeout_uses_the_per_case_budget() -> None:
+    out = cri.plan(
+        _env(CASES="star/ns_h star/1.3M_ms_high_Z", TIMEOUT_SEC=""), REPO_ROOT
+    )
+    rows = json.loads(out["matrix"])["include"]
+    budgets = cri.case_budget_table(REPO_ROOT)
+    assert [r["timeout_sec"] for r in rows] == [
+        budgets[("star", "ns_h")],
+        budgets[("star", "1.3M_ms_high_Z")],
+    ]
+    assert rows[0]["timeout_sec"] != rows[1]["timeout_sec"]
+    assert out["job_minutes"] == str(max(r["job_minutes"] for r in rows))
 
 
 @pytest.mark.parametrize(
@@ -90,6 +106,7 @@ def test_plan_builds_matrix_and_timeout_with_45_minute_headroom() -> None:
         {"TIMEOUT_SEC": "0"},
         {"TIMEOUT_SEC": "abc"},
         {"TIMEOUT_SEC": "99999"},
+        {"TIMEOUT_SEC": "17101"},
         {"MAX_RSS_GB": "nan"},
         {"MAX_RSS_GB": "64"},
         {"WINDOW": "w1"},
@@ -116,3 +133,27 @@ def test_resolve_dump_reports_missing_dump_and_unknown_case(
         cri.resolve_dump(tmp_path, "star", "ns_h", "", KNOWN)
     with pytest.raises(cri.InputError, match="manifest"):
         cri.resolve_dump(tmp_path, "star", "nope", "", KNOWN)
+
+
+def test_window_trace_args_read_stage_and_occurrence_from_the_id() -> None:
+    assert cri.window_trace_args("ns_h_s2_k1_m90_n12") == ["--stage", "2"]
+    assert cri.window_trace_args("wd_stable_h_burn_s1_k2_m70_n12") == [
+        "--occurrence",
+        "2",
+    ]
+    assert cri.window_trace_args("make_planets_s3_k2_m9_n3") == [
+        "--stage",
+        "3",
+        "--occurrence",
+        "2",
+    ]
+
+
+def test_window_trace_args_default_window_selects_nothing() -> None:
+    assert cri.window_trace_args("") == []
+    assert cri.window_trace_args("x_s1_k1_m1_n3") == []
+
+
+def test_window_trace_args_reject_an_id_without_window_fields() -> None:
+    with pytest.raises(cri.InputError):
+        cri.window_trace_args("ns_h_window")

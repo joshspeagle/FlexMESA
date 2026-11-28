@@ -1,6 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0-only
-//! Reference BLAS 3.12.0 routines (`BLAS/SRC/*.f`, `*.f90`), double
-//! precision, as the MESA SDK `26.6.1` builds them (`gfortran -O2 -fPIC`).
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Reference BLAS 3.12.0 routines (`BLAS/SRC/*.f`, `*.f90`, modified BSD
+//! licence), double precision, as the MESA SDK `26.6.1` builds them
+//! (`gfortran -O2 -fPIC`).
 //!
 //! Vectors are slices starting at `X(1)` with a positive increment.
 //! Unrolled loops are kept as upstream writes them: the unrolling does not

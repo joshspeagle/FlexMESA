@@ -375,7 +375,8 @@ def test_relax_composition_j_entropy_file_generation(
 ) -> None:
     """`RelaxCompositionJEntropyStarExtras` writes part-1 `.dat` files."""
     h = star_extras.RelaxCompositionJEntropyStarExtras()
-    h.extras_controls({"x_integer_ctrl": [1]})
+    assert h.extras_controls({"x_integer_ctrl": [0]}) is None
+    assert h.extras_controls({"x_integer_ctrl": [1]}) is None
     p1 = {
         "x_integer_ctrl": [1],
         "case_dir": str(tmp_path),
@@ -391,13 +392,19 @@ def test_relax_composition_j_entropy_file_generation(
         "l": [2.0 * constants.LSUN, constants.LSUN],
     }
     assert h.extras_finish_step(p1) == "keep_going"
-    assert h.extras_finish_step({**p1, "teff": 7900.0}) == (
-        "terminate",
-        "produced files for relax",
+    assert h.extras_finish_step({**p1, "teff": 7900.0}) == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "produced files for relax",
+    }
+    updates = h.extras_controls(
+        {"x_integer_ctrl": [2], "case_dir": str(tmp_path)}
     )
-    with pytest.raises(NotImplementedError, match="#154"):
-        h.extras_controls({"x_integer_ctrl": [2], "case_dir": str(tmp_path)})
+    assert updates is not None
+    assert math.isclose(updates["initial_mass"], 1.5, rel_tol=1.0e-15)
     assert math.isclose(h.loaded_initial_mass or 0.0, 1.5, rel_tol=1.0e-15)
+    assert math.isclose(h.target_teff, 7900.0, rel_tol=1.0e-15)
+    assert math.isclose(h.target_l, 2.0 * constants.LSUN, rel_tol=1.0e-15)
 
 
 def test_relax_composition_j_entropy_part2_tolerance_checks() -> None:
@@ -412,7 +419,11 @@ def test_relax_composition_j_entropy_part2_tolerance_checks() -> None:
             "l": [2.0 * constants.LSUN * 0.996],
         }
     )
-    assert ok_res == ("terminate", "Values for Teff and L are within tolerance")
+    assert ok_res == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "Values for Teff and L are within tolerance",
+    }
     assert h.within_tolerance is True
     bad_res = h.extras_check_model(
         {
@@ -421,7 +432,11 @@ def test_relax_composition_j_entropy_part2_tolerance_checks() -> None:
             "l": [2.0 * constants.LSUN],
         }
     )
-    assert bad_res == ("terminate", "Relaxed model does not match input")
+    assert bad_res == {
+        "action": "terminate",
+        "termination_code_slot": "t_xtra1",
+        "termination_code_str": "Relaxed model does not match input",
+    }
     assert h.within_tolerance is False
 
 

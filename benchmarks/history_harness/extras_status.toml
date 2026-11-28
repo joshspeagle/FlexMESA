@@ -405,9 +405,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "relax_composition_j_entropy"
-status = "unported"
+status = "ported"
 digest = "41feca7966910b153766eeaf8af12a0b66409ca3bc2f63d42003e9197dde2377"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -502,9 +501,8 @@ digest = "cdef7b57daff6676e9925c5fe0007af08344d8ee2b39a1a7d77920ac222183b4"
 [[cases]]
 suite = "star"
 case = "tzo"
-status = "unported"
+status = "ported"
 digest = "7c5c9d25dd8d864bc00ba46c11ceb95f1f4f696084a6ec65f5be49219a80b19f"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -624,9 +622,8 @@ digest = "61c0a560093e701477aff6315aa8f34a0ffc113d0032ddc0c10964692bebad08"
 [[cases]]
 suite = "astero"
 case = "example_astero"
-status = "unported"
+status = "ported"
 digest = "7333be5fc5a0a61015768a1d0ea4f98c8b855ce96cd954a0939be896b1587e10"
-issue = "#231"
 
 [[cases]]
 suite = "astero"

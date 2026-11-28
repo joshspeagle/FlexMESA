@@ -409,7 +409,7 @@ pub fn apply_step_pre_physics_with_extras(
     model.aux.mixing.crystal_core_boundary_mass_old =
         model.aux.crystal_core_boundary_mass;
     if !model.controls.rsp_flag {
-        crate::hydro_vars::set_gradt_excess_alpha(model);
+        crate::mix_info::set_gradt_excess_alpha(model);
     }
 
     // Refresh hydro and mixing info before operator-split pre-physics

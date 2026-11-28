@@ -195,6 +195,7 @@ pub mod stella;
 pub mod step_trace;
 pub mod stepdump;
 pub mod struct_burn_mix;
+pub mod tdc_hydro;
 pub mod termination;
 pub mod timestep;
 mod timestep_checks;
@@ -426,8 +427,8 @@ pub use pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
     eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
-    scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
-    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
+    solve_adipls_fgong_modes, solve_bvp_eigenmodes, solve_gyre_mesa_modes,
+    LinearOscillationMode,
 };
 pub use relax::{
     apply_uniform_rotation, excise_core_by_temperature,
@@ -540,8 +541,9 @@ pub use termination::{
     PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
 };
 pub use timestep::{
-    eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
+    eval_h211_factor, eval_varcontrol, filter_limit, pick_next_timestep,
+    TimestepAction, TimestepLimitReason, TimestepReport, TLIM_BINARY,
+    TLIM_NEG_X,
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{

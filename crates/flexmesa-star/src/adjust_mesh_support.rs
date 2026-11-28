@@ -214,8 +214,9 @@ fn do1_dlog_eps_dlogp_coef(
         }
         let dlog_eps = flexmesa_math::log10(eps / epsm1).abs();
         if !dlog_eps.is_finite() {
-            return Err(StarError::MicrophysicsError(format!(
-                "non-finite dlog_eps in adjust_mesh_support for category {cat} at zone {k}"
+            return Err(StarError::InvalidInput(format!(
+                "non-finite dlog_eps in adjust_mesh_support for category \
+                 {cat} at zone {k}"
             )));
         }
         let dlog_eps_dlogp = dlog_eps / dlogp;

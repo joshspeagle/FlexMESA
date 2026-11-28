@@ -19,8 +19,10 @@ from typing import Any
 from flexmesa import _dispatch
 from flexmesa.data import fetch
 from flexmesa.testing import (
+    _case_verdict,
     artifact_compare,
     baseline_regression,
+    case_budgets,
     case_manifest,
     case_report,
     early_stop,
@@ -30,6 +32,13 @@ from flexmesa.testing import (
     stage_steps,
     stepdump_compare,
 )
+
+
+def _positive_int(raw: str) -> int:
+    val = int(raw)
+    if val < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {val}")
+    return val
 
 
 def _non_negative_int(raw: str) -> int:
@@ -98,6 +107,9 @@ def _run_worker(argv: list[str]) -> int:
         ),
         "rss_gb": harness_runner.proc_rss_gb(os.getpid()),
     }
+    for key in ("star1_final_model_number", "star1_retries"):
+        if rep.get(key) is not None:
+            payload[key] = int(rep[key])
     pathlib.Path(ns.meta_json).write_text(
         json.dumps(payload, allow_nan=False), encoding="utf-8"
     )
@@ -208,6 +220,31 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--stage",
+        type=_positive_int,
+        default=None,
+        metavar="S",
+        help=(
+            "With --compare: dump only the S-th stage of a multi-inlist case "
+            "that reaches the solver (1-based; one MESA process per ./rn "
+            "stage). Earlier stages run without dumping and the run stops "
+            "after the window. Default: the stage recorded in the MESA "
+            "dump's header, else every stage."
+        ),
+    )
+    parser.add_argument(
+        "--occurrence",
+        type=_positive_int,
+        default=None,
+        metavar="K",
+        help=(
+            "With --compare: the window opens the K-th time the model "
+            "number rises to the dump's first model (a relax phase restarts "
+            "the numbering). Default: the occurrence in the MESA dump's "
+            "header, else 1."
+        ),
+    )
+    parser.add_argument(
         "--ignore",
         nargs="*",
         default=[],
@@ -243,6 +280,37 @@ def _stepdump_window(mesa_dump: pathlib.Path) -> tuple[int, int | None]:
     return steps, first
 
 
+def _stepdump_selectors(
+    mesa_dump: pathlib.Path,
+    stage: int | None,
+    occurrence: int | None,
+) -> tuple[int | None, int]:
+    """Returns the stage and occurrence of the window to dump.
+
+    Args:
+        mesa_dump: MESA dump whose ``# stage:`` and ``# occurrence:`` header
+            lines (``all`` and ``1`` when absent) give the defaults.
+        stage: Explicit ``--stage`` or ``None``.
+        occurrence: Explicit ``--occurrence`` or ``None``.
+
+    Returns:
+        ``(stage, occurrence)``; ``stage`` is ``None`` for every stage.
+    """
+    head: dict[str, str] = {}
+    with mesa_dump.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            key, _, val = line[1:].partition(":")
+            head[key.strip()] = val.strip()
+    if stage is None and head.get("stage", "all").isdigit():
+        stage = int(head["stage"])
+    if occurrence is None:
+        occ = head.get("occurrence", "1")
+        occurrence = int(occ) if occ.isdigit() and int(occ) > 0 else 1
+    return stage, occurrence
+
+
 def trace_main(argv: list[str] | None = None) -> int:
     """Execute ``flexmesa trace star|binary|astero <case>``.
 
@@ -257,7 +325,10 @@ def trace_main(argv: list[str] | None = None) -> int:
     if cli_args and cli_args[0] == "_worker":
         return _run_worker(cli_args[1:])
 
-    ns = _build_trace_parser().parse_args(cli_args)
+    parser = _build_trace_parser()
+    ns = parser.parse_args(cli_args)
+    if ns.compare is None and (ns.stage or ns.occurrence):
+        parser.error("--stage and --occurrence need --compare")
     eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     flex_dump: pathlib.Path | None = None
     if ns.compare is not None:
@@ -271,9 +342,19 @@ def trace_main(argv: list[str] | None = None) -> int:
             os.environ["FLEXMESA_STEPDUMP_FIRST"] = str(first)
         else:
             os.environ.pop("FLEXMESA_STEPDUMP_FIRST", None)
-        if first is None and ns.max_steps is None:
+        stage, occurrence = _stepdump_selectors(
+            pathlib.Path(ns.compare), ns.stage, ns.occurrence
+        )
+        os.environ["FLEXMESA_STEPDUMP_OCCURRENCE"] = str(occurrence)
+        if stage is None:
+            os.environ.pop("FLEXMESA_STEPDUMP_STAGE", None)
+        else:
+            os.environ["FLEXMESA_STEPDUMP_STAGE"] = str(stage)
+        if first is None and stage is None and ns.max_steps is None:
             # A window at the start of the run needs only its own models; a
-            # later window runs up to the timeout or --max-steps.
+            # later window runs up to the timeout or --max-steps. A selected
+            # stage stops itself after the window, and the earlier stages
+            # must run to their own end, so no cap applies.
             ns.max_steps = steps
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
@@ -553,6 +634,19 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         help="Seconds between early-stop and step-bound checks (default 10).",
     )
     p_run.add_argument(
+        "--case-budgets",
+        default=None,
+        metavar="TOML",
+        help=(
+            "Give each case the wall-clock budget listed for it in this "
+            "generated table (benchmarks/history_harness/case_budgets.toml) "
+            "instead of --timeout-sec; a case without a row keeps "
+            "--timeout-sec. With --shard the cases are packed onto shards by "
+            "budget. A case that ends on its budget is inconclusive, as "
+            "with any time budget (DECISIONS #59)."
+        ),
+    )
+    p_run.add_argument(
         "--shard",
         type=_shard_arg,
         default=None,
@@ -564,7 +658,9 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "with 'flexmesa harness merge'."
         ),
     )
-    p_run.set_defaults(budgets={}, budgeted_keys=frozenset())
+    p_run.set_defaults(
+        budgets={}, budgeted_keys=frozenset(), case_budget_table={}
+    )
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
@@ -713,6 +809,9 @@ def _case_timeout(
     """Return the wall-clock budget of one case (``--short-budget-sec``)."""
     if entry.key in ns.short_budget_keys:
         return float(ns.short_budget_sec)
+    table = ns.case_budget_table.get(entry.key)
+    if table is not None:
+        return float(table)
     budget = ns.budgets.get(entry.key)
     if budget is not None:
         return float(budget.timeout_sec)
@@ -1089,11 +1188,7 @@ def _render_harness_figures(
     fig_links: dict[tuple[str, str], str] = {}
     for rec in records:
         entry = entry_by_key[rec.suite, rec.case]
-        if (
-            not rec.executed
-            or entry.reference_status == "no_reference_yet"
-            or not entry.reference_path
-        ):
+        if not rec.executed or not _case_verdict.has_history_reference(entry):
             continue
         hist_p = harness_runner.locate_written_history(
             rec.suite, work_root / rec.suite / rec.case, True
@@ -1387,6 +1482,15 @@ def harness_main(argv: list[str] | None = None) -> int:
     if refusal:
         print(refusal, file=sys.stderr)
         return 1
+    if ns.case_budgets is not None and (
+        ns.budget_from_baseline or ns.short_budget_sec is not None
+    ):
+        print(
+            "--case-budgets cannot be combined with --budget-from-baseline "
+            "or --short-budget-sec",
+            file=sys.stderr,
+        )
+        return 1
     if ns.budget_from_baseline and ns.short_budget_sec is not None:
         print(
             "--budget-from-baseline replaces --short-budget-sec; give one",
@@ -1415,9 +1519,21 @@ def harness_main(argv: list[str] | None = None) -> int:
         ns.cases,
         harness_budgets.passing_keys(base_records),
     )
+    if ns.case_budgets is not None:
+        try:
+            ns.case_budget_table = case_budgets.load_case_budgets(
+                ns.case_budgets
+            )
+        except (ValueError, OSError) as exc:
+            print(f"cannot read --case-budgets: {exc}", file=sys.stderr)
+            return 1
     if ns.shard is not None:
         selected = harness_shards.shard_entries(
-            selected, ns.shard[0], ns.shard[1], _costly_keys(ns)
+            selected,
+            ns.shard[0],
+            ns.shard[1],
+            _costly_keys(ns),
+            ns.case_budget_table or None,
         )
         print(
             f"[harness] shard {ns.shard[0]}/{ns.shard[1]}: "
@@ -1483,6 +1599,11 @@ def harness_main(argv: list[str] | None = None) -> int:
                 "wall_times_json": ns.wall_times_json is not None,
             }
             if ns.budget_from_baseline
+            else None
+        ),
+        "case_budgets": (
+            pathlib.Path(ns.case_budgets).name
+            if ns.case_budgets is not None
             else None
         ),
         "mesa_step_factor": ns.mesa_step_factor,

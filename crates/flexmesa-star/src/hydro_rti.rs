@@ -308,17 +308,9 @@ pub fn eval_alpha_rti_sources(
     // Sink term (`hydro_alpha_rti_eqns.f90:112-123`):
     // `RTI_D = s% RTI_D * max(1, a_00 / RTI_max_alpha)`
     // `source_minus = RTI_D * a_00 * cs / rmid`
-    let r_s_00 = flexmesa_math::exp(
-        model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
-    );
+    let r_s_00 = flexmesa_math::exp(model.ln_r_start[k]);
     let r_s_in = if k + 1 < model.nz {
-        flexmesa_math::exp(
-            model
-                .ln_r_start
-                .get(k + 1)
-                .copied()
-                .unwrap_or(model.ln_r[k + 1]),
-        )
+        flexmesa_math::exp(model.ln_r_start[k + 1])
     } else {
         model.r_center
     };

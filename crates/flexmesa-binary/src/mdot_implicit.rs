@@ -182,7 +182,7 @@ impl ImplicitRlofSolver {
         F: FnMut(f64) -> f64,
     {
         self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
-            self.roche_lobe_objective(eval_gap(mdot))
+            (self.roche_lobe_objective(eval_gap(mdot)), false, true)
         })
     }
 
@@ -197,9 +197,21 @@ impl ImplicitRlofSolver {
     where
         F: FnMut(f64) -> (f64, f64),
     {
+        let slope_contact = pow(q_accretor_over_donor, -0.52);
         self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
             let (gap_d, gap_a) = eval_gaps(mdot);
-            self.contact_objective(gap_d, gap_a, q_accretor_over_donor)
+            let companion_detached = gap_a < 0.0
+                && (gap_d * slope_contact - gap_a > self.tolerance
+                    || gap_d < -self.tolerance);
+            if companion_detached {
+                (self.roche_lobe_objective(gap_d), false, true)
+            } else {
+                (
+                    self.contact_objective(gap_d, gap_a, q_accretor_over_donor),
+                    true,
+                    false,
+                )
+            }
         })
     }
 
@@ -207,10 +219,10 @@ impl ImplicitRlofSolver {
         &self,
         initial_mdot_g_s: f64,
         max_tries: usize,
-        mut eval_f: F,
+        mut eval_spec: F,
     ) -> (f64, usize, f64)
     where
-        F: FnMut(f64) -> f64,
+        F: FnMut(f64) -> (f64, bool, bool),
     {
         let mode = if self.use_quadratic {
             ImplicitSolverMode::Both
@@ -232,12 +244,18 @@ impl ImplicitRlofSolver {
             false,
             false,
         );
-        let max_abs = self.max_implicit_abs_mdot_msun_yr * MSUN / SECYER;
-        let mut mdot = initial_mdot_g_s.min(0.0).max(-max_abs);
+        let mut mdot = initial_mdot_g_s;
         let limit = max_tries;
         for iter in 1..=(limit + 1) {
-            let f = eval_f(mdot);
-            match state.record_and_propose(iter, limit, mdot, f, false, true) {
+            let (f, trial_use_sum, detach_allowed) = eval_spec(mdot);
+            match state.record_and_propose(
+                iter,
+                limit,
+                mdot,
+                f,
+                trial_use_sum,
+                detach_allowed,
+            ) {
                 ImplicitStepAction::Converged(m_ok) => return (m_ok, iter, f),
                 ImplicitStepAction::Detached => return (0.0, iter, f),
                 ImplicitStepAction::TryNextMdot(next_m) => {
@@ -248,7 +266,7 @@ impl ImplicitRlofSolver {
                 }
             }
         }
-        let final_f = eval_f(mdot);
+        let (final_f, _, _) = eval_spec(mdot);
         (mdot, limit + 1, final_f)
     }
 }

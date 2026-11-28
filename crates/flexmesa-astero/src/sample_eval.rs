@@ -3,20 +3,14 @@
 //! mode matching, surface-effect correction, and composite $\chi^2$ scoring
 //! (`astero/private/extras_support.f90:155-485`, `astero_support.f90:223-760`).
 
-use std::fmt::Write as _;
-use std::fs;
 use std::path::Path;
-use std::time::Instant;
 
 use flexmesa_const::RSUN;
 use flexmesa_star::controls::StarError;
 use flexmesa_star::eval_photosphere_info;
 use flexmesa_star::history::extract_history_row;
 use flexmesa_star::model::StarModel;
-use flexmesa_star::pulse_bvp::{BvpEigenmode, InertiaNormKind, OuterBoundKind};
-use flexmesa_star::pulse_modes::{
-    scan_bounds_from_targets, scan_star_bvp_eigenmodes, PulseModeScanOptions,
-};
+use flexmesa_star::pulse_modes::scan_bounds_from_targets;
 use flexmesa_star::pulse_write::fortran_1pe;
 
 use crate::adipls_support::AsteroAdipls;
@@ -156,14 +150,14 @@ fn eval_spectro_obs(
     let teff = model.teff.max(1.0);
     let (mut obs, mut sig, mut mval, mut names) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    if ctrl.include_age_in_chi2_spectro && ctrl.age_sigma > 0.0 {
+    if ctrl.include_age_in_chi2_spectro {
         obs.push(ctrl.age_target);
         sig.push(ctrl.age_sigma);
         mval.push(model.star_age);
         names.push(String::from("age"));
     }
     for (i, c) in ctrl.indexed_constraints.iter().enumerate() {
-        if c.include && c.sigma > 0.0 {
+        if c.include {
             obs.push(c.target);
             sig.push(c.sigma);
             mval.push(constraint_values[i]);
@@ -218,16 +212,12 @@ pub fn eval_spectro_and_delta_nu_chi2(
     let (sp_obs, sp_sig, sp_mod, _, teff, _, _, _) =
         eval_spectro_obs(model, ctrl, constraint_values);
     let mut sum_sp = 0.0_f64;
-    let mut n_sp = 0usize;
-    for i in 0..sp_obs.len() {
-        if sp_sig[i] > 0.0 {
-            let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
-            sum_sp += d * d;
-            n_sp += 1;
-        }
+    let cnt_sp = sp_obs.len();
+    for i in 0..cnt_sp {
+        sum_sp += flexmesa_math::pow2((sp_mod[i] - sp_obs[i]) / sp_sig[i]);
     }
-    let chi2_spectro = if ctrl.weights.normalize_chi2_spectro && n_sp > 0 {
-        sum_sp / (n_sp as f64)
+    let chi2_spectro = if ctrl.weights.normalize_chi2_spectro {
+        sum_sp / (cnt_sp as f64)
     } else {
         sum_sp
     };
@@ -243,46 +233,6 @@ pub fn eval_spectro_and_delta_nu_chi2(
         0.0
     };
     (chi2_spectro, chi2_delta_nu, delta_nu_uhz)
-}
-
-/// Parses `outer_bound` from a `GYRE` input file, stripping `!` comments first.
-pub fn parse_gyre_outer_bound(
-    case_dir: &Path,
-    gyre_file: &str,
-) -> Result<OuterBoundKind, StarError> {
-    let fname = gyre_file.trim();
-    if fname.is_empty() {
-        return Err(StarError::InvalidInput(String::from(
-            "oscillation_code = 'gyre' requires a non-empty gyre_input_file",
-        )));
-    }
-    let path = case_dir.join(fname);
-    let text = fs::read_to_string(&path).map_err(|e| {
-        StarError::IoError(format!(
-            "failed to read GYRE input file '{}': {e}",
-            path.display()
-        ))
-    })?;
-    for raw_line in text.lines() {
-        let line = raw_line.split('!').next().unwrap_or("").trim();
-        let Some((lhs, rhs)) = line.split_once('=') else {
-            continue;
-        };
-        if lhs.trim().eq_ignore_ascii_case("outer_bound") {
-            let val = rhs.trim().trim_matches(|c| c == '\'' || c == '"');
-            return match val.to_ascii_uppercase().as_str() {
-                "VACUUM" | "ZERO_R" => Ok(OuterBoundKind::Vacuum),
-                "JCD" | "DZIEM" | "UNNO" | "ISOTHERMAL" => {
-                    Ok(OuterBoundKind::AdiplsIsothermal)
-                }
-                _ => Err(StarError::InvalidInput(format!(
-                    "unrecognized GYRE outer_bound '{val}' in '{}'",
-                    path.display()
-                ))),
-            };
-        }
-    }
-    Ok(OuterBoundKind::AdiplsIsothermal)
 }
 
 /// Evaluates spectroscopic and asteroseismic $\chi^2$ on `model` (`extras_support.f90:155-485`).
@@ -523,7 +473,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         let mod_chk = eval_frequency_ratios_with_trimming(
             &model_freqs_corr[0],
             &ctrl.freq_sigma[0],
@@ -534,7 +484,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         if obs_r.n == 0
             || mod_chk.n != obs_r.n
             || mod_chk.l0_first != obs_r.l0_first
@@ -668,7 +618,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
             0,
             0,
             0,
-        );
+        )?;
         ratios_n = obs_r.n;
         ratios_l0_first = obs_r.l0_first;
         ratios_l1_first = obs_r.l1_first;
@@ -683,7 +633,7 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
                 obs_r.n,
                 obs_r.l0_first,
                 obs_r.l1_first,
-            );
+            )?;
             let l0_mod_axis =
                 &model_freqs[0][obs_r.l0_first + 1..=obs_r.l0_first + obs_r.n];
             let l1_mod_axis =
@@ -803,11 +753,13 @@ pub(crate) fn eval_model_astero_sample_with_output_root(
     }
     if ctrl.trace_chi2_spectro_info {
         for i in 0..sp_obs.len() {
-            let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
-            println!(
-                "chi2_spectro_info {} val={:.6} obs={:.6} sigma={:.6} chi2term={:.6}",
-                sp_names[i], sp_mod[i], sp_obs[i], sp_sig[i], d * d
-            );
+            if sp_sig[i] > 0.0 {
+                let d = (sp_mod[i] - sp_obs[i]) / sp_sig[i];
+                println!(
+                    "chi2_spectro_info {} val={:.6} obs={:.6} sigma={:.6} chi2term={:.6}",
+                    sp_names[i], sp_mod[i], sp_obs[i], sp_sig[i], d * d
+                );
+            }
         }
         println!("chi2_spectro={chi2_spectro:.6}");
     }
@@ -977,12 +929,7 @@ struct MatchedDegreeWithAlt {
 
 enum DegreeScanner {
     Adipls(Box<AsteroAdipls>),
-    Gyre {
-        outer_bc: OuterBoundKind,
-        gyre_driver: Option<Box<AsteroGyre>>,
-        stored_for_gyre: bool,
-        output_root: std::path::PathBuf,
-    },
+    Gyre(Box<AsteroGyre>),
 }
 
 impl DegreeScanner {
@@ -1002,36 +949,24 @@ impl DegreeScanner {
             drv.set_output_root(output_root, &ctrl.astero_results_directory);
             Ok(Self::Adipls(Box::new(drv)))
         } else if osc_trimmed.eq_ignore_ascii_case("gyre") {
-            let outer_bc =
-                parse_gyre_outer_bound(case_dir, &ctrl.gyre_input_file)?;
-            let mesa_dir =
-                std::env::var("MESA_DIR").unwrap_or_else(|_| String::from("."));
-            let mut gyre_driver =
-                match AsteroGyre::init(case_dir, ctrl, &mesa_dir) {
-                    Ok(mut drv) => {
-                        drv.set_output_root(
-                            output_root,
-                            &ctrl.astero_results_directory,
-                        );
-                        drv.store_model(model)?;
-                        Some(Box::new(drv))
-                    }
-                    Err(_) => None,
-                };
-            let stored_for_gyre = gyre_driver.is_some();
-            if !stored_for_gyre
-                && (ctrl.write_fgong_for_each_model
-                    || ctrl.write_gyre_for_each_model)
-            {
-                write_per_model_pulse_files(model, ctrl, output_root)?;
-                gyre_driver = None;
+            // Upstream declares `gyre_non_ad` (`astero_def.f90:256,394`,
+            // `astero_search.defaults:1342`) without reading it in
+            // `astero_support.f90` or `gyre_support.f90`, so accept and ignore
+            // it here rather than inventing a rejection.
+            if ctrl.gyre_input_file.trim().is_empty() {
+                return Err(StarError::InvalidInput(String::from(
+                    "oscillation_code = 'gyre' requires a non-empty \
+                     gyre_input_file",
+                )));
             }
-            Ok(Self::Gyre {
-                outer_bc,
-                gyre_driver,
-                stored_for_gyre,
-                output_root: output_root.to_path_buf(),
-            })
+            let mesa_dir = std::env::var("MESA_DIR")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| String::from("."));
+            let mut drv = AsteroGyre::init(case_dir, ctrl, &mesa_dir)?;
+            drv.set_output_root(output_root, &ctrl.astero_results_directory);
+            drv.store_model(model)?;
+            Ok(Self::Gyre(Box::new(drv)))
         } else {
             Err(StarError::InvalidInput(format!(
                 "unrecognized oscillation_code '{}'",
@@ -1049,14 +984,14 @@ impl DegreeScanner {
         dnu_obs: f64,
         delta_nu_model: f64,
     ) -> Result<Option<MatchedDegreeWithAlt>, StarError> {
-        let (nu_lo, nu_hi) = scan_bounds_from_targets(
-            &ctrl.freq_target[l],
-            ctrl.nu_lower_factor,
-            ctrl.nu_upper_factor,
-            dnu_obs,
-        );
         match self {
             Self::Adipls(driver) => {
+                let (nu_lo, nu_hi) = scan_bounds_from_targets(
+                    &ctrl.freq_target[l],
+                    ctrl.nu_lower_factor,
+                    ctrl.nu_upper_factor,
+                    dnu_obs,
+                );
                 let raw_iscan =
                     (ctrl.iscan_factor[l] * (ctrl.nl[l] as f64)) as i32;
                 let iscan = raw_iscan.max(1);
@@ -1083,76 +1018,22 @@ impl DegreeScanner {
                     l,
                 ))
             }
-            Self::Gyre {
-                outer_bc,
-                gyre_driver,
-                stored_for_gyre,
-                output_root,
-            } => {
-                let el = i32::try_from(l).unwrap_or(0);
-                if !ctrl.gyre_non_ad {
-                    if let Some(drv) = gyre_driver.as_mut() {
-                        let store_now = !*stored_for_gyre;
-                        match drv.get_modes(model, el, store_now) {
-                            Ok(raw_modes) => {
-                                *stored_for_gyre = true;
-                                if ctrl.trace_time_in_oscillation_code {
-                                    if let Some(dt) =
-                                        drv.last_oscillation_elapsed_sec()
-                                    {
-                                        println!(
-                                            "gyre time_in_oscillation_code l={l} elapsed_s={dt:.6}"
-                                        );
-                                    }
-                                }
-                                return Ok(match_osc_results_with_alt(
-                                    &ctrl.freq_target[l],
-                                    &raw_modes,
-                                    l,
-                                ));
-                            }
-                            Err(e) if e.to_string().contains("not ported") => {}
-                            Err(e) => return Err(e),
-                        }
+            Self::Gyre(driver) => {
+                let el = i32::try_from(l).map_err(|_| {
+                    StarError::InvalidInput(format!(
+                        "degree l={l} overflows i32"
+                    ))
+                })?;
+                let store_now = driver.gyre.model().is_none();
+                let raw_modes = driver.get_modes(model, el, store_now)?;
+                if ctrl.trace_time_in_oscillation_code {
+                    if let Some(dt) = driver.last_oscillation_elapsed_sec() {
+                        println!(
+                            "gyre time_in_oscillation_code l={l} elapsed_s={dt:.6}"
+                        );
                     }
                 }
-                let t0 = Instant::now();
-                let n_scan = ((2.0
-                    * (ctrl.nl[l] as f64)
-                    * ctrl.iscan_factor[l].max(1.0))
-                    as usize)
-                    .clamp(240, 600);
-                let opts = PulseModeScanOptions {
-                    l,
-                    freq_min_uhz: nu_lo,
-                    freq_max_uhz: nu_hi,
-                    n_freq: n_scan,
-                    add_center_point: ctrl.add_center_point,
-                    keep_surface_point: ctrl.keep_surface_point,
-                    add_atmosphere: ctrl.add_atmosphere,
-                    outer_bc: *outer_bc,
-                    inertia_norm: InertiaNormKind::Both,
-                };
-                let raw_modes = scan_star_bvp_eigenmodes(model, &opts);
-                if ctrl.trace_time_in_oscillation_code {
-                    let dt = t0.elapsed().as_secs_f64();
-                    println!(
-                        "gyre time_in_oscillation_code l={l} elapsed_s={dt:.6}"
-                    );
-                }
-                if ctrl.save_mode_model_number > 0
-                    && model.model_number.cast_signed()
-                        == ctrl.save_mode_model_number
-                    && el == ctrl.el_to_save
-                {
-                    save_bvp_mode_if_requested(
-                        output_root,
-                        ctrl,
-                        el,
-                        &raw_modes,
-                    )?;
-                }
-                Ok(match_degree_modes_with_alt(
+                Ok(match_osc_results_with_alt(
                     &ctrl.freq_target[l],
                     &raw_modes,
                     l,
@@ -1160,137 +1041,6 @@ impl DegreeScanner {
             }
         }
     }
-}
-
-fn write_per_model_pulse_files(
-    model: &StarModel,
-    ctrl: &AsteroSearchControls,
-    output_root: &Path,
-) -> Result<(), StarError> {
-    let dir = output_root.join(&ctrl.astero_results_directory);
-    fs::create_dir_all(&dir).map_err(|e| {
-        StarError::IoError(format!(
-            "failed creating astero_results_directory '{}': {e}",
-            dir.display()
-        ))
-    })?;
-    let num_str = format!(
-        "{:0width$}",
-        model.model_number,
-        width = ctrl.model_num_digits
-    );
-    if ctrl.write_fgong_for_each_model {
-        let pulse_in =
-            flexmesa_star::pulse_fgong::PulseDataInput::from_model(model)
-                .map_err(|e| StarError::InvalidInput(e.to_string()))?;
-        let (fg_g, fg_p) = flexmesa_star::pulse_fgong::get_fgong_data(
-            &pulse_in,
-            ctrl.add_center_point,
-            ctrl.keep_surface_point,
-            ctrl.add_atmosphere,
-        )
-        .map_err(|e| StarError::InvalidInput(e.to_string()))?;
-        let fg_text = flexmesa_star::pulse_write::write_fgong_data(
-            &fg_g,
-            &fg_p,
-            &flexmesa_star::pulse::default_fgong_header(),
-            model.controls.fgong_ivers,
-        )
-        .map_err(|e| StarError::InvalidInput(e.to_string()))?;
-        let path = dir.join(format!(
-            "{}{}{}",
-            ctrl.fgong_prefix.trim(),
-            num_str,
-            ctrl.fgong_postfix.trim()
-        ));
-        fs::write(&path, fg_text).map_err(|e| {
-            StarError::IoError(format!(
-                "failed writing FGONG '{}': {e}",
-                path.display()
-            ))
-        })?;
-    }
-    if ctrl.write_gyre_for_each_model {
-        let (gd, pd) =
-            flexmesa_star::pulse_gyre_data::star_get_pulse_data_gyre(
-                model,
-                ctrl.add_center_point,
-                ctrl.keep_surface_point,
-                ctrl.add_atmosphere,
-            )
-            .map_err(|e| StarError::InvalidInput(e.to_string()))?;
-        let text = flexmesa_star::pulse_write::write_gyre_data(
-            &gd,
-            &pd,
-            model.controls.gyre_data_schema,
-        )
-        .map_err(|e| StarError::InvalidInput(e.to_string()))?;
-        let path = dir.join(format!(
-            "{}{}{}",
-            ctrl.gyre_prefix.trim(),
-            num_str,
-            ctrl.gyre_postfix.trim()
-        ));
-        fs::write(&path, text).map_err(|e| {
-            StarError::IoError(format!(
-                "failed writing GYRE '{}': {e}",
-                path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
-
-fn save_bvp_mode_if_requested(
-    output_root: &Path,
-    ctrl: &AsteroSearchControls,
-    el: i32,
-    modes: &[BvpEigenmode],
-) -> Result<(), StarError> {
-    if let Some(m) = modes.iter().find(|m| m.n_pg == ctrl.order_to_save) {
-        let rel = ctrl.save_mode_filename.trim();
-        let rel = if rel.is_empty() {
-            "save_mode.data"
-        } else {
-            rel
-        };
-        let path = if Path::new(rel).is_absolute() {
-            std::path::PathBuf::from(rel)
-        } else {
-            output_root.join(rel)
-        };
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StarError::IoError(format!(
-                    "failed creating save_mode_filename dir '{}': {e}",
-                    parent.display()
-                ))
-            })?;
-        }
-        let mut buf = String::new();
-        let _ = writeln!(
-            buf,
-            "{:>8}{:>8}{:>8}{:>20}{:>20}{:>20}",
-            "el", "order", "em", "freq (microHz)", "inertia", "growth rate (s)"
-        );
-        let _ = writeln!(
-            buf,
-            "{:8}{:8}{:8}{:20.10}{}{}",
-            el,
-            m.n_pg,
-            0,
-            m.freq_uhz,
-            fortran_1pe(m.e_norm, 20, 10, None),
-            fortran_1pe(0.0, 20, 10, None),
-        );
-        fs::write(&path, buf).map_err(|e| {
-            StarError::IoError(format!(
-                "failed writing save_mode_filename '{}': {e}",
-                path.display()
-            ))
-        })?;
-    }
-    Ok(())
 }
 
 fn match_osc_results_with_alt(
@@ -1352,61 +1102,398 @@ fn match_osc_results_with_alt(
     Some(out)
 }
 
-fn match_degree_modes_with_alt(
-    targets: &[f64],
-    modes: &[BvpEigenmode],
-    l: usize,
-) -> Option<MatchedDegreeWithAlt> {
-    let mut out = MatchedDegreeWithAlt {
-        freqs: Vec::with_capacity(targets.len()),
-        inertias: Vec::with_capacity(targets.len()),
-        orders: Vec::with_capacity(targets.len()),
-        freqs_alt_up: vec![0.0; targets.len()],
-        inertias_alt_up: vec![0.0; targets.len()],
-        orders_alt_up: vec![0; targets.len()],
-        freqs_alt_down: vec![0.0; targets.len()],
-        inertias_alt_down: vec![0.0; targets.len()],
-        orders_alt_down: vec![0; targets.len()],
-    };
-    let mut jprev: Option<usize> = None;
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    for (idx, &target_nu) in targets.iter().enumerate() {
-        let start = jprev.map_or(0, |jp| jp + 1);
-        if start >= modes.len() {
-            return None;
-        }
-        let mut best_j = start;
-        let mut best_d = (modes[start].freq_uhz - target_nu).abs();
-        for (j, m) in modes.iter().enumerate().skip(start) {
-            let d = (m.freq_uhz - target_nu).abs();
-            if d < best_d {
-                best_d = d;
-                best_j = j;
-            }
-            if m.freq_uhz > target_nu {
-                break;
-            }
-        }
-        out.freqs.push(modes[best_j].freq_uhz);
-        out.inertias.push(modes[best_j].e_norm.max(1.0e-30));
-        out.orders
-            .push(isize::try_from(modes[best_j].n_pg).unwrap_or(0));
-        if l > 0 {
-            if best_j > 0 {
-                let md = &modes[best_j - 1];
-                out.freqs_alt_down[idx] = md.freq_uhz;
-                out.inertias_alt_down[idx] = md.e_norm.max(1.0e-30);
-                out.orders_alt_down[idx] =
-                    isize::try_from(md.n_pg).unwrap_or(0);
-            }
-            if best_j + 1 < modes.len() {
-                let mu = &modes[best_j + 1];
-                out.freqs_alt_up[idx] = mu.freq_uhz;
-                out.inertias_alt_up[idx] = mu.e_norm.max(1.0e-30);
-                out.orders_alt_up[idx] = isize::try_from(mu.n_pg).unwrap_or(0);
-            }
-        }
-        jprev = Some(best_j);
+    use flexmesa_star::controls::{
+        AtmOption, AtmTTauOpacity, AtmTTauRelation, StarControls, StarError,
+        StarJobControls,
+    };
+    use flexmesa_star::model::StarModel;
+    use flexmesa_star::{load_zams_model, set_hydro_vars};
+
+    use super::{
+        eval_model_astero_sample, eval_spectro_and_delta_nu_chi2,
+        scan_and_save_mode_at_number,
+    };
+    use crate::inlist_astero::{AsteroSearchControls, MAX_CONSTRAINTS};
+
+    static TEST_DIR_SEQ: AtomicUsize = AtomicUsize::new(1);
+
+    struct TempDirGuard {
+        path: PathBuf,
     }
-    Some(out)
+
+    impl TempDirGuard {
+        fn new(tag: &str) -> Self {
+            let id = TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "flexmesa_sample_eval_{tag}_{}_{id}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).expect("create temp dir");
+            Self { path }
+        }
+
+        fn write(&self, rel: &str, text: &str) {
+            fs::write(self.path.join(rel), text).expect("write fixture file");
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    const VALID_L0_GYRE_IN: &str = "\
+&model
+/
+&mode
+  l = 0
+/
+&osc
+  outer_bound = 'VACUUM'
+  variables_set = 'JCD'
+/
+&rot
+/
+&num
+  diff_scheme = 'COLLOC_GL4'
+/
+&scan
+  grid_type = 'LINEAR'
+  freq_min = 1500
+  freq_max = 3500
+  freq_min_units = 'UHZ'
+  freq_max_units = 'UHZ'
+  n_freq = 40
+/
+&grid
+/
+";
+
+    fn hydrated_solar_zams() -> StarModel {
+        let controls = StarControls {
+            zbase: 0.02,
+            calculate_brunt_n2: true,
+            atm_option: AtmOption::TTau,
+            atm_t_tau_relation: AtmTTauRelation::Eddington,
+            atm_t_tau_opacity: AtmTTauOpacity::Fixed,
+            ..StarControls::default()
+        };
+        let mut model = load_zams_model(controls, StarJobControls::default())
+            .expect("zams");
+        set_hydro_vars(&mut model, false, true).expect("set_hydro_vars");
+        model
+    }
+
+    fn base_gyre_ctrl(
+        gyre_file: &str,
+        gyre_non_ad: bool,
+    ) -> AsteroSearchControls {
+        let mut ctrl = AsteroSearchControls {
+            oscillation_code: String::from("gyre"),
+            gyre_input_file: String::from(gyre_file),
+            gyre_non_ad,
+            nl: [1, 0, 0, 0],
+            ..AsteroSearchControls::default()
+        };
+        ctrl.freq_target[0] = vec![2000.0];
+        ctrl.freq_sigma[0] = vec![1.0];
+        ctrl.weights.chi2_seismo_fraction = 1.0;
+        ctrl
+    }
+
+    #[test]
+    fn gyre_init_failure_returns_explicit_error_without_bvp_fallback() {
+        let tmp = TempDirGuard::new("gyre_init_err");
+        let mut model = hydrated_solar_zams();
+        model.model_number = 5;
+
+        // 1. Missing gyre_input_file must return IoError, not BVP modes.
+        let missing_ctrl = base_gyre_ctrl("missing_gyre.in", false);
+        let missing_err = eval_model_astero_sample(
+            &model,
+            &missing_ctrl,
+            &[0.0; MAX_CONSTRAINTS],
+            missing_ctrl.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect_err("missing gyre.in must fail loudly");
+        assert!(
+            matches!(missing_err, StarError::IoError(_)),
+            "expected IoError, got {missing_err:?}"
+        );
+
+        // 2. Empty gyre_input_file must return InvalidInput.
+        let empty_ctrl = base_gyre_ctrl("   ", false);
+        let empty_err = eval_model_astero_sample(
+            &model,
+            &empty_ctrl,
+            &[0.0; MAX_CONSTRAINTS],
+            empty_ctrl.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect_err("empty gyre_input_file must fail loudly");
+        assert!(
+            matches!(empty_err, StarError::InvalidInput(_)),
+            "expected InvalidInput, got {empty_err:?}"
+        );
+
+        // 3. Invalid GYRE namelist (e.g. missing &model) must propagate
+        //    AsteroGyre::init's InvalidInput error (even when outer_bound is
+        //    present) rather than falling back to BVP.
+        tmp.write("bad_gyre.in", "&osc\n  outer_bound = 'VACUUM'\n/\n");
+        let bad_ctrl = base_gyre_ctrl("bad_gyre.in", false);
+        let bad_err = eval_model_astero_sample(
+            &model,
+            &bad_ctrl,
+            &[0.0; MAX_CONSTRAINTS],
+            bad_ctrl.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect_err("malformed gyre.in must fail loudly");
+        assert!(
+            matches!(bad_err, StarError::InvalidInput(ref m) if m.contains("&model")),
+            "expected GYRE &model InvalidInput, got {bad_err:?}"
+        );
+
+        let mut save_ctrl = bad_ctrl;
+        save_ctrl.save_mode_model_number = 5;
+        let save_err = scan_and_save_mode_at_number(
+            &model, &save_ctrl, &tmp.path, &tmp.path,
+        )
+        .expect_err("save_mode path must also fail loudly on init");
+        assert!(
+            matches!(save_err, StarError::InvalidInput(ref m) if m.contains("&model")),
+            "expected GYRE &model InvalidInput, got {save_err:?}"
+        );
+    }
+
+    #[test]
+    fn gyre_non_ad_is_accepted_and_ignored_like_upstream() {
+        let tmp = TempDirGuard::new("gyre_non_ad_ignored");
+        tmp.write("gyre.in", VALID_L0_GYRE_IN);
+        let mut model = hydrated_solar_zams();
+        model.model_number = 7;
+
+        let ctrl_ad = base_gyre_ctrl("gyre.in", false);
+        let ctrl_non_ad = base_gyre_ctrl("gyre.in", true);
+
+        let res_ad = eval_model_astero_sample(
+            &model,
+            &ctrl_ad,
+            &[0.0; MAX_CONSTRAINTS],
+            ctrl_ad.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect("l=0 GYRE sample eval with gyre_non_ad = false succeeds");
+        let res_non_ad = eval_model_astero_sample(
+            &model,
+            &ctrl_non_ad,
+            &[0.0; MAX_CONSTRAINTS],
+            ctrl_non_ad.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect("l=0 GYRE sample eval must accept and ignore gyre_non_ad");
+
+        assert_eq!(res_non_ad.chi2.to_bits(), res_ad.chi2.to_bits());
+        assert_eq!(res_non_ad.model_orders, res_ad.model_orders);
+        assert_eq!(
+            res_non_ad.model_freqs[0]
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>(),
+            res_ad.model_freqs[0]
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            res_non_ad.model_inertias[0]
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>(),
+            res_ad.model_inertias[0]
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>()
+        );
+
+        let mut save_ctrl = ctrl_non_ad;
+        save_ctrl.save_mode_model_number = 7;
+        save_ctrl.el_to_save = -1;
+        scan_and_save_mode_at_number(&model, &save_ctrl, &tmp.path, &tmp.path)
+            .expect("save_mode path must accept and ignore gyre_non_ad");
+    }
+
+    #[test]
+    fn gyre_unported_get_modes_returns_explicit_error_without_bvp_fallback() {
+        let tmp = TempDirGuard::new("gyre_unported_err");
+        // l = 1 with variables_set = 'DZIEM' initializes AsteroGyre cleanly and
+        // stores the model, then fails in AdBvp::new with GyreError::Unported.
+        tmp.write(
+            "gyre_l1_dziem.in",
+            "\
+&model
+/
+&mode
+  l = 1
+/
+&osc
+  outer_bound = 'VACUUM'
+  variables_set = 'DZIEM'
+/
+&rot
+/
+&num
+  diff_scheme = 'COLLOC_GL4'
+/
+&scan
+  grid_type = 'LINEAR'
+  freq_min = 1500
+  freq_max = 3500
+  freq_min_units = 'UHZ'
+  freq_max_units = 'UHZ'
+  n_freq = 40
+/
+&grid
+/
+",
+        );
+        let model = hydrated_solar_zams();
+        let mut ctrl = AsteroSearchControls {
+            oscillation_code: String::from("gyre"),
+            gyre_input_file: String::from("gyre_l1_dziem.in"),
+            gyre_non_ad: false,
+            nl: [0, 1, 0, 0],
+            ..AsteroSearchControls::default()
+        };
+        ctrl.freq_target[1] = vec![2000.0];
+        ctrl.freq_sigma[1] = vec![1.0];
+        ctrl.weights.chi2_seismo_fraction = 1.0;
+
+        let err = eval_model_astero_sample(
+            &model,
+            &ctrl,
+            &[0.0; MAX_CONSTRAINTS],
+            ctrl.first_params(),
+            1,
+            &tmp.path,
+        )
+        .expect_err("unported GYRE mode path must fail loudly");
+        assert!(
+            matches!(
+                err,
+                StarError::InvalidInput(ref m) if m.contains("not ported")
+            ),
+            "expected GYRE not ported error, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn chi2_spectro_reproduces_upstream_zero_neg_sigma_and_empty_cnt() {
+        use crate::ratios_chi2::eval_astero_chi2;
+
+        let model = hydrated_solar_zams();
+        let values = [0.0_f64; MAX_CONSTRAINTS];
+
+        // 1. Empty spectroscopic selection: NaN when normalized, 0.0 when unnormalized.
+        let mut ctrl = AsteroSearchControls {
+            include_age_in_chi2_spectro: false,
+            ..AsteroSearchControls::default()
+        };
+        ctrl.weights.normalize_chi2_spectro = true;
+        let (chi2_empty_norm, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert!(chi2_empty_norm.is_nan());
+
+        ctrl.weights.normalize_chi2_spectro = false;
+        let (chi2_empty_raw, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert_eq!(chi2_empty_raw.to_bits(), 0.0_f64.to_bits());
+
+        // 2. Constraint with `sigma == 0`: `+Inf` if `value != target`, `NaN` if equal.
+        ctrl.weights.normalize_chi2_spectro = true;
+        ctrl.indexed_constraints[0].include = true;
+        ctrl.indexed_constraints[0].target = 5777.0;
+        ctrl.indexed_constraints[0].sigma = 0.0;
+        let mut vals_diff = values;
+        vals_diff[0] = 5800.0;
+        let (chi2_inf, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        assert!(chi2_inf.is_infinite() && chi2_inf.is_sign_positive());
+
+        let mut vals_eq = values;
+        vals_eq[0] = 5777.0;
+        let (chi2_zero_div_zero, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_eq);
+        assert!(chi2_zero_div_zero.is_nan());
+
+        // 3. `include_age_in_chi2_spectro = true` with `age_sigma == 0` -> Inf.
+        ctrl.indexed_constraints[0].include = false;
+        ctrl.include_age_in_chi2_spectro = true;
+        ctrl.age_target = model.star_age + 1.0e8;
+        ctrl.age_sigma = 0.0;
+        let (chi2_age_inf, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &values);
+        assert!(chi2_age_inf.is_infinite() && chi2_age_inf.is_sign_positive());
+
+        // 4. Negative sigma is squared and included in `cnt`, matching `get_chi2_spectro`.
+        ctrl.include_age_in_chi2_spectro = false;
+        ctrl.indexed_constraints[0].include = true;
+        ctrl.indexed_constraints[0].target = 5777.0;
+        ctrl.indexed_constraints[0].sigma = -10.0;
+        let (chi2_neg_sig, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        let expected_term0 = flexmesa_math::pow2((5800.0_f64 - 5777.0) / -10.0);
+        assert_eq!(chi2_neg_sig.to_bits(), 0x4015_28F5_C28F_5C28);
+        assert_eq!(chi2_neg_sig.to_bits(), expected_term0.to_bits());
+
+        // Adding a second constraint confirms `cnt == 2` includes the negative-sigma term.
+        ctrl.indexed_constraints[1].include = true;
+        ctrl.indexed_constraints[1].target = 1.0;
+        ctrl.indexed_constraints[1].sigma = 2.0;
+        vals_diff[1] = 3.0;
+        let (chi2_two_terms, _, _) =
+            eval_spectro_and_delta_nu_chi2(&model, &ctrl, &vals_diff);
+        assert_eq!(
+            chi2_two_terms.to_bits(),
+            ((expected_term0 + 1.0) / 2.0).to_bits()
+        );
+
+        // Meanwhile `get_chi2` (`eval_astero_chi2`) still guards `sigma > 0`.
+        let (_, _, chi2_get_chi2, _, _, _) = eval_astero_chi2(
+            &ctrl.weights,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            &[5777.0],
+            &[-10.0],
+            &[5800.0],
+        );
+        assert_eq!(chi2_get_chi2.to_bits(), 0.0_f64.to_bits());
+    }
 }

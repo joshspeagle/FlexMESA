@@ -1,6 +1,7 @@
-// SPDX-License-Identifier: GPL-3.0-only
-//! Reference LAPACK 3.12.0 auxiliary routines (`SRC/*.f`, `*.f90`), double
-//! precision, as the MESA SDK `26.6.1` builds them (`gfortran -O2 -fPIC`).
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Reference LAPACK 3.12.0 auxiliary routines (`SRC/*.f`, `*.f90`, modified
+//! BSD licence), double precision, as the MESA SDK `26.6.1` builds them
+//! (`gfortran -O2 -fPIC`).
 
 use super::blas::{dasum, dcopy, dgemv, dger, dnrm2, dscal, dtrsv, idamax};
 use super::{dlamch, ix, lsame, LapackError};
@@ -11,7 +12,8 @@ fn unported(routine: &'static str, lines: &'static str) -> LapackError {
 
 /// gfortran `MAX(a, b)` for non-NaN reals.
 #[inline]
-pub(crate) fn fmax(a: f64, b: f64) -> f64 {
+#[must_use]
+pub fn fmax(a: f64, b: f64) -> f64 {
     if a > b {
         a
     } else {
@@ -21,7 +23,8 @@ pub(crate) fn fmax(a: f64, b: f64) -> f64 {
 
 /// gfortran `MIN(a, b)` for non-NaN reals.
 #[inline]
-pub(crate) fn fmin(a: f64, b: f64) -> f64 {
+#[must_use]
+pub fn fmin(a: f64, b: f64) -> f64 {
     if a < b {
         a
     } else {
@@ -32,7 +35,8 @@ pub(crate) fn fmin(a: f64, b: f64) -> f64 {
 /// Fortran `SIGN(a, b)` (`-fsign-zero`, the default): `|a|` with the sign
 /// bit of `b`.
 #[inline]
-pub(crate) fn sign(a: f64, b: f64) -> f64 {
+#[must_use]
+pub fn sign(a: f64, b: f64) -> f64 {
     a.abs().copysign(b)
 }
 

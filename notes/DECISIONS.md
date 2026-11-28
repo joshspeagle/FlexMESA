@@ -88,8 +88,11 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 71 | Large Oracle Bundles Are Opt-In (`#552`) | In force | below |
 | 72 | Every Test File Is Listed in `test_taxonomy.toml` with Enforced Provenance and Checked Routine Maps (`#563`) | In force | below |
 | 73 | Train Campaigns Run on GitHub Actions at 3,000 s per Case, with Step Counts Enforced (`#546`, `#576`, `#598`) | In force | below |
-| 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force | below |
+| 75 | Harness Expectations Are Checked Against MESA's Own Output; a Hook Terminate Without a Code Is Named by Its Hook (`#604`) | In force; second bullet amended by decision 77 | below |
 | 76 | A Case That Takes Zero Steps and Writes a Result File Is Judged on That File (`#606`) | In force | below |
+| 77 | Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`) | In force | below |
+| 78 | When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`) | In force | below |
+| 79 | A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -1009,3 +1012,40 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Leaving the case at `no reference yet`*: it would stay unmeasured.
   - *Judging the printed per-model lines only*: they carry 5 digits where the file carries 11.
 - **Note**: the case's status is switched, with its declared gap, in the pull request that brings the hook fixes of `#606`; until then the comparison is built and the case stays `no reference yet`.
+
+## DECISIONS #77: Python Star Extras Custom Termination Codes Use Upstream `t_xtra1..t_xtra9` Slots (`#579`)
+
+- **Date**: 2026-11-27
+- **Decision**: Amends the second bullet of `DECISIONS #75`: when an extras hook returns `"action": "terminate"` and sets `s% termination_code = t_xtra1..t_xtra9` rather than leaving `termination_code` unset (`0`) or at the hook default (`t_extras_check_model` / `t_extras_finish_step`), the run reports `termination_code_str(t_xtraN)` instead of the hook name. In Python star hooks (`extras_start_step`, `extras_check_model`, and `extras_finish_step` via `parse_star_directive`), a `"terminate"` dict may select `"termination_code_slot"` in `"t_xtra1".."t_xtra9"` (`star_data/public/star_data_def.inc:238-246`) and optional `"termination_code_str"`. Omitting `"termination_code_str"` emits upstream's default `"customize by setting termination_code_str(t_xtraN)"` (`star/private/star_private_def.f90:215-223`). Trailing whitespace on `"termination_code_str"` is stripped while leading whitespace is preserved, matching Fortran `character(len=128)` `trim()` and blank-padded comparison (`star_data/public/star_data_def.inc:250`, `star/job/run_star_support.f90:837-838,872`). Empty or whitespace-only `"termination_code_str"` raises `ValueError` (`DECISIONS #43`): upstream checks `len_trim /= 0` at initialization (`star/private/star_private_def.f90:225-236`), and although Fortran allows blank runtime overwrites (`run_star_support.f90:831-842,870-873`), `FlexMESA` encodes `s% termination_code == 0` as `""` in `termination_code_string_okay`, so returning `""` for `t_xtraN` would collide with `termination_code == 0` and bypass `required_termination_code_string`. Free-form `"termination_code"`, non-`t_xtra` slots, `"termination_code_str"` without `"termination_code_slot"`, slots on non-`"terminate"` dicts, and slots from other hooks (`other_timestep_limit`) raise `ValueError`.
+- **Why**: Upstream MESA does not let `run_star_extras` overwrite built-in termination strings (`star/private/star_private_def.f90:170-213`); custom stop strings are emitted only by setting `termination_code_str(t_xtraN)` and assigning `s% termination_code = t_xtra1..9`. Requiring explicit `t_xtra1..9` slots preserves built-in `extras_check_model` / `other_timestep_limit` diagnostics (`star/job/standard_run_star_extras.inc:83,228`) while wiring `star/test_suite/tzo`'s `t_xtra1` termination string (`star/test_suite/tzo/src/run_star_extras.f90:143-145`).
+- **Alternatives Rejected**:
+  - *Allowing free-form `"termination_code"` on any hook dict*: masks built-in codes without mapping to `t_xtra1..9`.
+  - *Allowing empty `"termination_code_str"`*: collides with `FlexMESA`'s `""` sentinel for `s% termination_code == 0` in `termination_code_string_okay`.
+  - *Disallowing custom termination strings in Python extras*: leaves `tzo` (`t_xtra1`, `"PASS: Have reached requested NS mass"`) unable to match MESA's `required_termination_code_string`.
+- **Note**: number `#74` is reserved by `#586`.
+
+## DECISIONS #78: When MESA Writes a Run's History to Several Files, the Reference Is Their Concatenation in Model Order (`#143`)
+
+- **Date**: 2026-11-27 (lane A)
+- **Decision**:
+  - The reference history of a `star` case is MESA's own history rows of the final stage from every history file the run wrote, in model order: `LOGS/history.data` followed by `LOGS/map_history.data` where one exists. The six header lines are MESA's; the files must have identical headers and the first model of a later file must exceed the last model of the earlier one, otherwise the builder stops with an error and writes nothing.
+  - MESA switches files because an RSP run with `RSP_write_map` sets `star_history_name` to `RSP_map_history_filename` when the map period starts (`star/private/rsp.f90:510,534-535`). Of the RSP cases only `star/rsp_Delta_Scuti` sets `RSP_write_map = .true.`; in MESA `26.4.1` its `history.data` stops at model 5810 and `map_history.data` holds models 5820 to 7973 with the same header. The other RSP runs have one file whose last model equals the step count.
+  - FlexMESA's per-case output used by the harness is one explicit history file with every model: the explicit-file writer does not rotate and the map step then gets no log directory (`inlist_runner.rs`, `mesa_profile.rs`). A run into a log directory does rotate, as upstream does (`rsp_parity_test.rs`). The reference therefore matches what the harness compares against.
+  - The builder (`scripts/data/build_mesa_histories.py`) also stores `map_history.data` in the bundle's `runs/` tree so the merge can be redone from the bundle.
+- **Why**: with the first file alone the reference for `rsp_Delta_Scuti` ended at model 5810, 27 percent short of MESA's 7973 steps, so the last 2,163 models were never compared and the final values of FlexMESA's last row were paired with MESA's model 5810.
+- **Alternatives Rejected**:
+  - *Truncate FlexMESA's history at MESA's first file*: hides the part of the run that is not compared and discards rows MESA wrote.
+  - *Compare only the first file*: the status quo, which leaves the end of the run unmeasured.
+  - *Make the harness reproduce the file switch*: it adds a second output to match and gives the comparison no new information.
+
+## DECISIONS #79: A Reviewed Routine Map Evidences a Raise from `absent` to `partial` (`#610`, `#174`)
+
+- **Date**: 2026-11-27 (project lead)
+- **Decision**:
+  - A pull request may raise a file in `port_manifest.toml` from `absent` to `partial` without changing any of its `flexmesa_files` when three conditions hold. First, every entry of the file's `routine_map` passes `routine_gate` (`routine_key` and `fn_item`) outright, with no allow-list credit. Second, the pull request adds or changes an independent review record in `notes/audit/routine_map_reviews/` that lists the file. Third, that record names its committed review text and gives the seed, the sample sizes and the counts of over-claims, under-claims, wrong targets and not-ported routines. The record format is in `notes/audit/routine_map_reviews/README.md`.
+  - The exception applies to this one raise only. `ported_unverified` still requires a change to the implementing files, and the verified tiers still require evidence artifacts or MESA case evidence. `_port_manifest_verify.py` checks the conditions mechanically. The judgement in the review is the reviewer's, and corrections it finds are applied before the raise. The independent audit can reopen a raise like any closed package (`DECISIONS #21`).
+- **Why**: the rule that a raise must touch the implementing files assumes the raise arrives with new code. Mapping work raises files whose Rust already exists. The `#610b` work mapped 104 GYRE and ADIPLS files, and an independent sample of 60 of those mappings found none that pointed at the wrong code. Under the old rule those files would stay `absent` until someone edited 28 Rust files only to satisfy the gate, and the dashboard would under-report the port.
+- **Alternatives Rejected**:
+  - *Keeping the code-edit rule*: the raise then waits for an unrelated code change, or invites no-op edits that satisfy the gate while hiding the actual evidence.
+  - *Allowing mapping-only raises up to `ported_unverified`*: that tier claims the whole public interface of the file is ported, which a sampled review cannot establish file by file.
+- **Note**: the first record is the `#610b` review (`notes/audit/routine_map_reviews/610b.md`); its `files` list stays empty until the corrected maps are converted.

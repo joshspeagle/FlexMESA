@@ -242,15 +242,8 @@ pub fn eval_conv_bdy_hp(model: &StarModel, i: usize) -> Result<f64, StarError> {
                 hp = dr / mw.overshoot_alpha;
             }
         } else {
-            let has_alpha = mx.alpha_mlt.len() == model.nz
-                && mx.alpha_mlt.iter().any(|&v| v > 0.0);
-            let alpha_k = if has_alpha {
-                mx.alpha_mlt[k]
-            } else {
-                model.controls.mixing_length_alpha
-            };
             // Verbatim `star/private/overshoot_utils.f90:219`.
-            if alpha_k * hp > dr {
+            if mx.alpha_mlt[k] * hp > dr {
                 hp = dr / model.controls.mixing_length_alpha;
             }
         }

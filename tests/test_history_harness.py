@@ -51,8 +51,13 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
     n_none = sum(
         1 for c in manifest.cases if c.reference_status == "no_reference_yet"
     )
+    n_art = sum(
+        1
+        for c in manifest.cases
+        if c.reference_status == "mesa_26_4_1_artifact"
+    )
     n_26 = sum(1 for c in manifest.cases if c.reference_status == "mesa_26_4_1")
-    assert (n_26, n_interim, n_none) == (102, 0, 4)
+    assert (n_26, n_art, n_interim, n_none) == (102, 1, 0, 3)
 
     by_key = manifest.by_key()
     assert (
@@ -63,7 +68,13 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
 
     root = case_manifest.repo_root()
     for entry in manifest.cases:
-        if entry.reference_status != "no_reference_yet":
+        if entry.reference_status == "mesa_26_4_1_artifact":
+            assert entry.artifact is not None
+            assert entry.reference_path == entry.artifact.reference
+            assert (root / entry.reference_path).is_file()
+            if entry.artifact.stdout_reference:
+                assert (root / entry.artifact.stdout_reference).is_file()
+        elif entry.reference_status != "no_reference_yet":
             ref_file = harness_runner.resolve_reference_history_path(
                 entry.reference_path, root_dir=root
             )
@@ -618,10 +629,10 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     assert not (ast_out / "freqs.dat").exists()
 
     # Smoke harness run writes Markdown + JSON with full 106-case counts.
-    # `starspots` sets only `&star_job::mesa_dir` beyond the ported controls,
-    # which is a supported key since #548 (`star/defaults/star_job.defaults:
-    # 10-18`), so the unmodified inlists pass strict validation and the run
-    # is labelled as a strict smoke run, not a diagnostic.
+    # `1.3M_ms_high_Z` is a `pr_ci = true` strict MESA `26.4.1` case that
+    # loads a saved model directly instead of running `starspots`'s pre-MS
+    # relaxation, so two steps complete in ~6 s vs ~50 s with zero ignored
+    # controls and zero weakened assertions.
     md_out = tmp_path / "smoke_table.md"
     js_out = tmp_path / "smoke_table.json"
     rc_h = cli.main(
@@ -629,7 +640,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             "harness",
             "run",
             "--cases",
-            "starspots",
+            "1.3M_ms_high_Z",
             "--max-steps",
             "2",
             "--timeout-sec",

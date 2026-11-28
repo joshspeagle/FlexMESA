@@ -394,11 +394,8 @@ fn test_inlist_runner_installs_handles_and_evolves_with_other_overshoot() {
 ",
     )
     .expect("write inlist");
-    fs::write(
-        &rn_path,
-        "#!/bin/bash\ndo_one inlist_other_overshoot final.mod\n",
-    )
-    .expect("write rn");
+    fs::write(&rn_path, "#!/bin/bash\ndo_one inlist_other_overshoot\n")
+        .expect("write rn");
 
     let mut extras = RunnerOvershootExtras {
         overshoot_calls: Arc::new(AtomicUsize::new(0)),

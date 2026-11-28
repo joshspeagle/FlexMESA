@@ -45,10 +45,12 @@ on:
         type: string
         default: ""
       timeout_sec:
-        description: "Per-case timeout in seconds"
+        description: >-
+          Per-case timeout in seconds; empty uses the case's row in
+          benchmarks/history_harness/case_budgets.toml
         required: false
         type: string
-        default: "3000"
+        default: ""
       max_rss_gb:
         description: "Per-case RSS memory budget in GiB"
         required: false
@@ -142,7 +144,7 @@ jobs:
     name: ${{ inputs.mode }} ${{ matrix.suite }}/${{ matrix.case }}
     needs: [plan, build]
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.plan.outputs.job_minutes) }}
+    timeout-minutes: ${{ matrix.job_minutes }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -195,7 +197,7 @@ jobs:
         env:
           MODE: ${{ inputs.mode }}
           WINDOW: ${{ inputs.window }}
-          TIMEOUT_SEC: ${{ inputs.timeout_sec }}
+          TIMEOUT_SEC: ${{ matrix.timeout_sec }}
           MAX_RSS_GB: ${{ inputs.max_rss_gb }}
           SUITE: ${{ matrix.suite }}
           CASE: ${{ matrix.case }}
@@ -235,10 +237,17 @@ jobs:
                 # Unsupported controls are ignored so the case reaches its
                 # first solver call; the case may not do what its inlist
                 # asks (DECISIONS #26), so read a difference with that in mind.
+                # The window id carries stage and occurrence (_s<S>_k<K>_...).
+                WINDOW_ARGS=$(python scripts/ci/case_run_inputs.py window-args \
+                  --window "$WINDOW") || { echo "bad window id" > "$LOG"; STATUS=1; }
+              fi
+              if [ "$STATUS" -eq 0 ]; then
+                # shellcheck disable=SC2086
                 flexmesa trace "$SUITE" "$CASE" \
                   --out "$OUT_DIR/trace" \
                   --numerics-mode strict \
                   --allow-unsupported-controls \
+                  $WINDOW_ARGS \
                   --timeout-sec "$TIMEOUT_SEC" \
                   --max-rss-gb "$MAX_RSS_GB" \
                   --compare "$DUMP" \

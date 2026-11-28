@@ -331,6 +331,7 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-const",
  "flexmesa-math",
+ "flexmesa-mtx",
  "flexmesa-utils",
 ]
 
@@ -550,6 +551,7 @@ dependencies = [
  "flexmesa-autodiff",
  "flexmesa-const",
  "flexmesa-math",
+ "flexmesa-mtx",
  "flexmesa-testing",
  "flexmesa-utils",
  "serde",

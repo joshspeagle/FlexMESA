@@ -25,12 +25,15 @@
 //!
 //! # Scope
 //!
-//! The ported paths are those GYRE's calls reach (measured by line
-//! coverage in package G0) plus the small branches next to them. Paths
-//! that GYRE's calls never take and that would need further routines
-//! (blocked algorithms for blocks larger than the `ILAENV` block size,
-//! `DLASCL` rescaling of tiny or huge matrices, the careful-solve path of
-//! `DLATRS`, the `DLASQ1` path of `DBDSQR`) return
+//! The real auxiliary, BLAS, and LU subset (`aux`, `blas`, `lu`,
+//! `LapackError`, `ix`, `lsame`, `dlamch`, `ilaenv_nb`, `ilaenv_mnthr`) is
+//! hosted in [`flexmesa_mtx::lapack`] and re-exported here; the remaining
+//! modules (`svd`, `eig`, `z*`) stay in `flexmesa-gyre`. The ported paths are
+//! those GYRE's calls reach (measured by line coverage in package G0) plus the
+//! small branches next to them. Paths that GYRE's calls never take and that
+//! would need further routines (blocked algorithms for blocks larger than the
+//! `ILAENV` block size, `DLASCL` rescaling of tiny or huge matrices, the
+//! careful-solve path of `DLATRS`, the `DLASQ1` path of `DBDSQR`) return
 //! [`LapackError::UnportedPath`] instead of computing something different.
 //!
 //! # Conventions
@@ -40,6 +43,10 @@
 //! sub-matrix argument `A(i,j)` is the slice starting at that element.
 //! Character options are ASCII bytes compared case-insensitively
 //! (`LSAME`).
+
+pub use flexmesa_mtx::lapack::{
+    aux, blas, dlamch, ilaenv_mnthr, ilaenv_nb, ix, lsame, lu, LapackError,
+};
 
 // The routines mirror the Fortran one to one: argument lists, local names
 // (`ll`/`lll`, `smin`/`sminl`), loop bounds written `a..n + 1` for
@@ -60,9 +67,6 @@ macro_rules! lapack_mod {
         pub mod $name;
     };
 }
-lapack_mod!(aux);
-lapack_mod!(blas);
-lapack_mod!(lu);
 lapack_mod!(svd);
 lapack_mod!(zaux);
 lapack_mod!(zblas);
@@ -70,93 +74,3 @@ lapack_mod!(zlu);
 lapack_mod!(zsvd);
 lapack_mod!(eig);
 lapack_mod!(zeig);
-
-/// Errors from the LAPACK port.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LapackError {
-    /// Upstream would call `XERBLA` (invalid argument number `info`).
-    IllegalArgument {
-        /// Routine name.
-        routine: &'static str,
-        /// Negative `INFO` upstream would report.
-        info: i32,
-    },
-    /// A branch GYRE's calls never reach and that is not ported.
-    UnportedPath {
-        /// Routine name.
-        routine: &'static str,
-        /// Upstream source lines of the branch.
-        lines: &'static str,
-    },
-}
-
-impl std::fmt::Display for LapackError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IllegalArgument { routine, info } => {
-                write!(f, "{routine}: illegal argument (INFO = {info})")
-            }
-            Self::UnportedPath { routine, lines } => write!(
-                f,
-                "{routine}: branch at lines {lines} of the Reference LAPACK 3.12.0 \
-                 source is not ported (never reached by GYRE's calls)"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for LapackError {}
-
-/// Column-major index of 1-based `(i, j)` with leading dimension `ld`.
-#[inline]
-#[must_use]
-pub const fn ix(i: usize, j: usize, ld: usize) -> usize {
-    (i - 1) + (j - 1) * ld
-}
-
-/// `LSAME(ca, cb)`: case-insensitive ASCII comparison.
-#[inline]
-#[must_use]
-pub fn lsame(ca: u8, cb: u8) -> bool {
-    ca.eq_ignore_ascii_case(&cb)
-}
-
-/// `DLAMCH` constants (`INSTALL/dlamch.f`, binary64, round-to-nearest).
-pub mod dlamch {
-    /// `DLAMCH('E')`: relative machine epsilon `EPSILON(0d0)*0.5 = 2**-53`.
-    pub const EPS: f64 = f64::from_bits(0x3CA0_0000_0000_0000);
-    /// `DLAMCH('S')`: safe minimum `TINY(0d0) = 2**-1022`.
-    pub const SFMIN: f64 = f64::from_bits(0x0010_0000_0000_0000);
-    /// `DLAMCH('B')`: base 2.
-    pub const BASE: f64 = 2.0;
-    /// `DLAMCH('P')`: `EPS*BASE = 2**-52`.
-    pub const PREC: f64 = f64::from_bits(0x3CB0_0000_0000_0000);
-    /// `DLAMCH('O')`: `HUGE(0d0)`.
-    pub const RMAX: f64 = f64::MAX;
-    /// `DLAMCH('U')`: `TINY(0d0)`.
-    pub const RMIN: f64 = f64::from_bits(0x0010_0000_0000_0000);
-}
-
-/// `ILAENV(1, name, ...)` block sizes for the routines ported here
-/// (`SRC/ilaenv.f:269-516`).
-#[must_use]
-pub const fn ilaenv_nb(name: &str) -> i32 {
-    match name.as_bytes() {
-        b"DGETRF" => 64,
-        b"DGEQRF" | b"DGELQF" | b"DGEBRD" | b"DORGQR" | b"DORGLQ" => 32,
-        // ILAENV's default for names it does not list
-        _ => 1,
-    }
-}
-
-/// `ILAENV(6, 'DGESVD', ...)`: `INT(REAL(MIN(N1,N2))*1.6E0)` in `REAL(4)`.
-#[must_use]
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
-pub fn ilaenv_mnthr(n1: usize, n2: usize) -> usize {
-    let p = n1.min(n2) as f32 * 1.6_f32;
-    p as usize
-}

@@ -1422,7 +1422,7 @@ fn eval_scalar_column(
     model: &StarModel,
     ctx: &StepReportContext,
     astero_cache: &mut Option<(f64, f64, f64, f64)>,
-) -> MesaCellValue {
+) -> Result<MesaCellValue, StarError> {
     let nz = model.nz;
     let star_mass = model.mstar / M_SUN;
     let star_mdot = model.mstar_dot / (M_SUN / SECYER);
@@ -1448,7 +1448,7 @@ fn eval_scalar_column(
     let sh = &model.aux.step_hist;
     let e_end = ctx.energies_erg.5;
 
-    match name {
+    Ok(match name {
         "model_number" => MesaCellValue::Int(model.model_number as i64),
         "num_zones" | "zones" => MesaCellValue::Int(nz as i64),
         "species" => MesaCellValue::Int(model.species as i64),
@@ -1872,22 +1872,22 @@ fn eval_scalar_column(
             -99.0
         }),
         "log_cntr_T" | "log_center_T" => {
-            MesaCellValue::Float(center_value(model, &model.ln_t) / LN10)
+            MesaCellValue::Float(center_value(model, &model.ln_t)? / LN10)
         }
         "log_cntr_Rho" | "log_center_Rho" => {
-            MesaCellValue::Float(center_value(model, &model.lnd) / LN10)
+            MesaCellValue::Float(center_value(model, &model.lnd)? / LN10)
         }
         "log_cntr_P" | "log_center_P" => {
-            MesaCellValue::Float(center_value(model, &model.ln_peos) / LN10)
+            MesaCellValue::Float(center_value(model, &model.ln_peos)? / LN10)
         }
         "center_T" => MesaCellValue::Float(flexmesa_math::exp10(
-            center_value(model, &model.ln_t) / LN10,
+            center_value(model, &model.ln_t)? / LN10,
         )),
         "center_Rho" => MesaCellValue::Float(flexmesa_math::exp10(
-            center_value(model, &model.lnd) / LN10,
+            center_value(model, &model.lnd)? / LN10,
         )),
         "center_P" => MesaCellValue::Float(flexmesa_math::exp10(
-            center_value(model, &model.ln_peos) / LN10,
+            center_value(model, &model.ln_peos)? / LN10,
         )),
 
         "total_entropy" => MesaCellValue::Float(
@@ -2305,35 +2305,41 @@ fn eval_scalar_column(
             1.0
         }),
         "center_degeneracy" => {
-            MesaCellValue::Float(center_value(model, &model.eta))
+            MesaCellValue::Float(center_value(model, &model.eta)?)
         }
         "center_eps_nuc" => {
-            MesaCellValue::Float(center_value(model, &model.eps_nuc))
+            MesaCellValue::Float(center_value(model, &model.eps_nuc)?)
         }
         "log_center_eps_nuc" => MesaCellValue::Float(safe_log10(center_value(
             model,
             &model.eps_nuc,
-        ))),
+        )?)),
         "d_center_eps_nuc_dlnT" => {
-            MesaCellValue::Float(center_value(model, &model.d_epsnuc_dlnt))
+            MesaCellValue::Float(center_value(model, &model.d_epsnuc_dlnt)?)
         }
         "d_center_eps_nuc_dlnd" => {
-            MesaCellValue::Float(center_value(model, &model.d_epsnuc_dlnd))
+            MesaCellValue::Float(center_value(model, &model.d_epsnuc_dlnd)?)
         }
         "center_eps_grav" => MesaCellValue::Float(center_value_by(
             model,
             model.eps_grav_ad.len(),
             |k| model.eps_grav_ad[k].val,
-        )),
+        )?),
         "center_non_nuc_neu" => {
-            MesaCellValue::Float(center_value(model, &model.non_nuc_neu))
+            MesaCellValue::Float(center_value(model, &model.non_nuc_neu)?)
         }
-        "center_gamma" => MesaCellValue::Float(center_value(model, &model.gam)),
-        "center_zbar" => MesaCellValue::Float(center_value(model, &model.zbar)),
-        "center_abar" => MesaCellValue::Float(center_value(model, &model.abar)),
-        "center_mu" => MesaCellValue::Float(center_value(model, &model.mu)),
-        "center_ye" => MesaCellValue::Float(center_value(model, &model.ye)),
-        "center_entropy" => MesaCellValue::Float(ctx.center_entropy(model)),
+        "center_gamma" => {
+            MesaCellValue::Float(center_value(model, &model.gam)?)
+        }
+        "center_zbar" => {
+            MesaCellValue::Float(center_value(model, &model.zbar)?)
+        }
+        "center_abar" => {
+            MesaCellValue::Float(center_value(model, &model.abar)?)
+        }
+        "center_mu" => MesaCellValue::Float(center_value(model, &model.mu)?),
+        "center_ye" => MesaCellValue::Float(center_value(model, &model.ye)?),
+        "center_entropy" => MesaCellValue::Float(ctx.center_entropy(model)?),
         "max_entropy" => MesaCellValue::Float(if nz > 0 {
             flexmesa_math::exp(
                 model.ln_s[..nz]
@@ -2347,7 +2353,7 @@ fn eval_scalar_column(
         }),
         "center_omega" => {
             MesaCellValue::Float(if model.controls.rotation_flag {
-                center_value(model, &model.omega)
+                center_value(model, &model.omega)?
             } else {
                 0.0
             })
@@ -2361,7 +2367,7 @@ fn eval_scalar_column(
                     } else {
                         0.0
                     }
-                })
+                })?
                 .min(1.0)
             } else {
                 0.0
@@ -2840,16 +2846,16 @@ fn eval_scalar_column(
         "H_rich" => MesaCellValue::Float(
             star_mass - ctx.cores.he_core_mass.max(ctx.cores.co_core_mass),
         ),
-        "H_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "h1")),
+        "H_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "h1")?),
         "He_cntr" => MesaCellValue::Float(
-            center_avg_x_by_name(model, "he3")
-                + center_avg_x_by_name(model, "he4"),
+            center_avg_x_by_name(model, "he3")?
+                + center_avg_x_by_name(model, "he4")?,
         ),
-        "C_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "c12")),
-        "N_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "n14")),
-        "O_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "o16")),
-        "Ne_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "ne20")),
-        "Si_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "si28")),
+        "C_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "c12")?),
+        "N_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "n14")?),
+        "O_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "o16")?),
+        "Ne_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "ne20")?),
+        "Si_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "si28")?),
         "eta_cntr" => {
             MesaCellValue::Float(if nz > 0 { model.eta[nz - 1] } else { 0.0 })
         }
@@ -3013,7 +3019,7 @@ fn eval_scalar_column(
         other => unreachable!(
             "validated history scalar column {other:?} missing evaluator arm"
         ),
-    }
+    })
 }
 
 /// Evaluates `(fe_core_infall, non_fe_core_infall)` in $\mathrm{cm\,s^{-1}}$
@@ -3185,12 +3191,12 @@ pub fn evaluate_star_history_row_with_ctx(
     let mut colors_cache: Option<ColorsEvalOutput> = None;
 
     let nz = model.nz;
-    Ok(specs
+    specs
         .iter()
         .map(|sp| {
             let val = match sp {
                 HistoryColumnSpec::Scalar(name) => {
-                    eval_scalar_column(name, model, ctx, &mut astero_cache)
+                    eval_scalar_column(name, model, ctx, &mut astero_cache)?
                 }
                 HistoryColumnSpec::CategoryLuminosity(cid) => {
                     MesaCellValue::Float(safe_log10(ctx.cat_lum_lsun[cid - 1]))
@@ -3204,7 +3210,7 @@ pub fn evaluate_star_history_row_with_ctx(
                     let slot = iso_slot_for_chem_id(model, *cid);
                     let v = match q {
                         HistoryIsoQuery::Center => {
-                            center_avg_x_slot(model, slot)
+                            center_avg_x_slot(model, slot)?
                         }
                         HistoryIsoQuery::Surface => {
                             surface_avg_x_slot(model, slot)
@@ -3216,7 +3222,7 @@ pub fn evaluate_star_history_row_with_ctx(
                             star_avg_x_slot(model, slot) * model.xmstar / M_SUN
                         }
                         HistoryIsoQuery::LogCenter => {
-                            safe_log10(center_avg_x_slot(model, slot))
+                            safe_log10(center_avg_x_slot(model, slot)?)
                         }
                         HistoryIsoQuery::LogSurface => {
                             safe_log10(surface_avg_x_slot(model, slot))
@@ -3321,9 +3327,9 @@ pub fn evaluate_star_history_row_with_ctx(
                     )
                 }
             };
-            (sp.column_name(), val)
+            Ok((sp.column_name(), val))
         })
-        .collect())
+        .collect::<Result<Vec<_>, StarError>>()
 }
 
 fn eval_photosphere_xz(

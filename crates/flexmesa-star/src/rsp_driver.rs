@@ -410,6 +410,7 @@ pub fn rsp_one_step_with_extras(
     log_dir: Option<&Path>,
     extras: &mut dyn StarExtras,
 ) -> Result<(usize, usize), StarError> {
+    crate::hydro_vars::check_other_cgrav_step_call_points(model)?;
     let nz = model.nz;
     let dc = RspDerivedConsts::from_config(&model.controls.rsp, nz);
     let chem = RspChemCache::from_controls(

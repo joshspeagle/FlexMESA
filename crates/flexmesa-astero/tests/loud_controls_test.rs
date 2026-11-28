@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use flexmesa_astero::inlist_astero::{
     parse_astero_search_controls, parse_astero_search_controls_with_options,
 };
-use flexmesa_astero::sample_eval::parse_gyre_outer_bound;
 use flexmesa_star::{InlistLoadOptions, StarError};
 
 struct TempAsteroGuard {
@@ -168,14 +167,6 @@ fn test_astero_option_strings_and_missing_files_fail_loudly() {
         fs::write(d.join("inlist_astero_search_controls"), body).expect("w");
         assert!(parse_astero_search_controls(&d).is_err());
     }
-
-    assert!(parse_gyre_outer_bound(&tmp.root, "missing_gyre.in").is_err());
-    fs::write(
-        tmp.root.join("gyre_bad.in"),
-        "&osc\n  outer_bound = 'BOGUS'\n/\n",
-    )
-    .expect("write");
-    assert!(parse_gyre_outer_bound(&tmp.root, "gyre_bad.in").is_err());
 
     let from_file_dir = tmp.root.join("from_file_bad");
     fs::create_dir_all(&from_file_dir).expect("mkdir");

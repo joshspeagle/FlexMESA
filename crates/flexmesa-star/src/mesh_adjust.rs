@@ -26,7 +26,7 @@ pub use crate::mesh_remap::{
     remap_onto_dq, solve_cell_lnt_for_energy, CellType, StandardMeshPlan,
 };
 use crate::mesh_remap::{
-    clean_up_fractions_slice, compute_xqs, count_plan_splits_and_merges,
+    clean_up_fractions_remesh, compute_xqs, count_plan_splits_and_merges,
     execute_adjust_mesh_from_plan_with, fix_tail_dq,
 };
 use crate::model::StarModel;
@@ -400,7 +400,7 @@ pub fn try_plan_standard_mesh(
     }
 
     let mut xa_clean = model.xa.clone();
-    clean_up_fractions_slice(&mut xa_clean, nz, model.species, 10.0, 1.0e-2)?;
+    clean_up_fractions_remesh(&mut xa_clean, nz, model.species)?;
     try_plan_standard_mesh_with_cleaned_xa(model, &mw, &xa_clean, false)
 }
 
@@ -644,9 +644,10 @@ fn do_adjust_mesh_with(
         return Ok((0, 0));
     }
 
-    // Upstream `adjust_mesh.f90:109` runs `clean_up_fractions` on `s% xa`
-    // before `check_validity`, `get_gval_info`, and `do_mesh_plan`.
-    clean_up_fractions_slice(&mut model.xa, nz, model.species, 10.0, 1.0e-2)?;
+    // Upstream `adjust_mesh.f90:109-116` runs `clean_up_fractions` on `s% xa`
+    // before `check_validity`, `get_gval_info`, and `do_mesh_plan`, returning
+    // `remesh = retry` on failure.
+    clean_up_fractions_remesh(&mut model.xa, nz, model.species)?;
 
     // Upstream `star/private/adjust_mesh.f90:155-159, 280` copies
     // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before clamping

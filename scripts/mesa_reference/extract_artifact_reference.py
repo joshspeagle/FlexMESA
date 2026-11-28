@@ -6,7 +6,7 @@
 hook writes `7B_2nd_crossing.data` and prints one block per scanned model.
 The harness compares a run's file with the copy committed under
 `benchmarks/history_harness/reference_artifacts/<suite>/<case>/`. This script
-rebuilds that directory from the stored MESA run of the `mesa-histories-v1`
+rebuilds that directory from the stored MESA run of the `mesa-histories-v2`
 data bundle:
 
 * the MESA-written file, byte for byte;
@@ -41,7 +41,7 @@ from flexmesa.data import fetch
 SUITE = "star"
 CASE = "rsp_check_2nd_crossing"
 ARTIFACT = "7B_2nd_crossing.data"
-BUNDLE = "mesa-histories-v1"
+BUNDLE = "mesa-histories-v2"
 _SCRIPT = "scripts/mesa_reference/extract_artifact_reference.py"
 _BLOCK_RE = re.compile(r"call star_do1_rsp_build model Teff L\s+\d+\s")
 

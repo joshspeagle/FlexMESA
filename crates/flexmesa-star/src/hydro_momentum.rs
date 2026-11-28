@@ -44,9 +44,7 @@ use crate::star_ad::{
 #[inline]
 pub fn eval_p_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    if model.controls.using_velocity_time_centering
         && model.controls.include_p_in_velocity_time_centering
         && logt
             <= model
@@ -72,7 +70,7 @@ pub fn eval_mlt_pturb_cell_ad(
     if model.controls.mlt_pturb_factor <= 0.0 {
         return StarAdOrder1::ZERO;
     }
-    let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+    let vc_old = model.aux.mlt_vc_old[k];
     if vc_old <= 0.0 {
         return StarAdOrder1::ZERO;
     }
@@ -95,13 +93,10 @@ pub fn eval_time_centered_hse_geom_ad(
 ) -> (StarAdOrder1, StarAdOrder1) {
     let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
     let r_k = lnr_k.exp();
-    let using_v_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    let using_v_tc = model.controls.using_velocity_time_centering
         && (model.controls.v_flag || model.controls.u_flag)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
-    let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
+        && model.dt > 0.0;
+    let lnr_start_k = model.ln_r_start[k];
     let r2 = if using_v_tc {
         let r_start = flexmesa_math::exp(lnr_start_k).max(1.0);
         (r_k * r_start).max(StarAdOrder1::ONE)
@@ -198,15 +193,10 @@ pub fn get_area_info_opt_time_center(
         StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp()
     };
     let r2_00 = r_00.pow2();
-    if model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-    {
+    if model.controls.using_velocity_time_centering {
         // `r_start(k)` is saved from `r(k) = exp(lnR(k))` at the start of the
         // step; `ln_r_start` holds that `lnR(k)`.
-        let r_start = flexmesa_math::exp(
-            model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
-        );
+        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
         let area = FOUR_PI * (r2_00 + r_00 * r_start + r_start * r_start) / 3.0;
         let inv_r2 = 1.0 / (r_00 * r_start);
         (area, inv_r2)
@@ -409,6 +399,12 @@ pub fn expected_non_hse_term(model: &StarModel, k: usize) -> StarAdOrder1 {
                     non_hse = non_hse + uq;
                 }
             }
+        } else if model.controls.tdc_alpha_m > 0.0
+            && model.controls.mlt_option == flexmesa_turb::MltOption::Tdc
+        {
+            // `Uq_ad = compute_tdc_Uq_face(s, k, ierr)`
+            // (`star/private/hydro_momentum.f90:433-436`).
+            non_hse = non_hse + crate::tdc_hydro::compute_tdc_uq_face(model, k);
         }
     }
 
@@ -473,7 +469,7 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     };
     let iptotavg_ad = 1.0 / ptotavg_ad;
     // `setup_d_mlt_Pturb`
-    let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+    let vc_old = model.aux.mlt_vc_old[k];
     let d_mlt_pturb_ad =
         if model.controls.mlt_pturb_factor > 0.0 && vc_old > 0.0 {
             let rho_00 = wrap_d_00(model, k);
@@ -576,9 +572,7 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let v00 = StarAdOrder1::variable(vel_curr, I_V_00);
         v00 / model.aux.csound_start[k]
     } else {
-        let vel_tc = model
-            .controls
-            .is_velocity_time_centered(model.model_number_old);
+        let vel_tc = model.controls.using_velocity_time_centering;
         let v_ad = if model.controls.v_flag {
             let v_var = StarAdOrder1::variable(model.v[k], I_V_00);
             if vel_tc {
@@ -609,9 +603,7 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let dr_div_r0_actual = dxh_lnr.expm1();
         // `dr_div_r0_expected = v00*s% dt/s% r_start(k)` (`:585-586`), with
         // `r_start = exp(lnR_start)` as `set_rv_info` sets `r`.
-        let r_start = flexmesa_math::exp(
-            model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
-        );
+        let r_start = flexmesa_math::exp(model.ln_r_start[k]);
         let dr_div_r0_expected = v_ad * model.dt / r_start;
         dr_div_r0_expected - dr_div_r0_actual
     };

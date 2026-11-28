@@ -227,6 +227,21 @@ pub trait TurbScalar:
     /// Evaluates $\arctan(x)$.
     #[must_use]
     fn atan(self) -> Self;
+
+    /// Evaluates the `eval_xis` subexpressions that upstream computes in the
+    /// structure (`auto_diff_real_star_order1`) type before `convert` lifts
+    /// them (`turb/private/tdc_support.f90:537-557`).
+    ///
+    /// Only the lifted Newton-solver scalar overrides this, because only
+    /// there do the structure-type quotient and power rules round the
+    /// partials differently from the lifted type's own. Value-only and
+    /// structure-type scalars return `None` and use the generic path.
+    #[must_use]
+    fn star_xi_terms(
+        _info: &tdc_support::TdcInfo<Self>,
+    ) -> Option<tdc_support::StarXiTerms<Self>> {
+        None
+    }
 }
 
 impl TurbScalar for f64 {

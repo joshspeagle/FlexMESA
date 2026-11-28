@@ -41,12 +41,13 @@ use crate::star_ad::{
 };
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
-/// (`get_Pvsc_ad` in `star/private/star_utils.f90:3454-3482`).
+/// (`get_Pvsc_ad` in `star/private/star_utils.f90:3441-3469`). The
+/// `s% Pvsc_start` side effect is `capture_pvsc_start`.
 #[must_use]
 pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     if !model.controls.use_pvsc_art_visc
         || !model.controls.v_flag
-        || model.controls.pvsc_cq <= 0.0
+        || model.controls.pvsc_cq == 0.0
     {
         return StarAdOrder1::ZERO;
     }
@@ -58,12 +59,57 @@ pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     };
     let peos_00 = model.ln_peos_ad[k].exp();
     let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-    let peos_div_rho = (peos_00 / rho_00).max(StarAdOrder1::constant(1.0e-30));
+    let peos_div_rho = peos_00 / rho_00;
     let dv = (v_p1 - v_00) - model.controls.pvsc_zshock * peos_div_rho.sqrt();
     if dv.val <= 0.0 {
         return StarAdOrder1::ZERO;
     }
-    rho_00 * model.controls.pvsc_cq * (dv * dv)
+    rho_00 * model.controls.pvsc_cq * dv.pow2()
+}
+
+/// `s% Pvsc_start(k)` as `get_Pvsc_ad` leaves it once it has evaluated
+/// `Pvsc(k) = pvsc` (`star/private/star_utils.f90:3452-3468`): the value
+/// captured earlier in the step, or `pvsc` itself while the
+/// [`crate::hydro_state::PVSC_START_UNSET`] sentinel is still in place
+/// (`pvsc` is zero when `get_Pvsc_ad` returns early).
+#[must_use]
+pub(crate) fn pvsc_start_after_get(
+    model: &StarModel,
+    k: usize,
+    pvsc: f64,
+) -> f64 {
+    match model.aux.pvsc_start.get(k) {
+        Some(&start) if start < 0.0 => pvsc,
+        Some(&start) => start,
+        None => pvsc,
+    }
+}
+
+/// Stores the `s% Pvsc_start` side effect of the first `get_Pvsc_ad` call of
+/// a step (`star/private/star_utils.f90:3452-3468`): a cell still holding the
+/// `-1d99` sentinel set by `save_start_values`
+/// (`star/private/struct_burn_mix.f90:313`) takes `Pvsc` at the current
+/// state, zero when `get_Pvsc_ad` returns early, and keeps it for the rest of
+/// the step. Upstream calls `get_Pvsc_ad` only under `use_Pvsc_art_visc`
+/// (`star/private/hydro_energy.f90:710`, `star/private/star_utils.f90:3411`),
+/// and every call inside one `eval_equations` sees the same state, so a pass
+/// over all cells before the equations are assembled stores the same values.
+pub(crate) fn capture_pvsc_start(model: &mut StarModel) {
+    if !model.controls.use_pvsc_art_visc {
+        return;
+    }
+    let nz = model.nz;
+    if model.aux.pvsc_start.len() != nz {
+        model
+            .aux
+            .pvsc_start
+            .resize(nz, crate::hydro_state::PVSC_START_UNSET);
+    }
+    for k in 0..nz {
+        if model.aux.pvsc_start[k] < 0.0 {
+            model.aux.pvsc_start[k] = eval_pvsc_cell_ad(model, k).val;
+        }
+    }
 }
 
 /// Evaluates effective cell pressure $P_{\mathrm{cell},k}$ including optional
@@ -95,9 +141,7 @@ pub fn eval_cell_pressure_for_work_ad(
 #[must_use]
 pub(crate) fn eval_l_theta(model: &StarModel, k: usize) -> f64 {
     let logt = model.ln_t[k] / LN10;
-    if model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
+    if model.controls.using_velocity_time_centering
         && model.controls.include_l_in_velocity_time_centering
         && logt
             <= model
@@ -198,11 +242,15 @@ fn setup_rti_diffusion(model: &StarModel, k: usize) -> StarAdOrder1 {
 /// Evaluates all nuclear, neutrino, extra, diffusion, premix, phase-separation,
 /// turbulent work, RTI diffusion, drag, and irradiation heating terms for cell
 /// `k` (`setup_sources_and_others` in `star/private/hydro_energy.f90:230-330`).
-#[must_use]
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] when the TDC eddy-viscous heating term
+/// is active (`star/private/hydro_energy.f90:268-277`): it needs
+/// `compute_tdc_Eq_div_w_face`, which is not ported.
 pub fn setup_sources_and_others(
     model: &StarModel,
     k: usize,
-) -> (StarAdOrder1, StarAdOrder1, bool) {
+) -> Result<(StarAdOrder1, StarAdOrder1, bool), StarError> {
     let t_start_k = flexmesa_math::exp(
         model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
     );
@@ -261,18 +309,21 @@ pub fn setup_sources_and_others(
         others.val += model.aux.eps_phase_separation[k];
     }
 
-    let eq_ad = if model.controls.rsp2_flag
-        || (model.controls.tdc_alpha_m > 0.0
-            && model.controls.mlt_option == MltOption::Tdc
-            && model.controls.tdc_include_eturb_in_energy_equation
-            && (model.controls.v_flag || model.controls.u_flag))
-    {
+    // `star/private/hydro_energy.f90:264-277`: `RSP2` reads `s% Eq_ad(k)`;
+    // the TDC branch builds `Eq_ad` from `compute_tdc_Eq_div_w_face`.
+    let eq_ad = if model.controls.rsp2_flag {
         model
             .aux
             .eq_ad
             .get(k)
             .copied()
             .unwrap_or(StarAdOrder1::ZERO)
+    } else if model.controls.tdc_alpha_m > 0.0
+        && model.controls.mlt_option == MltOption::Tdc
+        && model.controls.tdc_include_eturb_in_energy_equation
+        && (model.controls.v_flag || model.controls.u_flag)
+    {
+        crate::tdc_hydro::tdc_energy_eq_ad(model, k)
     } else {
         StarAdOrder1::ZERO
     };
@@ -293,11 +344,24 @@ pub fn setup_sources_and_others(
                 0.0
             }
         };
+        // `wrap_v_00` and `wrap_v_p1` return the Riemann face velocity
+        // `u_face_ad` when `u_flag` is set (`auto_diff_support.f90:1060-1073,
+        // 1089-1111`), and `s% v` otherwise.
+        let v_00_ad = if c.u_flag {
+            model.aux.u_face_ad[k]
+        } else {
+            StarAdOrder1::variable(v_of(k), I_V_00)
+        };
+        let v_p1_ad = if c.u_flag {
+            model.aux.u_face_ad[k + 1].shift_p1()
+        } else {
+            StarAdOrder1::variable(v_of(k + 1), I_V_P1)
+        };
         if model.q[k] > c.min_q_for_drag
             && c.drag_coefficient > 0.0
             && c.use_drag_energy
         {
-            let v_00 = StarAdOrder1::variable(v_of(k), I_V_00);
+            let v_00 = v_00_ad;
             let drag_force = v_00 * c.drag_coefficient / model.dt;
             drag_energy = v_00 * 0.5 * drag_force;
         }
@@ -305,7 +369,7 @@ pub fn setup_sources_and_others(
             && c.drag_coefficient > 0.0
             && c.use_drag_energy
         {
-            let v_p1 = StarAdOrder1::variable(v_of(k + 1), I_V_P1);
+            let v_p1 = v_p1_ad;
             let drag_force = v_p1 * c.drag_coefficient / model.dt;
             drag_energy = drag_energy + v_p1 * 0.5 * drag_force;
         }
@@ -321,7 +385,7 @@ pub fn setup_sources_and_others(
     if model.mstar_dot != 0.0 {
         sources.val += model.eps_mdot[k];
     }
-    (sources, others, doing_op_split_burn)
+    Ok((sources, others, doing_op_split_burn))
 }
 
 /// Evaluates the turbulent energy time derivative $de_{\mathrm{turb}}/dt$ for
@@ -334,39 +398,42 @@ pub fn setup_d_turbulent_energy_dt(
 ) -> StarAdOrder1 {
     let dt = model.dt;
     if model.controls.rsp2_flag {
-        let etrb = if model.layout.i_w.is_some() {
-            model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0).max(0.0)
-        } else {
-            model.aux.etrb.get(k).copied().unwrap_or(0.0).max(0.0)
-        };
-        let etrb_s = model.aux.etrb_start.get(k).copied().unwrap_or(etrb);
-        let et_ad = if model.layout.i_w.is_some() {
-            let w_00 =
-                StarAdOrder1::variable(etrb.sqrt(), crate::star_ad::I_W_00);
-            w_00 * w_00
-        } else {
-            StarAdOrder1::constant(etrb)
-        };
-        return (et_ad - etrb_s) / dt;
+        // `(wrap_etrb_00 - get_etrb_start)/dt` with `etrb = pow2(w)` and
+        // `get_etrb_start = pow2(w_start(k))` (`hydro_energy.f90:358-359`,
+        // `auto_diff_support.f90:396-400,434-439`).
+        let etrb_ad =
+            crate::rsp2_ad::wrap_w(model, k, crate::star_ad::I_W_00).pow2();
+        let etrb_s = flexmesa_math::pow2(
+            model.aux.rsp.w_start.get(k).copied().unwrap_or(0.0),
+        );
+        return (etrb_ad - etrb_s) / dt;
     }
     if model.controls.mlt_option == MltOption::Tdc
         && model.controls.tdc_include_eturb_in_energy_equation
     {
+        // `hydro_energy.f90:360-382`; the start-of-step value is zero until
+        // `mlt_vc_old` has been set (`okay_to_set_mlt_vc`).
+        let have_old = model.aux.okay_to_set_mlt_vc;
+        let vc_old = |j: usize| model.aux.mlt_vc_old[j];
         let vc_00 = model.mlt_vc_ad[k];
-        let vc_p1 = if k + 1 < model.nz {
-            model.mlt_vc_ad[k + 1].shift_p1()
+        let (eturb_cell, eturb_cell_start) = if k + 1 < model.nz {
+            let vc_p1 = model.mlt_vc_ad[k + 1].shift_p1();
+            let start = if have_old {
+                0.75 * (flexmesa_math::pow2(vc_old(k))
+                    + flexmesa_math::pow2(vc_old(k + 1)))
+            } else {
+                0.0
+            };
+            (0.75 * (vc_00.pow2() + vc_p1.pow2()), start)
         } else {
-            StarAdOrder1::ZERO
+            let start = if have_old {
+                0.75 * flexmesa_math::pow2(vc_old(k))
+            } else {
+                0.0
+            };
+            (vc_00.pow2() * 0.75, start)
         };
-        let vc_old_00 = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        let vc_old_p1 = if k + 1 < model.nz {
-            model.aux.mlt_vc_old.get(k + 1).copied().unwrap_or(0.0)
-        } else {
-            0.0
-        };
-        let ke_new = vc_00 * vc_00 + vc_p1 * vc_p1;
-        let ke_old = vc_old_00 * vc_old_00 + vc_old_p1 * vc_old_p1;
-        return (ke_new - ke_old) * (0.75 / dt);
+        return (eturb_cell - eturb_cell_start) / dt;
     }
     StarAdOrder1::ZERO
 }
@@ -440,18 +507,14 @@ pub fn eval_surface_and_center_work(model: &StarModel) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let vel_tc = model.controls.using_velocity_time_centering && model.dt > 0.0;
     let simple_pdv = !u_flag_only
         && vel_tc
         && model
             .controls
             .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
-    let skip_peos = !u_flag_only
-        && model.controls.energy_eqn_option == EnergyEqnOption::EpsGrav;
+    // `skip_P = eps_grav_form` (`star/private/hydro_energy.f90:166`).
+    let skip_peos = eps_grav_form(model);
 
     let p_in = model.peos_start.get(nz - 1).copied().unwrap_or(0.0);
     let work_inward_at_center =
@@ -530,9 +593,13 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
 ) -> Result<f64, StarError> {
     let dl_dm = setup_dl_dm(model, k);
     let (sources, others, doing_op_split_burn) =
-        setup_sources_and_others(model, k);
+        setup_sources_and_others(model, k)?;
     // Every rate in the energy equation divides by `s% dt`
     // (`dt = s% dt`, `star/private/hydro_energy.f90:156`); a solve always has `dt > 0`.
+    // Without `v_flag` or `u_flag`, `eval1_work` returns early for
+    // `dt <= 0` with `work` unset for `k <= nz`
+    // (`star/private/hydro_energy.f90:640-655`), so that path has no defined
+    // value either and stops here.
     // `dm = s% dm(k)` (`star/private/hydro_energy.f90:157`); `set_m_and_dm`
     // flags `dm <= 0` as bad (`star/private/star_utils.f90:642-646`).
     let dm_k = model.dm[k];
@@ -544,18 +611,21 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
     let dt = model.dt;
     if dt.is_nan() || dt <= 0.0 {
         return Err(StarError::InvalidInput(format!(
-            "energy equation at cell {k}: dt = {dt} is not positive (star/private/hydro_energy.f90)"
+            "energy equation at cell {k}: dt = {dt} is not positive (star/private/hydro_energy.f90:156,640-655)"
+        )));
+    }
+    // `setup_eps_grav` stops for `RSP2_flag` in the `eps_grav` form
+    // (`star/private/hydro_energy.f90:407-409`).
+    if model.controls.rsp2_flag && eps_grav_form(model) {
+        return Err(StarError::InvalidInput(format!(
+            "energy equation at cell {k}: cannot use eps_grav with RSP2 yet (star/private/hydro_energy.f90:407-409)"
         )));
     }
     let d_eturb_dt = setup_d_turbulent_energy_dt(model, k);
 
     let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
     let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
-    let vel_tc = model
-        .controls
-        .is_velocity_time_centered(model.model_number_old)
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let vel_tc = model.controls.using_velocity_time_centering && model.dt > 0.0;
 
     // `d_dwork_dxam1`, `d_dwork_dxa00`, `d_dwork_dxap1` (zero unless a work
     // term with `Peos` is evaluated; `hydro_energy.f90:163-190`).
@@ -568,10 +638,43 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
 
     let esum = if u_flag_only {
         has_dedt_dxa = true;
-        let total_rates =
-            crate::riemann_ad::eval_u_flag_total_energy_rates_ad(model, k, dt);
-        -dl_dm + sources + others - d_eturb_dt - total_rates
-    } else if v_flag_only {
+        if vel_tc
+            && model
+                .controls
+                .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity
+        {
+            // Upstream switches to `eval_simple_PdV_work` here
+            // (`hydro_energy.f90:170-175`), which is not ported for the
+            // Riemann face velocity `u_face_ad`.
+            return Err(StarError::InvalidInput(format!(
+                "energy equation at cell {k}: use_P_d_1_div_rho_form_of_work_when_time_centering_velocity with u_flag (star/private/hydro_energy.f90:170-175)"
+            )));
+        }
+        // `esum_ad` terms in upstream order (`hydro_energy.f90:107-108`):
+        // `dwork_dm` from `eval_dwork` divided by `dm`, then `dke_dt`,
+        // `dpe_dt` and `de_dt` (`setup_de_dt_and_friends`).
+        let work_00 = crate::riemann_eqns::eval1_work_u_flag_ad(model, k);
+        let work_p1 = if k + 1 < model.nz {
+            crate::riemann_eqns::eval1_work_u_flag_ad(model, k + 1).shift_p1()
+        } else {
+            crate::riemann_eqns::eval1_work_u_flag_ad(model, model.nz)
+        };
+        let dwork_dm = (work_00 - work_p1) / dm_k;
+        let de_dt = setup_de_dt(model, k, dt);
+        let dke_dt = crate::hydro_work::eval_dke_dt_ad(model, k, dt);
+        let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
+        -dl_dm + sources + others
+            - d_eturb_dt
+            - dwork_dm
+            - dke_dt
+            - dpe_dt
+            - de_dt
+    } else if v_flag_only || eps_grav_form(model) {
+        // The hydrostatic `eps_grav` form reaches here too: upstream always
+        // subtracts `dwork_dm` evaluated with `skip_P = eps_grav_form`
+        // (`star/private/hydro_energy.f90:102-104,166-192`), which keeps
+        // the non-`Peos` work terms (`Ptrb`, `mlt_Pturb`, `extra_P`) and the
+        // surface and centre work.
         let simple_pdv = vel_tc
             && model
                 .controls
@@ -618,8 +721,6 @@ pub(crate) fn do1_energy_eqn_with_ergs_error(
                     - de_dt
             }
         }
-    } else if eps_grav_form(model) {
-        -dl_dm + sources + others - d_eturb_dt + model.eps_grav_ad[k]
     } else {
         has_dedt_dxa = true;
         let de_dt = setup_de_dt(model, k, dt);

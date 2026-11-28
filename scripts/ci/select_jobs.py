@@ -11,8 +11,11 @@ falls into one of three narrow classes whose effect is known:
   which Rust tests also read);
 - Rust tests: files under ``crates/<crate>/tests/``.
 
-A change to anything else (library code, build files, ``benchmarks/``,
-``scripts/``, workflows, fixtures) runs every group. A push to ``main`` and a
+Rust library source (``crates/<crate>/src/``, except the PyO3 bridge) runs
+the Rust and engine groups but not the Python suites (DECISIONS #81). A
+change to anything else (Python library code, the bridge, build files,
+``benchmarks/``, ``scripts/``, workflows, fixtures) runs every group, and so
+does every pull request from a ``train-*`` branch. A push to ``main`` and a
 manual run also run every group, so a job skipped on a pull request still
 runs on ``main`` after the merge.
 
@@ -41,7 +44,11 @@ _DOC_GLOBS = (
 
 
 def classify(path: str) -> str:
-    """Return ``docs``, ``py_tests``, ``rust_tests`` or ``other``."""
+    """Return ``docs``, ``py_tests``, ``rust_tests``, ``rust_src`` or ``other``.
+
+    ``rust_src`` is Rust library source outside the PyO3 bridge
+    (``crates/<crate>/src/**.rs`` for every crate but ``flexmesa-py``).
+    """
     parts = path.split("/")
     if (
         len(parts) >= 4
@@ -50,6 +57,14 @@ def classify(path: str) -> str:
         and path.endswith(".rs")
     ):
         return "rust_tests"
+    if (
+        len(parts) >= 4
+        and parts[0] == "crates"
+        and parts[1] != "flexmesa-py"
+        and parts[2] == "src"
+        and path.endswith(".rs")
+    ):
+        return "rust_src"
     if (
         parts[0] == "tests"
         and path.endswith(".py")
@@ -63,7 +78,9 @@ def classify(path: str) -> str:
     return "other"
 
 
-def select(paths: list[str], event: str) -> dict[str, bool]:
+def select(
+    paths: list[str], event: str, train: bool = False
+) -> dict[str, bool]:
     """Return which job groups must run.
 
     Args:
@@ -79,21 +96,30 @@ def select(paths: list[str], event: str) -> dict[str, bool]:
         strict-determinism jobs.
     """
     everything = dict.fromkeys(GROUPS, True)
-    if event != "pull_request" or not paths:
+    if event != "pull_request" or train or not paths:
         return everything
     classes = {classify(p) for p in paths}
     if "other" in classes:
         return everything
+    # DECISIONS #81: a pull request that changes only Rust library source
+    # (no Python, bridge, build or data files) skips the Python suites. They
+    # run on every train pull request (T1) and every push to main, where a
+    # Rust change that breaks a Python test is caught before and after merge.
     return {
-        "rust": "rust_tests" in classes,
+        "rust": bool(classes & {"rust_tests", "rust_src"}),
         "python": "py_tests" in classes,
-        "engine_runs": False,
+        "engine_runs": "rust_src" in classes,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--event", required=True)
+    parser.add_argument(
+        "--head-ref",
+        default="",
+        help="Pull request head branch; a 'train-*' branch runs every group.",
+    )
     parser.add_argument(
         "--paths-file",
         required=True,
@@ -106,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
         with open(ns.paths_file, encoding="utf-8") as fh:
             text = fh.read()
     paths = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for group, run in select(paths, ns.event).items():
+    train = ns.head_ref.startswith("train-")
+    for group, run in select(paths, ns.event, train).items():
         print(f"{group}={'true' if run else 'false'}")
     return 0
 

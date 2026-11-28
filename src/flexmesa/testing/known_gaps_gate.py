@@ -147,6 +147,18 @@ class KnownGapsAuditResult:
     fail_on_imperative_skips: bool = False
 
     @property
+    def only_unexpected_passes(self) -> bool:
+        """Whether the gate's only finding is ignored tests that now pass.
+
+        The nightly campaign reports this improvement with its own exit
+        status so that it asks for the ledger to be updated instead of
+        raising the regression alert (DECISIONS #81).
+        """
+        if self.ok or not self.unexpected_passes:
+            return False
+        return dataclasses.replace(self, unexpected_passes=()).ok
+
+    @property
     def ok(self) -> bool:
         """Whether all bijective, issue, and execution checks pass."""
         if self.fail_on_imperative_skips and self.imperative_python_skips:
@@ -885,6 +897,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also exit non-zero if any imperative pytest.skip() remains.",
     )
+    parser.add_argument(
+        "--stale-gap-status",
+        type=int,
+        default=1,
+        help=(
+            "Exit status when the only finding is --ignored tests that now "
+            "pass (default 1; the nightly campaign uses 3, DECISIONS #81)."
+        ),
+    )
     parser.add_argument("--json-out", default=None)
     parser.add_argument("--markdown-out", default=None)
     return parser
@@ -927,7 +948,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         out_json.write_text(
             json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8"
         )
-    return 0 if result.ok else 1
+    if result.ok:
+        return 0
+    return int(ns.stale_gap_status) if result.only_unexpected_passes else 1
 
 
 if __name__ == "__main__":

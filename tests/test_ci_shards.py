@@ -91,7 +91,7 @@ def test_ci_job_selection_runs_everything_unless_change_is_narrow() -> None:
 
     # Anything outside the three narrow classes runs every group.
     for path in (
-        "crates/flexmesa-star/src/hydro_vars.rs",
+        "crates/flexmesa-py/src/lib.rs",
         "crates/flexmesa-star/Cargo.toml",
         "Cargo.lock",
         "src/flexmesa/cli.py",
@@ -127,6 +127,24 @@ def test_ci_job_selection_runs_everything_unless_change_is_narrow() -> None:
         ["crates/flexmesa-star/tests/rsp2_test.rs", "tests/unit/test_x.py"],
         "pull_request",
     ) == {"rust": True, "python": True, "engine_runs": False}
+
+
+def test_ci_job_selection_skips_python_for_rust_source_except_on_trains() -> (
+    None
+):
+    """Rust library source alone skips Python, except on train PRs (#81)."""
+    sel = _load_select_module()
+    everything = {"rust": True, "python": True, "engine_runs": True}
+    rust_only = ["crates/flexmesa-star/src/hydro_vars.rs", "README.md"]
+    assert sel.select(rust_only, "pull_request") == {
+        "rust": True,
+        "python": False,
+        "engine_runs": True,
+    }
+    assert sel.select(rust_only, "pull_request", train=True) == everything
+    assert sel.select(rust_only, "push") == everything
+    with_py = [*rust_only, "src/flexmesa/cli.py"]
+    assert sel.select(with_py, "pull_request") == everything
 
 
 def _load_cargo_shard_module() -> types.ModuleType:

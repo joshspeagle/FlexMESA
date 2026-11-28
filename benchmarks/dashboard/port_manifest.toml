@@ -5467,7 +5467,14 @@ upstream_lines = 449
 upstream_sha256 = "78b18c9ccc5b244fe0b53349236870af15d71365b70d25167873a997ffa1475d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["init_potekhin"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"init_potekhin" = "crates/flexmesa-kap/src/conduction.rs::init_potekhin" # partial: parses the embedded copy of condtabl.data (include_str) once under a OnceLock instead of reading kap_dir/condtabl.data on first call; failures return KapError instead of mesa_error; ilinx/iliny not retained (unused downstream)
+"do_electron_conduction_potekhin" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction_potekhin"
+"do_electron_conduction_potekhin::get1" = "crates/flexmesa-kap/src/conduction.rs::eval_potekhin_z_slice"
+"do_electron_conduction_blouin" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction_blouin"
+"do_electron_conduction" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction"
 
 [[files]]
 upstream_path = "kap/private/cubic_interpolator.f90"
@@ -5485,7 +5492,17 @@ upstream_lines = 608
 upstream_sha256 = "4704f516b5af1dfaa020a735e3596302c4fa0fb56b4ab44b2d777f676d36ff71"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kap_aesopus_init", "read_kap_aesopus_tables", "AESOPUS_interp_fixedZref::clipped_linear_weights", "AESOPUS_get"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kap_aesopus_init" = "crates/flexmesa-kap/src/aesopus_h5.rs::resolve_aesopus_data" # partial: resolves and caches the table per file name; there is no module-level kap_aesopus_is_initialized flag
+"read_kap_aesopus_tables" = "crates/flexmesa-kap/src/aesopus_h5.rs::resolve_aesopus_data+load_aesopus_hdf5_bytes" # partial: pure-Rust HDF5 reader with extra shape, finiteness and strictly-increasing-grid checks; bicubic splines are fitted lazily per sub-table (loader.rs AesopusSlice::spline_data) instead of eagerly at read; bundled-table fast path for the default file; no show_info output (#702)
+"AESOPUS_interp" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp"
+"outside_R_and_T_bounds" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp"
+"AESOPUS_interp_fixedZref" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp_fixed_zref"
+"AESOPUS_interp_fixedZref::clipped_linear_weights" = "crates/flexmesa-kap/src/low_t.rs::clipped_linear_weights" # partial: adds unwrap_or(0) and min(len - 2) guards on the binary_search result that upstream lacks (unreached for finite val) (#702)
+"AESOPUS_interp_RT" = "crates/flexmesa-kap/src/low_t.rs::aesopus_interp_rt+eval_evbicub_kap"
+"AESOPUS_get" = "crates/flexmesa-kap/src/low_t.rs::aesopus_get+aesopus_get_with_data" # partial: returns Err on ierr /= 0 instead of the kap = -1, zero-derivative sentinel with ierr
 
 [[files]]
 upstream_path = "kap/private/kap_ctrls_io.f90"
@@ -5494,7 +5511,11 @@ upstream_lines = 527
 upstream_sha256 = "5fdec2f58ad1c46ed2d437a3c4f98f4df46f65a3b19bd1b3e046fe0c3b62fe37"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["set_default_controls", "store_controls"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"set_default_controls" = "crates/flexmesa-kap/src/types.rs::KapConfig::default" # partial: defaults match kap.defaults for every control KapConfig holds (Zbase, prefixes, blend bounds, Type2 limits, conduction flags, ctrl arrays); show_info, use_other_* hooks, dbg limits and extra-inlist controls are not held in KapConfig
+"store_controls" = "crates/flexmesa-star/src/inlist_populate_micro.rs::populate_kap_section" # partial: an unrecognised kap_file_prefix, kap_CO_prefix or kap_lowT_prefix is an error (no user-table switch with user_* arrays, which are only range-checked), and use_other_* hooks set true are rejected; Type2 full-on/off limits are checked as upstream
 
 [[files]]
 upstream_path = "kap/private/kap_eval.f90"
@@ -5503,7 +5524,15 @@ upstream_lines = 874
 upstream_sha256 = "c7ddba42f54f7b6fa32969b1e7b802fd76d013ec920613bc52bdcbddf9340d93"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["get_kap_Results", "get_kap_Results_blend_T", "get_kap_highT_Results", "combine_rad_with_conduction"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_kap_Results" = "crates/flexmesa-kap/src/eval.rs::get_kap_results" # partial: adds an up-front non-finite check on log_rho, log_t, x, z and zbar that upstream lacks; use_other_compton_opacity and use_other_radiative_opacity hooks are not wired (#700)
+"get_kap_Results_blend_T" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t" # partial: takes log10 of kap1 and kap2 with safe_log10 (floor 1e-99) where upstream uses plain log10; other_* hooks are handled in the caller, not here (#700)
+"get_kap_lowT_Results" = "crates/flexmesa-kap/src/blend.rs::get_kap_low_t_results"
+"get_kap_highT_Results" = "crates/flexmesa-kap/src/blend.rs::get_kap_high_t_results" # partial: omits the is_bad(dXC) or is_bad(dXO) ierr = -1 return (kap_eval.f90:593); a missing CO z-table errors where upstream proceeds with frac_Type2 = 1 and no table association check (#700)
+"combine_rad_with_conduction" = "crates/flexmesa-kap/src/eval.rs::combine_rad_with_conduction" # partial: use_other_elect_cond_opacity hook not wired; the is_bad(kap_ec), is_bad(kap) and is_bad(dlnkap) mesa_error and ierr = -1 returns are not transcribed (#700)
+"Compton_Opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_co.f90"
@@ -5512,7 +5541,26 @@ upstream_lines = 1241
 upstream_sha256 = "0b2f6a93e7f822709cae496511f0686c0ecb75e7e76afa1ab4d66451275dfc39"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["Get1_kap_CO_Results", "Get_Kap_for_CO_X", "Get_Kap_for_dXCO", "Get_Kap_for_dXCO::matches_table", "Find_CO_Tables::matches_table"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Get1_kap_CO_Results" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results" # partial: selects the table set by prefix and omits the ascending-Zbase check (ierr = -3); the use_closest_Z branch is a compile-time false constant upstream and is not ported
+"Get_Kap_for_CO_Z_cubic" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_Z_cubic::interp1" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_Z_linear" = "crates/flexmesa-kap/src/co.rs::get1_kap_co_results"
+"Get_Kap_for_CO_X" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x" # partial: omits the ascending-X check (ierr = -3) and the X1 <= X0 check (ierr = 1)
+"Get_Kap_for_CO_X_cubic" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_CO_X_cubic::interp1" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_CO_X_linear" = "crates/flexmesa-kap/src/co.rs::get_kap_for_co_x"
+"Get_Kap_for_dXCO" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: omits the num_CO_tables < 1 error and the final is_bad(logK) ierr = -1 return (#703)
+"Get_Kap_for_dXCO::matches_table" = "crates/flexmesa-kap/src/co.rs::get_kap_for_dxco" # partial: index < 1 returns false where upstream calls mesa_error for i < 1 or i > num_CO_tables (kap_eval_co.f90:813-826) (#703)
+"Get_Kap_for_dXCO::Get_Kap_at_dXO" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxo"
+"Get_Kap_for_dXCO::Get_Kap_at_dXC" = "crates/flexmesa-kap/src/co_find.rs::get_kap_at_dxc"
+"Find_CO_Tables" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Find_CO_Tables::matches_table" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables" # partial: index < 1 returns false where upstream has no range check (not shown reachable) (#703)
+"Find_CO_Tables::on_midline" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Find_CO_Tables::on_diagonal" = "crates/flexmesa-kap/src/co_find.rs::find_co_tables"
+"Get_CO_Kap_for_logRho_logT" = "crates/flexmesa-kap/src/co_find.rs::get_co_kap_for_log_rho_log_t"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_fixed.f90"
@@ -5521,7 +5569,18 @@ upstream_lines = 762
 upstream_sha256 = "d7b85d22a82e28595b56e8030e38f4f7934842a576dee5b7403c399322149e8a"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["Get1_kap_fixed_metal_Results", "Get_Kap_for_X"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Get1_kap_fixed_metal_Results" = "crates/flexmesa-kap/src/fixed.rs::get1_kap_fixed_metal_results" # partial: selects the table set by prefix instead of taking a z_tables argument, and omits the ascending-Z check (ierr = -3) and the Z1 <= Z0 check (ierr = 1); tables are not loaded lazily per entry
+"Get_Kap_for_Z_cubic" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x_z_cubic"
+"Get_Kap_for_Z_cubic::interp1" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x_z_cubic"
+"Get_Kap_for_Z_linear" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x_z_linear"
+"Get_Kap_for_X" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x" # partial: omits the ascending-X check (ierr = -3 then stop) and the X1 <= X0 check (ierr = 1)
+"Get_Kap_for_X_cubic" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x"
+"Get_Kap_for_X_cubic::interp1" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x"
+"Get_Kap_for_X_linear" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_x"
+"Get_Kap_for_logRho_logT" = "crates/flexmesa-kap/src/fixed.rs::get_kap_for_log_rho_log_t"
 
 [[files]]
 upstream_path = "kap/private/kap_eval_support.f90"
@@ -5530,7 +5589,13 @@ upstream_lines = 311
 upstream_sha256 = "f0196024c55e5c86683c5f8e0226c74e8aefcf1c70e2d4720b8df98624fe05cc"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["locate_log", "locate_logT", "locate_logR"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"locate_log" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: adds an unreachable clamp of the equally-spaced index to num_logs - 2 (upstream's index is already in range), maps a failed binary_search to i = 0 instead of the i < 1 error, and adds an empty-grid error (#701)
+"locate_logT" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
+"locate_logR" = "crates/flexmesa-kap/src/spline.rs::locate_log" # partial: thin wrapper over locate_log (callers use locate_log directly); inherits the locate_log departures
+"do_kap_interpolations" = "crates/flexmesa-kap/src/spline.rs::do_kap_interpolations"
 
 [[files]]
 upstream_path = "kap/private/kapcn.f90"
@@ -5539,7 +5604,18 @@ upstream_lines = 441
 upstream_sha256 = "c47f439e387bae7a5d16f90272394a96aafa3babcc84af05104533e3c0b04b1f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kapCN_init", "read_kapCN_tables", "read_one_kapCN_table"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kapCN_init" = "crates/flexmesa-kap/src/loader.rs::kap_tables" # partial: tables load lazily on first kap_tables() call (embedded or built FMKAP001 payload); there is no kapCN_is_initialized flag
+"read_kapCN_tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_kapcn_section_bytes" # partial: reads kR_Z_fCN.data and the kR_Z*.data tables at table-build time into an i16 (1000 x log kappa) FMKAP001 section; file names come from a fixed match on Z rather than the 1pe6.1e1 format; no kapCN cache file
+"read_one_kapCN_table" = "crates/flexmesa-kap/src/loader_ascii.rs::build_kapcn_section_bytes" # partial: ASCII parsed at build time and quantised to i16/1000; bicubic splines fitted lazily per sub-table in loader.rs (KapCnZSet::spline_data) with added non-finite checks; no cache file read or write
+"kapCN_interp" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp"
+"outside_R_and_T_bounds" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp"
+"kapCN_interp_fixedZ" = "crates/flexmesa-kap/src/low_t.rs::kapcn_interp_fixed_z"
+"kapCN_interp_fixedZ::interp" = "crates/flexmesa-kap/src/low_t.rs::lagrange_3pt_weights"
+"kapCN_interp_RT" = "crates/flexmesa-kap/src/low_t.rs::eval_evbicub_kap"
+"kapCN_get" = "crates/flexmesa-kap/src/low_t.rs::kapcn_get"
 
 [[files]]
 upstream_path = "kap/private/load_co_kap.f90"
@@ -5548,7 +5624,23 @@ upstream_lines = 913
 upstream_sha256 = "8511974e1ba86bb40181d62c069119b0f3348f54b9dec800ca1a5e8cd9e8505e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["Setup_Kap_CO_Tables", "load_one_CO", "Prepare_Kap_CO_X_Table", "Prepare_Kap_CO_X_Table::Setup_Kap_CO_X_Table", "Prepare_Kap_CO_X_Table::Read_Kap_CO_X_Table", "Read_Kap_CO_Table", "Make_CO_Interpolation_Data", "Make_CO_Interpolation_Data::Check_Interpolation_Data", "Get_CO_Filenames", "Create_fname"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"Setup_Kap_CO_Tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: builds all CO sets (gn93_co, gs98_co, a09_co) once into the FMKAP001 payload; Zfrac_* come from each file header; no load_on_demand
+"load_one_CO" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: parses one CO data file into the payload at build time; no Get_CO_Filenames, cache files, or not_loaded_yet flag
+"Prepare_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: omits the form and version checks and the |xin - X|, |zz - Z| > 1e-6 and num_tables <= 0 errors; no cache read or write
+"Prepare_Kap_CO_X_Table::Setup_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: omits the |xin - X|, |zz - Z| > 1e-6 and num_tables <= 0 errors; X and Z come from the caller
+"Prepare_Kap_CO_X_Table::Read_Kap_CO_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: CO_table_numbers and next_dXC/dXO_table are built later in loader_parse.rs::parse_kap_tables; cache read path not ported
+"Prepare_Kap_CO_X_Table::find_next_dXC_table" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Prepare_Kap_CO_X_Table::find_next_dXO_table" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Read_Kap_CO_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_co_file_bytes" # partial: log kappa stored as round(1000 x value) in i16 and divided by 1000 at fit time; exact for 3-decimal table values
+"Make_CO_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per sub-table, and a non-finite value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting (#704)
+"Make_CO_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them (#704)
+"get_dX_lookup" = "crates/flexmesa-kap/src/loader.rs::get_dx_lookup"
+"find_in_dXs" = "crates/flexmesa-kap/src/loader_parse.rs::parse_kap_tables"
+"Get_CO_Filenames" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: file names built inline as <prefix>_z<Z>_x<X>.data; no cache or temp-cache file names
+"Create_fname" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: inlined with get_output_string
 
 [[files]]
 upstream_path = "kap/private/load_kap.f90"
@@ -5557,7 +5649,20 @@ upstream_lines = 765
 upstream_sha256 = "45e9ba95785f895f6f38e7e5193ef5d4d7d1411c6bffd9210e95e301f2cfd73e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["setup_kap_tables", "setup_kap_tables::setup", "setup_kap_tables::setup_lowT", "load_one", "Prepare_Kap_X_Table", "Prepare_Kap_X_Table::Setup_Kap_X_Table", "Prepare_Kap_X_Table::Read_Kap_X_Table", "Make_Interpolation_Data", "Make_Interpolation_Data::Check_Interpolation_Data", "Get_Filenames", "create_fname"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"setup_kap_tables" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: builds every table set once into a single FMKAP001 payload instead of per kap_option handle with use_cache and load_on_demand; the Compton blend bounds of load_kap.f90:65-70 are computed at evaluation in loader.rs (KapTables::compton_blend_bounds) and init_potekhin runs lazily in conduction.rs
+"setup_kap_tables::setup" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: fixed-metal sets are built for every prefix, not only rq% kap_option; X clipped to 1 - Z as upstream
+"setup_kap_tables::setup_lowT" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: lowT_fa05_gs98 and Freedman11 sets are built for every option; kapCN and AESOPUS arrive as pre-converted sections instead of kapCN_init and kap_aesopus_init
+"load_one" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: parses one data file into the FMKAP001 payload at build time; no Get_Filenames, cache files, or not_loaded_yet flag
+"Prepare_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the form, version >= min_version and X/Z header-consistency (1e-6) checks; no cache read or write
+"Prepare_Kap_X_Table::Setup_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: omits the |xin - X| and |zz - Z| > 1e-6 error; X and Z come from the caller rather than the file header
+"Prepare_Kap_X_Table::Read_Kap_X_Table" = "crates/flexmesa-kap/src/loader_ascii.rs::parse_fixed_file_bytes" # partial: log kappa is stored as round(1000 x value) in i16 and divided by 1000 at fit time; exact for 3-decimal table values; cache read path not ported
+"Make_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: spline fit is lazy per table (OnceLock), and a non-finite table value or fitted coefficient returns a TableIo error where upstream zeroes non-finite coefficients after fitting (Check_Interpolation_Data) (#704)
+"Make_Interpolation_Data::Check_Interpolation_Data" = "crates/flexmesa-kap/src/loader.rs::fit_kap_spline" # partial: returns an error on non-finite values instead of zeroing them (#704)
+"Get_Filenames" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: file names are built inline as <prefix>_z<Z>_x<X>.data with get_output_string; no cache or temp-cache file names
+"create_fname" = "crates/flexmesa-kap/src/loader_ascii.rs::build_full_kap_tables_bytes" # partial: inlined, including the Freedman11 name; no cache file name
 
 [[files]]
 upstream_path = "kap/private/op_common.f"
@@ -5639,6 +5744,8 @@ upstream_sha256 = "c4271ed5c4fd16b01cf1570b190b54a1ad2ebad32c8d2dd0538b993b3b309
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_output_string" = "crates/flexmesa-kap/src/spline.rs::get_output_string"
 
 [[files]]
 upstream_path = "kap/public/kap_lib.f90"
@@ -5647,7 +5754,14 @@ upstream_lines = 868
 upstream_sha256 = "7ced181ca4636da7c161f8ae7ba177c9de1a8ff9d76bea8f87915d25b096b749"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-kap/src/lib.rs"]
+routine_map_partial = ["kap_setup_tables", "kap_get", "kap_get_elect_cond_opacity", "kap_get_compton_opacity", "kap_get_radiative_opacity"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"kap_setup_tables" = "crates/flexmesa-kap/src/loader.rs::kap_tables" # partial: tables load lazily and globally on first kap_tables() call instead of per handle with use_cache and load_on_demand
+"kap_get" = "crates/flexmesa-kap/src/eval.rs::kap_get" # partial: takes a KapConfig instead of a handle and has no kap_is_initialized check; dlnkap_dxa (identically zero upstream) is not returned
+"kap_get_elect_cond_opacity" = "crates/flexmesa-kap/src/conduction.rs::do_electron_conduction" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers pass a KapConfig directly
+"kap_get_compton_opacity" = "crates/flexmesa-kap/src/compton.rs::compton_opacity" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers call compton_opacity directly
+"kap_get_radiative_opacity" = "crates/flexmesa-kap/src/blend.rs::get_kap_results_blend_t" # partial: upstream wrapper takes a handle and checks kap_is_initialized; Rust callers pass a KapConfig directly
 
 [[files]]
 upstream_path = "math/private/math_io.f90"
@@ -5931,7 +6045,35 @@ upstream_lines = 3374
 upstream_sha256 = "e643adb6b5fd60887d797c96ff3d7d6b2b126ed20babccf18063be1a7f5016de"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["approx21_weak_rates", "approx21_pa_pg_fractions", "approx21_special_reactions", "approx21_eps_info", "approx21_eps_info::set_eps_nuc", "approx21_dfdy", "set_approx21", "set_approx21_isos", "set_approx21_isos::do1", "set_approx21_reactions", "set_approx21_reactions::do1"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions" # partial: in the tot <= 1d-30 branch upstream gives -0.0 for dratrawdt(ifg) and dratrawdd(ifg) (net_approx21.f90:235-237), Rust writes +0.0 (#735)
+"approx21_pa_pg_fractions::set1" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
+"approx21_weak_rates" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the ni56/co56 rates go through eval_single_weak_blended (eval_weak_reaction_info) with abar = zbar = z2bar = 1; no ierr is returned
+"approx21_eval_PPII_fraction" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eval_ppii_fraction"
+"eval_fe56ec_fake_factor" = "crates/flexmesa-net/src/approx21_dydt.rs::eval_fe56ec_fake_factor"
+"approx21_special_reactions" = "crates/flexmesa-net/src/approx21_special.rs::approx21_special_reactions" # partial: no stop for ratdum(i) < 0 or for is_bad(dratdumdy1(iralf2)) and no ierr; the equilibrium-link arithmetic matches (#735)
+"approx21_dydt" = "crates/flexmesa-net/src/approx21_dydt.rs::approx21_dydt"
+"approx21_eps_info" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info" # partial: category and total sums match in order; the per-reaction raw_rate, screened_rate, eps_nuc_rate and eps_neu_rate arrays are not filled (#735)
+"approx21_eps_info::m2" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m3" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m4" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::m5" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info"
+"approx21_eps_info::set_eps_nuc" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eps_info" # partial: only the category accumulation is kept; the per-reaction array updates are omitted (#735)
+"approx21_d_epsneu_dy" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_d_epsneu_dy"
+"approx21_dfdy" = "crates/flexmesa-net/src/approx21_dfdy.rs::approx21_dfdy" # partial: rows ineut and iprot (approx21_dfdy_heavy.rs) hoist y*y products and sub-sums, changing rounding order; the other entries are textually identical (#735)
+"approx21_dfdT_dfdRho" = "crates/flexmesa-net/src/approx21_eval.rs::approx21_dfdt_dfdrho"
+"mark_approx21" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_isos" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_isos::do1" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_reactions" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"mark_approx21_reactions::do1" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"set_approx21" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: lazy index resolution; a missing name maps to index 0 instead of mesa_error and there is no irfe56_aux4 consistency check (#734)
+"set_approx21_isos" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: a missing isotope maps to index 0 instead of mesa_error; iso_cid is not kept (#734)
+"set_approx21_isos::do1" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: closure iso(); same missing-name behaviour (#734)
+"set_approx21_reactions" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: ifa uses g.num_reactions rather than num_mesa_reactions; no consistency check; rate_id not kept (#734)
+"set_approx21_reactions::do1" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: closure rxn(); a missing reaction maps to index 0 instead of mesa_error (#734)
 
 [[files]]
 upstream_path = "net/private/net_burn.f90"
@@ -5940,7 +6082,13 @@ upstream_lines = 475
 upstream_sha256 = "81095d869c6edcd941138d0c4eb860df3aaf6de59e227133f608769bb9af98c6"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_1_zone", "burn_1_zone::burner_derivs", "burn_1_zone::jakob_or_derivs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_1_zone" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: honours a positive stptry_in where upstream overwrites it with max(start*1d-10, 1d-16) at net_burn.f90:242-243; adds the dxdt_source_term to f, which upstream accepts but never uses; mismatching species/reaction counts are errors where upstream returns with ierr = 0 (#729)
+"burn_1_zone::burner_derivs" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: adds the dxdt_source_term to f (upstream burner_derivs does not use it) (#729)
+"burn_1_zone::burner_jakob" = "crates/flexmesa-net/src/burn.rs::burn_1_zone"
+"burn_1_zone::jakob_or_derivs" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: adds the dxdt_source_term to f; the EOS call is eos_dt_get_from_weights_with_tables with the (rho, lgRho, T, lgT) quadruple instead of eosDT_get by handle (#729)
 
 [[files]]
 upstream_path = "net/private/net_burn_const_density.f90"
@@ -5949,7 +6097,13 @@ upstream_lines = 502
 upstream_sha256 = "3d6adaef0d79f66ec9e0730a8a5cce9fa496dc015754851b6d0691f523736b2b"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_const_density_1_zone", "burn_const_density_1_zone::jakob_or_derivs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_const_density_1_zone" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: honours a positive stptry_in where upstream overwrites it with max(start*1d-10, 1d-16) at net_burn_const_density.f90:257-258 (#730)
+"burn_const_density_1_zone::burner_derivs" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density"
+"burn_const_density_1_zone::burner_jakob" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density"
+"burn_const_density_1_zone::jakob_or_derivs" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: evaluates the EOS with eos_dt_get instead of get_eos_info_for_burn_at_const_density and errors when Cv <= 0 or not finite, which upstream does not check (#730)
 
 [[files]]
 upstream_path = "net/private/net_burn_const_p.f90"
@@ -5958,7 +6112,13 @@ upstream_lines = 583
 upstream_sha256 = "b2077aac6c81a6dfc6755dd97b5c560f69f2f2fc9c6e4305262ab19c49794253"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["burn_1_zone_const_P", "burn_1_zone_const_P::do_isolve", "burn_1_zone_const_P::burn_derivs", "burn_1_zone_const_P::burn_jacob"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"burn_1_zone_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: inlines the roscor integrator (step control, rejection factors, error norm and facgus compared with mod_rosenbrock.f and match) instead of calling isolve with the lapack decsol; Rodas3, Ros2 and Rose2 use the Rodas4 tableau (#736); no time_net/time_eos timing counters; no solout
+"burn_1_zone_const_P::do_isolve" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: inlined Rosenbrock integrator rather than a call to isolve
+"burn_1_zone_const_P::burn_derivs" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: evaluated through the burn_jacob closure with no Jacobian requested
+"burn_1_zone_const_P::burn_jacob" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: Pgas <= 0 and Cp <= 0 are errors with messages; Radiation_Pressure is evaluated as CRAD*pow4(T)/3, a different rounding order from crad*T*T*T*T/3d0 (#736); no timing counters
 
 [[files]]
 upstream_path = "net/private/net_burn_support.f90"
@@ -5967,7 +6127,13 @@ upstream_lines = 641
 upstream_sha256 = "897e9ea4504765ecb5f33f6d4264a19576c86953b3f69c7f1c56c6859d5b4af2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["netint", "simpr"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"netint" = "crates/flexmesa-net/src/burn_stepper.rs::netint" # partial: does not call burner_finish_substep at the start of each substep or at the end; step counts come back as a return tuple
+"stifbs" = "crates/flexmesa-net/src/burn_stepper.rs::stifbs"
+"simpr" = "crates/flexmesa-net/src/burn_stepper.rs::simpr" # partial: statements match, but the solve uses dgetrf/dgetrs (my_lapack95 port: sfmin pivot division, NaN/Inf rejected) where upstream calls my_getf2/my_getrs1 from mtx_solve_routines.inc (always 1/pivot, no finiteness test) (#740)
+"net_pzextr" = "crates/flexmesa-net/src/burn_stepper.rs::net_pzextr"
 
 [[files]]
 upstream_path = "net/private/net_derivs.f90"
@@ -5976,7 +6142,21 @@ upstream_lines = 1833
 upstream_sha256 = "7e9066f4a6619405c9ec959c2db283c8022f9425fdb361ce4db57ec20938496f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["get_derivs", "get_derivs::get_general_1_to_1_derivs", "get_derivs::get_general_2_to_1_derivs", "get_derivs::get_general_2_to_2_derivs", "get_derivs::get_basic_2_to_2_derivs", "get_derivs::get_basic_2_to_1_derivs", "get1_derivs", "update_special_rates", "update_special_rates::do_FL_3alf", "eval_ni56_ec_rate", "eval_co56_ec_rate", "eval1_weak_rate"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"get_derivs" = "crates/flexmesa-net/src/derivs.rs::get_derivs" # partial: the net_other_net_derivs hook is not called; the eps_nuc_cancel_factor path (always 1 upstream) is dropped
+"get_derivs::get_general_1_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_1_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored (#731)
+"get_derivs::get_general_2_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_2_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored (#731)
+"get_derivs::get_general_2_to_2_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_general_2_to_2_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored (#731)
+"get_derivs::get_basic_2_to_2_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_basic_2_to_2_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored (#731)
+"get_derivs::get_basic_2_to_1_derivs" = "crates/flexmesa-net/src/derivs_paired.rs::get_basic_2_to_1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored (#731)
+"get1_derivs" = "crates/flexmesa-net/src/derivs.rs::get1_derivs" # partial: Q comes from reactions[i].std_q instead of n% reaction_Qs(ir), so a caller-supplied reaction_Qs array is ignored; upstream reads n% y(0) when itab(in1) or itab(in2) is 0 for a 2- or 3-input reaction, and the Rust path errors there (#675) (#731)
+"update_special_rates" = "crates/flexmesa-net/src/derivs_support.rs::update_special_rates" # partial: handles the triple-alpha Fushiki-Lamb and rn14ag_lite cases; conv = QCONV * std_q instead of n% reaction_Qs(ir) (#731)
+"update_special_rates::do_FL_3alf" = "crates/flexmesa-net/src/derivs_support.rs::update_special_rates" # partial: conv = QCONV * std_q instead of QCONV * n% reaction_Qs(ir) (#731)
+"eval_ni56_ec_rate" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the ni56 electron-capture rate is evaluated inline in approx21_weak_rates (reaction rni56ec_to_co56 or rni56ec_to_fe56) with abar = zbar = z2bar = 1 and no Coulomb information
+"eval_co56_ec_rate" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the co56 electron-capture rate is evaluated inline in approx21_weak_rates (rco56ec_to_fe56) with abar = zbar = z2bar = 1 and no Coulomb information
+"eval1_weak_rate" = "crates/flexmesa-net/src/derivs_support.rs::eval_single_weak_blended" # partial: returns a WeakRateEval for a weak-info pair with the low-T9 blending; weak_rate_factor is applied by the caller and Q, Qneu come back in the result
 
 [[files]]
 upstream_path = "net/private/net_derivs_support.f90"
@@ -5985,7 +6165,14 @@ upstream_lines = 454
 upstream_sha256 = "01e7b2896719984c3c0663219217fbbebb80463123c1ac42bc0a7599dec9a6d9"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["do_in_out", "do_in_out_neu", "do_in_out_neu::check", "do_lhs_iso", "do_rhs_iso"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_in_out" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out" # partial: Q and Qneu come from reactions[i].std_q and std_qneu * reaction_neuqs_factor instead of n% reaction_Qs/reaction_neuQs(j) (#732)
+"do_in_out_neu" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out_neu" # partial: clamps the reaction category index; omits check_balance, the checkQs consistency test and the debug prints; an input or output isotope number of 0 underflows and panics instead of the mesa_error (#732)
+"do_in_out_neu::check" = "crates/flexmesa-net/src/derivs_support.rs::do_in_out_neu" # partial: a zero isotope number underflows and panics instead of the mesa_error with the reaction name (#732)
+"do_lhs_iso" = "crates/flexmesa-net/src/derivs_support.rs::do_signed_iso" # partial: folds do_lhs_iso and do_rhs_iso into one signed routine and updates every positive idr slot, where upstream returns at the first idr <= 0 (#732)
+"do_rhs_iso" = "crates/flexmesa-net/src/derivs_support.rs::do_signed_iso" # partial: folds do_lhs_iso and do_rhs_iso into one signed routine and updates every positive idr slot, where upstream returns at the first idr <= 0 (#732)
 
 [[files]]
 upstream_path = "net/private/net_eval.f90"
@@ -6017,7 +6204,41 @@ upstream_lines = 2300
 upstream_sha256 = "a1bd6eca9e9a9ee38a308250a08c3e152ab3b30d426876ad26474fa80fcc2d1f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["alloc_net_general_info", "do_read_net_file", "do_read_net_file::error", "do_read_net_file::do_isos", "do_read_net_file::do_reactions", "do_read_net_file::do_basic_reactions_for_isos", "do_read_net_file::do1_iso", "do_read_net_file::do_basic_reactions_for_iso", "do_read_net_file::add_this_reaction", "do_read_net_file::add_reaction_for_this_handle", "do_read_net_file::add_this_reaclib_forward_reaction", "do_read_net_file::add_this_reaclib_reverse_reaction", "do_read_net_file::add_basic_reaction", "add_net_iso", "remove_net_iso", "remove_reactions_for_iso", "add_net_reaction", "remove_net_reaction", "finish_net_def", "finish_net_def::do_set_approx21", "setup_iso_info", "setup_reaction_info", "check_for_hardwired_pairs", "check_pair", "set_reaction_kinds"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"alloc_net_general_info" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: builds the rate tables only (init_screening_tables is called from from_parsed_with_rate_overrides); no cache_suffix or on-disk cache, a process-wide Arc cache instead; rates make_rate_tables not compared
+"set_reaction_max_Z" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides"
+"set_reaction_max_Z::update_max_Z" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides"
+"do_read_net_file" = "crates/flexmesa-net/src/parser.rs::read_net_file_with_depth" # partial: al26 checks run once after the top-level file, not after each include; adds a 32-level include depth guard; search order is search_dir, search_dir/nets, then the embedded bundle (#734)
+"do_read_net_file::error" = "crates/flexmesa-net/src/parser.rs::read_net_file_with_depth" # partial: errors come back as NetError::ParseError without the message text or file close
+"do_read_net_file::do_approx21" = "crates/flexmesa-net/src/parser.rs::do_approx21"
+"do_read_net_file::do_isos" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: range branch always applies the add/remove instead of only when net_iso(id) == 0 (#734)
+"do_read_net_file::do_reactions" = "crates/flexmesa-net/src/parser.rs::do_reactions" # partial: removing an unknown or absent reaction is ignored where upstream sets ierr = -1; an unknown add errors immediately rather than after the loop (#734)
+"do_read_net_file::do_basic_reactions_for_isos" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: merged into do_isos with add_rxns = true; same element-range and single-iso paths
+"do_read_net_file::do1_iso" = "crates/flexmesa-net/src/parser.rs::do_isos" # partial: inlined: apply_iso then do_basic_reactions_for_iso
+"do_read_net_file::do_basic_reactions_for_iso" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso" # partial: pair conditions and order match and the 51-row special-case table is identical; reverse pairs are recorded only when both reactions are added and add failures are swallowed (#734)
+"do_read_net_file::get_iso_id" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
+"do_read_net_file::add_this_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: one synthesize_reaction_info lookup replaces the forward/reverse/handle three-stage search; failure returns Err where upstream stops; rates reaclib lookups not compared
+"do_read_net_file::add_reaction_for_this_handle" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates add_reaction_for_handle not compared
+"do_read_net_file::add_this_reaclib_forward_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates reaclib_lookup not compared
+"do_read_net_file::add_this_reaclib_reverse_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: folded into the single synthesize_reaction_info lookup; rates reverse_dict not compared
+"do_read_net_file::add_basic_reaction" = "crates/flexmesa-net/src/parser.rs::try_pair" # partial: forward and reverse names are added independently with errors swallowed; no skip_warnings_dict; reaclib reverse lookup is inside synthesize_reaction_info
+"add_net_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: no net_has_been_defined or range checks
+"remove_net_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: no net_has_been_defined or range checks; removes reactions that use the isotope as remove_reactions_for_iso does
+"remove_reactions_for_iso" = "crates/flexmesa-net/src/parser.rs::apply_iso" # partial: inlined retain over active_reactions on input and output isotopes
+"add_net_reaction" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: no net_has_been_defined or id-range checks; id comes from synthesize_reaction_info
+"remove_net_reaction" = "crates/flexmesa-net/src/parser.rs::do_reactions" # partial: inlined as active_reactions.remove inside do_reactions
+"finish_net_def" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: ordering, kinds and per-isotope tables built in one function; mark_approx21 runs at parse end and set_approx21 is Approx21Indices::from_net at use time; no reaction_names_dict hash (#734)
+"finish_net_def::do_mark_approx21" = "crates/flexmesa-net/src/parser.rs::mark_approx21"
+"finish_net_def::do_set_approx21" = "crates/flexmesa-net/src/approx21.rs::from_net" # partial: index setup is lazy at each evaluation and never errors (#734)
+"setup_iso_info" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: no error for an empty isotope set (#734)
+"setup_reaction_info" = "crates/flexmesa-net/src/initialize.rs::from_parsed_with_rate_overrides" # partial: name-sorted order, kind grouping and forward/reverse adjacency match; no mesa_error for a missing reverse id; reverse lookup is net-local (#734)
+"check_for_hardwired_pairs" = "crates/flexmesa-net/src/initialize.rs::build_reverse_id_map" # partial: pairs are the same 29 distinct pairs but kept only if both are in the net and are exact stoichiometric reverses; upstream sets a global reverse_reaction_id unconditionally (#734)
+"check_pair" = "crates/flexmesa-net/src/initialize.rs::build_reverse_id_map" # partial: try_insert adds the net-membership and stoichiometry tests (#734)
+"set_reaction_kinds" = "crates/flexmesa-net/src/initialize.rs::classify_reaclib_kinds" # partial: branch-for-branch match; the reverse partner comes from the net-local map and reverse_id stays 0 when it is not in the net (#734)
+"init_special_case_reaction_info" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
+"init_special_case_reaction_info::set" = "crates/flexmesa-net/src/parser.rs::do_basic_reactions_for_iso"
 
 [[files]]
 upstream_path = "net/private/net_screen.f90"
@@ -6026,7 +6247,19 @@ upstream_lines = 566
 upstream_sha256 = "825e2189b9305f04d7adf92403f176dce7804db624534809155633f23af6afc4"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["screen_net", "screen_net::screening_pair", "screen_net::eval_screen_triple", "screen_net::set_combo_screen_rates", "screen_net::rate_for_pg_pa_branches"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"make_screening_tables" = "crates/flexmesa-net/src/screen.rs::init_screening_tables"
+"screen_net" = "crates/flexmesa-net/src/screen.rs::screen_net" # partial: splits the init pass into init_screening_tables; drops the nrattab > 1 condition on the low-T cutoff factor; takes zbar/abar/z2bar directly instead of screen_set_context; no ierr from screening failures (#733)
+"screen_net::screening_pair" = "crates/flexmesa-net/src/screen.rs::eval_screening_pair" # partial: non-init path only (init is init_screen_triple/init_az_info); inlines the rates screen_pair early-outs for NoScreening, zbar == 0, z <= 0 and logT < logTcut_lo
+"screen_net::set_rate_screening" = "crates/flexmesa-net/src/screen.rs::set_rate_screening"
+"screen_net::eval_screen_pair" = "crates/flexmesa-net/src/screen.rs::screen_net+eval_screening_pair"
+"screen_net::eval_screen_triple" = "crates/flexmesa-net/src/screen.rs::eval_screen_triple" # partial: an n + n + A reaction returns UNSCREENED (rate_screened = rate_raw) where upstream returns without setting rate_screened(i) (#733)
+"screen_net::set_combo_screen_rates" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates" # partial: the alpha ap/gp branch lists run as two loops instead of interleaved calls (outputs are independent); reactions are found by name; error returns replace mesa_error
+"screen_net::rate_for_alpha_ap" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates"
+"screen_net::rate_for_alpha_gp" = "crates/flexmesa-net/src/screen_combo.rs::set_combo_screen_rates"
+"screen_net::rate_for_pg_pa_branches" = "crates/flexmesa-net/src/screen_combo.rs::rate_for_pg_pa_branches" # partial: omits the mesa_error for ir_start, irpg or irpa == 0 (a zero index underflows and panics instead)
 
 [[files]]
 upstream_path = "net/public/burner_const_density_get_eos_info.inc"
@@ -6062,7 +6295,15 @@ upstream_lines = 1210
 upstream_sha256 = "167060f4a53cf6afa708fbd91a41b48031d485862dbd24944043c2d1a5b06bb7"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
+routine_map_partial = ["net_get", "net_get_symbolic_d_dxdt_dx", "net_get_rates_only", "net_1_zone_burn", "net_1_zone_burn_const_density", "net_1_zone_burn_const_P"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"net_get" = "crates/flexmesa-net/src/lib.rs::net_get" # partial: takes a NetGeneralInfo and fixed use_3a_fl87/use_suzuki_weak_rates from it; there are no caller-supplied reaction_Qs or reaction_neuQs and no handle
+"net_get_symbolic_d_dxdt_dx" = "crates/flexmesa-net/src/lib.rs::net_get_symbolic_d_dxdt_dx" # partial: takes a NetGeneralInfo instead of a handle and returns the flattened (species x species) pattern
+"net_get_rates_only" = "crates/flexmesa-net/src/derivs.rs::eval_net" # partial: reached through eval_net with rates_only = true; no separate entry point and no reaction_Qs arguments
+"net_1_zone_burn" = "crates/flexmesa-net/src/burn.rs::burn_1_zone" # partial: input struct instead of argument list; inherits the burn_1_zone departures
+"net_1_zone_burn_const_density" = "crates/flexmesa-net/src/burn_const_density.rs::burn_1_zone_const_density" # partial: input struct instead of argument list; inherits the burn_1_zone_const_density departures
+"net_1_zone_burn_const_P" = "crates/flexmesa-net/src/burn_const_p.rs::burn_1_zone_const_p" # partial: input struct instead of argument list; inherits the burn_1_zone_const_P departures
 
 [[files]]
 upstream_path = "neu/plotter/src/neu_plotter.f90"
@@ -6710,7 +6951,10 @@ upstream_lines = 71
 upstream_sha256 = "fc617f047eb808333910f3e32b5434d1b85d451b86405d1cc59d452e3dcb7049"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_coulomb_set_context"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_coulomb_set_context" = "crates/flexmesa-rates/src/ecapture.rs::coulomb_plasma_params_ad" # partial: gamma_e and rs are computed on demand as auto-diff values seeded as upstream (temp d1val1, den d1val2); no Coulomb_Info struct, so zbar, abar, z2bar, logT and logRho are not stored
 
 [[files]]
 upstream_path = "rates/private/eval_coulomb.f90"
@@ -6719,7 +6963,18 @@ upstream_lines = 350
 upstream_sha256 = "a0ded3b7226d3634e2dccb724b08fc17a0d4c856b349333f98e4ad17ad2e94fe"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_mui_coulomb", "do_Vs_coulomb"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_mui_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad" # partial: returns zero for z <= 0 where upstream has no guard; the option is an argument rather than the module variable which_mui_coulomb (#739)
+"mui_coulomb_DGC1973" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_I1993" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009::fii" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"mui_coulomb_PCR2009::fie" = "crates/flexmesa-rates/src/ecapture.rs::eval_mui_coulomb_ad"
+"do_Vs_coulomb" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad" # partial: returns zero for z <= 0 where upstream has no guard (#739)
+"Vs_coulomb_TF" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad"
+"Vs_coulomb_Itoh" = "crates/flexmesa-rates/src/ecapture.rs::eval_vs_coulomb_ad"
 
 [[files]]
 upstream_path = "rates/private/eval_ecapture.f90"
@@ -6728,7 +6983,10 @@ upstream_lines = 334
 upstream_sha256 = "acb5f2195069675687e30bf7d96489b8a9d9f6de545901f048145911bf47528f"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_eval_ecapture_reaction_info"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_eval_ecapture_reaction_info" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: per-pair evaluation from caller-resolved tables instead of the dict lookups; the eta < 2*beta exit returns q = q_tot with zero rates where upstream leaves the outputs untouched; out-of-range state index is an error (#737)
 
 [[files]]
 upstream_path = "rates/private/eval_psi.f90"
@@ -6737,7 +6995,12 @@ upstream_lines = 163
 upstream_sha256 = "465b589f0f4806c216f56faeda13421427418bdb6eae25199b2b1133c6e814cd"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_psi_Iec_and_Jec", "do_psi_Iee_and_Jee"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"fd_integral" = "crates/flexmesa-rates/src/ecapture.rs::fd_complete_ad"
+"do_psi_Iec_and_Jec" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: inlined; returns zero where upstream stops for zeta > -beta (#737)
+"do_psi_Iee_and_Jee" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_with_data" # partial: inlined; returns zero where upstream stops for zeta < beta (#737)
 
 [[files]]
 upstream_path = "rates/private/eval_weak.f90"
@@ -6746,7 +7009,11 @@ upstream_lines = 346
 upstream_sha256 = "d8afb36a1a82449ebc22762d790fb6188a66cfc6b96038e3ade4050d60b0cb53"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_eval_weak_reaction_info", "do_eval_weaklib_reaction_info"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_eval_weak_reaction_info" = "crates/flexmesa-net/src/derivs_support.rs::eval_single_weak_blended" # partial: one reaction per call instead of the n-array loop; the low-T blend and the optional ecapture dispatch sit in this function (net crate); blend arithmetic matches
+"do_eval_weaklib_reaction_info" = "crates/flexmesa-rates/src/weak.rs::eval_weak_reaction_pair" # partial: one pair per call; ye_rho is clamped at 1e-99 where upstream returns ierr = -1 for a non-finite log10(YeRho), and no non-finite Qneu error (#741)
 
 [[files]]
 upstream_path = "rates/private/load_ecapture.f90"
@@ -6755,7 +7022,12 @@ upstream_lines = 353
 upstream_sha256 = "bede1c81f568336ffa31b3690412a37c15e63d309911d2b71d1a4ccec7360579"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["load_ecapture_data", "load_ecapture_states_list", "load_ecapture_transitions_list"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"load_ecapture_data" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: no do_ecapture gate; tables come from the embedded aic files or from_files
+"load_ecapture_states_list" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: token-stream parse; comment rule and error handling differ (#738)
+"load_ecapture_transitions_list" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::from_str_pair" # partial: token-stream parse; comment rule, size limits and unknown-nuclide timing differ (#738)
 
 [[files]]
 upstream_path = "rates/private/load_weak.f90"
@@ -6774,6 +7046,8 @@ upstream_sha256 = "d1283b2415329fe39b1f332836d206f41c20e71ca35c25cd86a5302372609
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf_with_derivs"
 
 [[files]]
 upstream_path = "rates/private/ratelib.f90"
@@ -6782,7 +7056,115 @@ upstream_lines = 4619
 upstream_sha256 = "0a2fee330c11988740fb2f7a903942e5d1311300dcf3c2c4ea2351fed74a9961"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["rate_al27pg_jina", "rate_ar36ap_jina", "rate_be7dp_jina", "rate_be7he3_jina", "rate_c12_c12_to_h1_na23_jina", "rate_c12ag_jina", "rate_c12o16a_jina", "rate_c12o16p_jina", "rate_ca40ap_jina", "rate_cl35pg_jina", "rate_co55pg_jina", "rate_cr48ap_jina", "rate_ddg_jina", "rate_f19pg_jina", "rate_fe52ap_jina", "rate_fe52ng_jina", "rate_fe53ng_jina", "rate_fe54a_jina", "rate_fe54an_jina", "rate_fe54ap_jina", "rate_fe54ng_jina", "rate_fe54pg_jina", "rate_fe55ng_jina", "rate_he3d_jina", "rate_he4_mg24_to_c12_o16_jina", "rate_he4_ne20_to_c12_c12_jina", "rate_k39pg_jina", "rate_mg24ap_jina", "rate_mn51pg_jina", "rate_n14ag_jina", "rate_n15pa_jina", "rate_n15pg_jina", "rate_na23pa_jina", "rate_na23pg_jina", "rate_ne18ag_jina", "rate_ne18ap_jina", "rate_ne19pg_jina", "rate_ne20ap_jina", "rate_o16o16_jina", "rate_o16o16a_jina", "rate_o16o16p_jina", "rate_o17pg_jina", "rate_p31pg_jina", "rate_s32ap_jina", "rate_sc43pg_jina", "rate_si28ap_jina", "rate_ti44ap_jina", "rate_tripalf_jina", "rate_v47pg_jina", "jina_reaclib_1_1", "jina_reaclib_1_2", "jina_reaclib_1_3", "jina_reaclib_1_4", "jina_reaclib_2_1", "jina_reaclib_2_2", "jina_reaclib_2_3", "jina_reaclib_2_4", "jina_reaclib_3_1", "jina_reaclib_3_2", "jina_reaclib_4_2", "try1_reaclib_1_1", "try1_reaclib_1_2", "try1_reaclib_1_3", "try1_reaclib_1_4", "try1_reaclib_2_1", "try1_reaclib_2_2", "try1_reaclib_2_3", "try1_reaclib_2_4", "try1_reaclib_3_1", "try1_reaclib_3_2", "try1_reaclib_4_2", "reaclib_rate", "reaclib_rate_for_handle", "reaclib_rate_and_dlnT_for_handle", "reaclib_rate_and_dlnT"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"rate_b8ep" = "crates/flexmesa-rates/src/ratelib.rs::rate_b8ep"
+"rate_be7em_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_be7em_fxt"
+"rate_be7pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_be7pg_nacre"
+"rate_c12ag_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12ag_nacre"
+"rate_c12c12_fxt_multi" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12c12_fxt_multi"
+"rate_c12o16_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12o16_fxt"
+"rate_c12pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c12pg_nacre"
+"rate_c13pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_c13pg_nacre"
+"rate_dpg_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_dpg_fxt"
+"rate_dpg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_dpg_nacre"
+"rate_f19pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_f19pa_nacre"
+"rate_he3he3_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3he3_nacre"
+"rate_he3he4_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3he4_nacre"
+"rate_he3ng_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_he3ng_fxt"
+"rate_hep_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_hep_fxt"
+"rate_li7pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_li7pa_nacre"
+"rate_n13pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_n13pg_nacre"
+"rate_n14pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_n14pg_nacre"
+"rate_ne20pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_ne20pg_nacre"
+"rate_o16ag_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16ag_nacre"
+"rate_o16o16g_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16o16g_fxt"
+"rate_o16pg_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o16pg_nacre"
+"rate_o18pa_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_o18pa_nacre"
+"rate_pep_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_pep_fxt"
+"rate_png_fxt" = "crates/flexmesa-rates/src/ratelib.rs::rate_png_fxt"
+"rate_pp_nacre" = "crates/flexmesa-rates/src/ratelib.rs::rate_pp_nacre"
+"rnacre" = "crates/flexmesa-rates/src/ratelib.rs::rnacre"
+"rnacre_rev" = "crates/flexmesa-rates/src/ratelib.rs::rnacre_rev"
+"tfactors" = "crates/flexmesa-rates/src/tfactors.rs::TFactors::from_log_t"
+"ecapnuc" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapnuc_rate"
+"get_partition_fcn_indx" = "crates/flexmesa-chem/src/elements.rs::get_partition_fcn_indx"
+"rate_al27pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ar36ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_be7dp_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_be7he3_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_c12_c12_to_h1_na23_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_c12ag_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_c12o16a_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_c12o16p_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ca40ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_cl35pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_co55pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_cr48ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ddg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_f19pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe52ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe52ng_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe53ng_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe54a_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe54an_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe54ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe54ng_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe54pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_fe55ng_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_he3d_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_he4_mg24_to_c12_o16_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_he4_ne20_to_c12_c12_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_k39pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_mg24ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_mn51pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_n14ag_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_n15pa_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_n15pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_na23pa_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_na23pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ne18ag_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ne18ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ne19pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ne20ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_o16o16_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_o16o16a_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_o16o16p_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_o17pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_p31pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_s32ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_sc43pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_si28ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_ti44ap_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_tripalf_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"rate_v47pg_jina" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: REACLIB evaluation through the handle terms (eval_reaction_raw op_code 0/29); the reaction-to-handle assignment comes from the embedded bundle and was not compared (#744)
+"jina_reaclib_1_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_1_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_1_3" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_1_4" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_2_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_2_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_2_3" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_2_4" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_3_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_3_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"jina_reaclib_4_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_1_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_1_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_1_3" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_1_4" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_2_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_2_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_2_3" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_2_4" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_3_1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_3_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"try1_reaclib_4_2" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle comes from the bundle (target_handle, is_rev) instead of the isotope-list lookup and the try-reverse-order fallback
+"reaclib_rate" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: min-T9 gate and the w/e flag rule are in eval_reaclib_terms (check_e_flag selects the rate_for_handle rule); lo/hi index lookup replaced by the per-handle term list
+"reaclib_rate_for_handle" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: min-T9 gate and the w/e flag rule are in eval_reaclib_terms (check_e_flag selects the rate_for_handle rule); lo/hi index lookup replaced by the per-handle term list
+"reaclib_rate_and_dlnT_for_handle" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: min-T9 gate and the w/e flag rule are in eval_reaclib_terms (check_e_flag selects the rate_for_handle rule); lo/hi index lookup replaced by the per-handle term list
+"reaclib_rate_and_dlnT" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: min-T9 gate and the w/e flag rule are in eval_reaclib_terms (check_e_flag selects the rate_for_handle rule); lo/hi index lookup replaced by the per-handle term list
 
 [[files]]
 upstream_path = "rates/private/rates_initialize.f90"
@@ -6791,7 +7173,12 @@ upstream_lines = 1422
 upstream_sha256 = "2b967697cc5859cdfc310a762d0e60a4edc8b9c638fb3b86bbf1177f9cdb920e"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["get_Qtotal"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"is_pp_reaction" = "crates/flexmesa-net/src/reaction_synth.rs::is_pp_reaction"
+"is_cno_reaction" = "crates/flexmesa-net/src/reaction_synth.rs::is_cno_reaction"
+"get_Qtotal" = "crates/flexmesa-net/src/reaction_synth.rs::mesa_reaction_qtotal" # partial: returns None for a missing input or output isotope, rn14ag_lite and r1..r9 placeholders where upstream passes the reactant list to reaction_Qtotal unconditionally
 
 [[files]]
 upstream_path = "rates/private/rates_names.f90"
@@ -6818,7 +7205,13 @@ upstream_lines = 706
 upstream_sha256 = "95f988449a1af9be3e3cc3c18cb08b29cdd5f518a611d4bbf4b7b6b6031f3a96"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_get_raw_rates", "do_make_rate_tables", "get_net_rates_for_tables"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_get_raw_rates" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: table lookup, dtab/ddtab and the dT/dRho formulas match; no max_safe_rate_for_any_temp stop and no nrattab == 1 branch (#744); the k cap is one cell more permissive than rates_support.f90:150-155, unreachable because logttab[last] == RATTAB_THI
+"do_get_raw_rates::get_rates_from_table" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables"
+"do_make_rate_tables" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: no disk cache (process-wide Arc cache keyed by reaction name), per-reaction splines built in parallel, weak-only sentinel mapped to exp(-99) at spline time, no nrattab == 1 branch
+"get_net_rates_for_tables" = "crates/flexmesa-net/src/initialize.rs::spline_reaction_rate_table" # partial: tfactors plus raw-rate evaluation per grid point; no is_bad check before the spline (#744)
 
 [[files]]
 upstream_path = "rates/private/raw_rates.f90"
@@ -6827,7 +7220,23 @@ upstream_lines = 1140
 upstream_sha256 = "5bf45a46436eb4d83f721e364ee37a4b61f8c8e5ad5fe7f930e50898ff5d53d2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["set_raw_rates", "set_raw_rate", "set_raw_rate::do_default", "set_raw_rate::do1", "set_raw_rate::do1_reverse", "eval_which_raw_rate", "eval_raw_rate", "eval_table", "eval_table_reverse", "get_interp_table", "get_reaclib_rate_and_dlnT", "get_reaclib_rate_and_dlnT::get_reaclib_lo_hi", "get_reaclib_rate_and_dlnT::do_jina_reaclib_reverse"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"set_raw_rates" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rates" # partial: loops over reaction ids calling set_raw_rate; per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rate" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do_default" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do1" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"set_raw_rate::do1_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: per-reaction rate function replaced by op_code dispatch from the embedded bundle; the op_code assignments were not compared with upstream (#744)
+"eval_which_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: thin wrapper around eval_raw_rate; same op_code dispatch
+"eval_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: no error for fr < 0, rr < 0 or missing_value (#744)
+"eval_table" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw" # partial: table evaluation is eval_rate_table on the bundle (op_code 1); no lazy need_to_read file load
+"eval_table_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaction_raw_with_overrides" # partial: detailed balance uses eval_reaclib_inverse_ratio on the first REACLIB term; no do_reaclib_indices_for_reaction error path
+"get_interp_table" = "crates/flexmesa-rates/src/raw_rates.rs::RateTable1D::from_str_table" # partial: text parse of the table plus the cubic coefficients built at load; search order and error handling differ from the Fortran file reader
+"get_reaclib_rate_and_dlnT" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: handle lookup replaces the reaction_is_reverse / reverse_reaction_id caches
+"get_reaclib_rate_and_dlnT::get_reaclib_lo_hi" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: catalog stores the terms per handle instead of lo/hi indices
+"get_reaclib_rate_and_dlnT::do_jina_reaclib" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat"
+"get_reaclib_rate_and_dlnT::do_jina_reaclib_reverse" = "crates/flexmesa-rates/src/raw_rates.rs::eval_reaclib_with_cat" # partial: is_rev flag swaps forward and reverse values; no mesa_error when the reverse id is unknown
 
 [[files]]
 upstream_path = "rates/private/reaclib_eval.f90"
@@ -6836,7 +7245,15 @@ upstream_lines = 292
 upstream_sha256 = "42348b6f3c68c82d3019cb993d0249190e49723eb5b8c377892dab8f83d96bb1"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["reaction_rates", "compute_some_inverse_lambdas", "do_reaclib_lookup", "do_reaclib_indices_for_reaction", "do_reaclib_reaction_rates"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: no forward_only argument: the reverse sum is always formed (#744)
+"compute_some_lambdas" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms"
+"compute_some_inverse_lambdas" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: terms with rflag w or e contribute no reverse rate, equivalent to the -huge inverse coefficient upstream's loader stores for them; a term with inv_part(1) == 0 is also skipped, which upstream does not do; the arithmetic otherwise matches (#744)
+"do_reaclib_lookup" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: handle-to-terms map built at load instead of the integer dict and index ranges
+"do_reaclib_indices_for_reaction" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: terms are stored per handle, so no lo/hi search
+"do_reaclib_reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: thin wrapper around reaction_rates
 
 [[files]]
 upstream_path = "rates/private/reaclib_input.f90"
@@ -6862,7 +7279,10 @@ upstream_lines = 766
 upstream_sha256 = "15db7aba384fc82c221f57902b68a0e5d2b67ae0ef70cb4f16cb629c553f8191"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["compute_rev_ratio"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"compute_rev_ratio" = "crates/flexmesa-rates/src/loader.rs::compute_reaclib_rev_coeffs" # partial: inverse coefficients, exponent and partition-function ratio follow upstream; w/e reactions keep their coefficients and are skipped at evaluation instead of getting -huge; the separate Python-exposed helper compute_rev_ratio_coeff1 rounds differently (#744)
 
 [[files]]
 upstream_path = "rates/private/screen.f90"
@@ -6871,7 +7291,10 @@ upstream_lines = 108
 upstream_sha256 = "b99b97f79fe4dd183bfcfdc19d21511d0acf6e16d87bd32281fd51a0b138883c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["do_screen_set_context"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"do_screen_set_context" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined per call; the no_screening/zbar == 0 early return is in screen_pair; z1pt58bar, zbar13, ntot and a_e are not stored (a_e and ntot are recomputed in screen_chugunov)
 
 [[files]]
 upstream_path = "rates/private/screen5.f90"
@@ -6881,6 +7304,9 @@ upstream_sha256 = "87f978405f2bb8ae51acf6e85fc6febf14f9904af971be49f5f43a90a0d7c
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"screen5_init_AZ_info" = "crates/flexmesa-rates/src/screen.rs::screen_extended"
+"fxt_screen5" = "crates/flexmesa-rates/src/screen.rs::screen_extended"
 
 [[files]]
 upstream_path = "rates/private/screen_chugunov.f90"
@@ -6889,7 +7315,10 @@ upstream_lines = 309
 upstream_sha256 = "0ae97adff443cc034f38e410ddd6efc6f487a4e85cca8f17cb9af3c28fa8614d"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["eval_screen_chugunov"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"eval_screen_chugunov" = "crates/flexmesa-rates/src/screen_chugunov.rs::screen_chugunov" # partial: arithmetic matches; also returns unscreened for temp <= 0 or den <= 0 (#739)
 
 [[files]]
 upstream_path = "rates/private/suzuki_tables.f90"
@@ -6898,7 +7327,13 @@ upstream_lines = 553
 upstream_sha256 = "1a2cad2ad9a8f4028bcfdebdadbd9b649ed5a98dc66ba9956b8d31e99d5c4096"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["interpolate_suzuki_table", "interpolate_suzuki_table::setup_for_linear_interp", "interpolate_suzuki_table::do_linear_interp"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"interpolate_suzuki_table" = "crates/flexmesa-rates/src/weak.rs::eval_suzuki_one" # partial: the grid-bounds test (ierr = -1 upstream) is done by the caller eval_weak_reaction_pair, which then falls back to weaklib; arithmetic matches
+"interpolate_suzuki_table::find_location" = "crates/flexmesa-rates/src/weak.rs::find_location"
+"interpolate_suzuki_table::setup_for_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no x_alfa/y_alfa range checks (#741)
+"interpolate_suzuki_table::do_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no non-finite fval error (#741)
 
 [[files]]
 upstream_path = "rates/private/weak_support.f90"
@@ -6916,7 +7351,13 @@ upstream_lines = 514
 upstream_sha256 = "7f5d625c8ddfc0f6fc968dec469e9d9e97779bcf984a8a31749924a018e463d8"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["interpolate_weaklib_table", "interpolate_weaklib_table::setup_for_linear_interp", "interpolate_weaklib_table::do_linear_interp"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"interpolate_weaklib_table" = "crates/flexmesa-rates/src/weak.rs::eval_weaklib_one" # partial: linear path only (weak_bicubic is .false. and has no setter); no non-finite fval error (#741)
+"interpolate_weaklib_table::find_location" = "crates/flexmesa-rates/src/weak.rs::find_location"
+"interpolate_weaklib_table::setup_for_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no x_alfa/y_alfa range checks (#741)
+"interpolate_weaklib_table::do_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no non-finite fval error (#741)
 
 [[files]]
 upstream_path = "rates/public/rates_def.f90"
@@ -6934,7 +7375,39 @@ upstream_lines = 974
 upstream_sha256 = "b79b9ef58c4ffdf1055df4015f150659612f54faa0c07fdb07daa2d52fbf0c27"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["read_rate_from_file", "read_rates_from_files", "add_reaction_from_reaclib", "add_reaction_for_handle", "make_rate_tables", "get_raw_rate", "get_raw_rates", "rates_reaction_id", "is_weak_reaction", "get_weak_rate_id", "get_weak_info_list_id", "get_ecapture_rate_id", "get_ecapture_info_list_id", "reaclib_lookup", "reaclib_indices_for_reaction", "reaclib_reaction_rates", "screen_init_AZ_info", "screening_option", "eval_weak_reaction_info", "eval_ecapture_reaction_info", "eval_using_rate_tables", "screen_set_context", "screen_pair", "coulomb_set_context", "get_mui_value", "get_vs_value"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"read_rate_from_file" = "crates/flexmesa-rates/src/raw_rates.rs::RateTable1D::from_file" # partial: file load only; no global raw_rates_records update
+"read_rates_from_files" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::from_name_or_dir_with_rate_overrides" # partial: tables are passed as (name, RateTable1D) overrides when the net is built
+"add_reaction_from_reaclib" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: synthesize_reaction_info builds the entry; no global reaction arrays
+"add_reaction_for_handle" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: synthesize_reaction_info builds the entry; no global reaction arrays
+"make_rate_tables" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: see rates_support do_make_rate_tables
+"eval_tfactors" = "crates/flexmesa-rates/src/tfactors.rs::TFactors::from_log_t"
+"get_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rate" # partial: see raw_rates set_raw_rate (#744)
+"get_raw_rates" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rates" # partial: see raw_rates set_raw_rates (#744)
+"rates_reaction_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaction_id_by_name" # partial: 316-entry catalog only; reactions added at net build get their ids in the net parser
+"is_weak_reaction" = "crates/flexmesa-net/src/initialize.rs::classify_reaclib_kinds" # partial: Rust tests weak_isos[0] > 0 only; upstream also requires weak_reaction_info(2) > 0 or std_reaction_neuQs > 0 (#745)
+"get_weak_rate_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::weak_by_pair" # partial: returns the table by name pair rather than an integer id
+"get_weak_info_list_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::weak_by_pair" # partial: returns the table by name pair rather than an integer id
+"get_ecapture_rate_id" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::pair_data" # partial: returns the pair data rather than an integer id
+"get_ecapture_info_list_id" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::pair_data" # partial: returns the pair data rather than an integer id
+"reaclib_lookup" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: handle-to-terms map instead of the integer dict
+"reaclib_indices_for_reaction" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: terms are stored per handle, so no lo/hi
+"reaclib_reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: see reaclib_eval reaction_rates (#744)
+"screen_init_AZ_info" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined in screen_extended
+"screening_option" = "crates/flexmesa-rates/src/types.rs::ScreeningMode::from_name" # partial: accepts integer codes and aliases and rejects an empty name, where upstream maps an empty name to no_screening (#745)
+"eval_salpeter_screening" = "crates/flexmesa-rates/src/screen.rs::screen_salpeter"
+"eval_weak_reaction_info" = "crates/flexmesa-net/src/derivs_support.rs::eval_single_weak_blended" # partial: one reaction per call; weaklib blend and ecapture dispatch in one function
+"eval_ecapture_reaction_info" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_pair_with_derivs" # partial: see eval_ecapture do_eval_ecapture_reaction_info (#737)
+"eval_using_rate_tables" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: see rates_support do_get_raw_rates (#744)
+"screen_set_context" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined per call; see screen.f90 do_screen_set_context
+"screen_pair" = "crates/flexmesa-rates/src/screen.rs::screen_pair" # partial: no low_logT_lim argument (scor = 0 below it): the net caller applies g.log_tcut_lo in net screen.rs; other_screening hook absent
+"eval_ecapnuc_rate" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapnuc_rate"
+"eval_FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf_with_derivs"
+"coulomb_set_context" = "crates/flexmesa-rates/src/ecapture.rs::coulomb_plasma_params_ad" # partial: see coulomb do_coulomb_set_context
+"get_mui_value" = "crates/flexmesa-rates/src/types.rs::CoulombMuiOption::from_name" # partial: case-insensitive and accepts integer codes and extra aliases; upstream matches exact names and calls mesa_error otherwise (#745)
+"get_vs_value" = "crates/flexmesa-rates/src/types.rs::CoulombVsOption::from_name" # partial: case-insensitive and accepts integer codes and extra aliases; upstream matches exact names and calls mesa_error otherwise (#745)
 
 [[files]]
 upstream_path = "star/job/gyre_in_mesa_extras_finish_step.inc"
@@ -7679,18 +8152,47 @@ upstream_lines = 1460
 upstream_sha256 = "f779283daa37ed7a74c712cd5620e72c1fd0b56f467a6e71adf9f5f2197a1f32"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rti.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_temperature.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/hydro_work.rs", "crates/flexmesa-star/src/mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/star_ad.rs"]
-routine_map_partial = ["get_RSP2_conv_velocity"]
+routine_map_partial = ["get_RSP2_conv_velocity", "get_face_weights_ad_support", "wrap_ChiRho_m1", "wrap_ChiT_m1", "wrap_Cp_m1", "wrap_Hp_00", "wrap_Hp_p1", "wrap_grad_ad_m1", "wrap_opt_time_center_v_00", "wrap_opt_time_center_v_m1", "wrap_opt_time_center_v_p1", "wrap_v_00", "wrap_v_m1", "wrap_v_p1", "wrap_w_00", "wrap_w_m1"]
 notes = "seeded from coverage-map.md (partial): quick. 3/118 wrapper names; Rust builds stencil duals ad hoc"
 [files.routine_map]
+"get_etrb" = "crates/flexmesa-star/src/cell_energy.rs::cell_rsp2_eturb"
+"get_face_weights_ad_support" = "crates/flexmesa-star/src/mesh.rs::StarModel::get_face_weights" # partial: returns (1.0, 0.0) at k == 0 instead of mesa_error and guards denom <= 0 -> (0.5, 0.5)
 "get_RSP2_conv_velocity" = "crates/flexmesa-star/src/mix_info.rs::set_mixing_info_with_skip"
 "shift_m1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_m1"
 "shift_p1" = "crates/flexmesa-star/src/star_ad.rs::StarAdOrder1::shift_p1"
+"wrap_ChiRho_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_ChiRho_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_ChiT_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_ChiT_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_Cp_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_Cp_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
 "wrap_d_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_00"
 "wrap_d_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_d_m1"
 "wrap_e_00" = "crates/flexmesa-star/src/hydro_energy.rs::wrap_e_cell_00"
+"wrap_grad_ad_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_00"
+"wrap_grad_ad_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_eos_m1" # partial: caller passes k - 1 without internal k > 0 zero-return guard
+"wrap_Hp_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp" # partial: returns constant when layout.i_hp is None
+"wrap_Hp_p1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_hp" # partial: returns constant when layout.i_hp is None; omits internal k < nz zero-return guard
+"wrap_opt_time_center_r_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_00"
+"wrap_opt_time_center_r_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_m1"
+"wrap_opt_time_center_r_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_r_p1"
+"wrap_opt_time_center_u_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_u_00"
+"wrap_opt_time_center_u_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_u_m1"
+"wrap_opt_time_center_v_00" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_00" # partial: v_flag branch only; omits u_flag/u_face_start branch
+"wrap_opt_time_center_v_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_m1" # partial: v_flag branch only; omits u_flag/u_face_start branch
+"wrap_opt_time_center_v_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::otc_v_p1" # partial: v_flag branch only; omits u_flag/u_face_start branch
 "wrap_Peos_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_00"
 "wrap_Peos_m1" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_peos_m1"
 "wrap_r_00" = "crates/flexmesa-star/src/hydro_momentum.rs::wrap_r_00"
+"wrap_r_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_r_m1"
+"wrap_r_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_r_p1"
+"wrap_u_00" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_u_00"
+"wrap_u_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_u_m1"
+"wrap_v_00" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_00" # partial: v_flag branch only; omits u_flag wrap_u_face_00 dispatch
+"wrap_v_m1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_m1" # partial: v_flag branch only; omits u_flag wrap_u_face_m1 dispatch
+"wrap_v_p1" = "crates/flexmesa-star/src/tdc_hydro.rs::wrap_v_p1" # partial: v_flag branch only; omits u_flag wrap_u_face_p1 dispatch
+"wrap_w_00" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_w" # partial: computes w = et_rsp.max(0.0).sqrt() and returns constant when layout.i_w is None
+"wrap_w_m1" = "crates/flexmesa-star/src/rsp2_ad.rs::wrap_w" # partial: computes w = et_rsp.max(0.0).sqrt(), returns constant when layout.i_w is None, and omits internal k > 0 guard
 
 [[files]]
 upstream_path = "star/private/brunt.f90"
@@ -7699,10 +8201,14 @@ upstream_lines = 335
 upstream_sha256 = "95520f5f1b4a0d740f56a60a890e82fef0ed4efc1460605454fda9e46ba3d218"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/mixing_state.rs"]
+routine_map_partial = ["do_brunt_B_MHM_form", "get_brunt_B"]
 notes = "Ported under #155: verbatim do_brunt_B (Brassard/MHM, unsmoothed_brunt_B retention, weighted/threshold smoothing) and do_brunt_N2 with rotational f_T/f_P and brunt_N2_composition_term."
 [files.routine_map]
 "do_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b"
+"do_brunt_B::smooth_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b"
+"do_brunt_B_MHM_form" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b" # partial: inlined over 1..nz rather than nzlo..nzhi; adds non-upstream use_brunt_gradmux_form/species==0 branch and xa_00==xa_m1 short-circuit, zeroes brunt_n2_composition_term
 "do_brunt_N2" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_n2"
+"get_brunt_B" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::do_brunt_b" # partial: inlined in do_brunt_b; adds use_brunt_gradmux_form, xa_00==xa_m1->0 short-circuit, and !(rho_f>0 && t_f>0) guard; calls eos_dt_get directly rather than eos_support::get_eos and omits report_ierr/stop_for_bad_nums prints
 
 [[files]]
 upstream_path = "star/private/conv_premix.f90"
@@ -7714,6 +8220,19 @@ flexmesa_files = ["crates/flexmesa-star/src/conv_premix.rs", "crates/flexmesa-st
 notes = "Ported under #155: verbatim do_conv_premix with per-zone ZoneInfo tracking, 1..=1024 subcell advance_bdy_by_one_cell, fixed-(Pgas,T)/(rho,T) EOS + kap + MLT re-evaluation, time_factor, avoid_increase, and dump_snapshots."
 [files.routine_map]
 "do_conv_premix" = "crates/flexmesa-star/src/conv_premix.rs::do_conv_premix"
+"advance_bdy_" = "crates/flexmesa-star/src/conv_premix.rs::advance_bdy"
+"advance_bdy_by_one_cell_" = "crates/flexmesa-star/src/conv_premix.rs::advance_bdy_by_one_cell"
+"init_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::init_zone_info"
+"create_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::create_zone_info"
+"update_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::update_zone_info"
+"set_penetration_velocities_" = "crates/flexmesa-star/src/conv_premix.rs::set_penetration_velocities"
+"set_burn_data_" = "crates/flexmesa-star/src/conv_premix.rs::set_burn_data"
+"set_abund_data_" = "crates/flexmesa-star/src/conv_premix.rs::set_abund_data"
+"validate_zone_info_" = "crates/flexmesa-star/src/conv_premix.rs::validate_zone_info"
+"update_model_" = "crates/flexmesa-star/src/conv_premix.rs::update_model"
+"dump_snapshot_" = "crates/flexmesa-star/src/conv_premix.rs::dump_snapshot"
+"save_model_" = "crates/flexmesa-star/src/conv_premix.rs::save_model"
+"restore_model_" = "crates/flexmesa-star/src/conv_premix.rs::restore_model"
 
 [[files]]
 upstream_path = "star/private/create_initial_model.f90"
@@ -7830,10 +8349,13 @@ upstream_lines = 1544
 upstream_sha256 = "4c2ea8db6b0de26687eacbd46aa268185fe2740838d1d8d64ae55217f19e9950"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/termination.rs"]
+routine_map_partial = ["do_one_check_model", "get_history_info"]
 notes = "updated for #159: full do_check_limits, compare_to_target (when_to_stop_rtol/atol), all 13 stop_at_phase_* checks, verbatim #264/#265; terminal/log formatting not ported"
 [files.routine_map]
 "compare_to_target" = "crates/flexmesa-star/src/termination.rs::compare_to_target"
 "do_check_limits" = "crates/flexmesa-star/src/termination.rs::do_check_limits+eval_check_limits_core"
+"do_one_check_model" = "crates/flexmesa-star/src/mesa_profile.rs::StarLogsWriter::due_flags+StarLogsWriter::record_step_with_extras" # partial: history/profile cadence and priority selection in StarLogsWriter; do_check_limits runs in evolve.rs, termination uses priority 3 vs 2, omits terminal output and logged gate
+"get_history_info" = "crates/flexmesa-star/src/mesa_profile.rs::StarLogsWriter::due_flags+StarLogsWriter::is_history_due" # partial: history cadence only in StarLogsWriter::due_flags; omits terminal_interval/header/summary output and forces history on first step and profile steps
 "get_species_mass" = "crates/flexmesa-star/src/termination.rs::get_species_mass_msun"
 
 [[files]]
@@ -7858,10 +8380,14 @@ upstream_lines = 413
 upstream_sha256 = "b5a0f3896d61be48fb9eec226c24810ad2068ddf1245d10d43ed3f923c4c9b7c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/pre_ms.rs", "crates/flexmesa-star/src/star_lib.rs"]
-routine_map_partial = ["solve_eos_given_PgasT_auto"]
+routine_map_partial = ["solve_eos_given_DE", "solve_eos_given_DEgas", "solve_eos_given_DP", "solve_eos_given_PT", "solve_eos_given_PgasT_auto"]
 notes = "seeded from coverage-map.md (partial): quick. `get_eos` path only; `solve_eos_given_DE/PgasT/...` helpers and `eos_frac_*` reporting not found (0/8 names)"
 [files.routine_map]
 "get_eos" = "crates/flexmesa-star/src/micro.rs::eval_cell"
+"solve_eos_given_DE" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy" # partial: inlined eos_dt_get_t on I_LN_E in mesh_remap with shared tol and (lnT, energy) return; omits full dres outputs and timing_num_solve_eos_calls
+"solve_eos_given_DEgas" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_eos_degas_and_kap" # partial: inlined eos_dt_get_t on WHICH_OTHER_EGAS in rsp_eos_inv with fixed 1e-11 tol; omits standalone wrapper, dres outputs, and timing counter
+"solve_eos_given_DP" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_t_given_dp" # partial: inlined eos_dt_get_t on WHICH_OTHER_LOG_PTOT in rsp_eos_inv with fixed 1e-11 tol; omits standalone wrapper, dres outputs, and timing counter
+"solve_eos_given_PT" = "crates/flexmesa-star/src/rsp_eos_inv.rs::eval1_mesa_rho_given_pt" # partial: inlined eos_dt_get_rho on WHICH_OTHER_LOG_PTOT in rsp_eos_inv with 9x tolerance relaxation; omits standalone wrapper, dres outputs, and timing counter
 "solve_eos_given_PgasT" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t"
 "solve_eos_given_PgasT_auto" = "crates/flexmesa-star/src/star_lib.rs::star_solve_eos_given_pgas_t_auto"
 
@@ -7872,9 +8398,14 @@ upstream_lines = 408
 upstream_sha256 = "9f76d4460b067e0dd485628664cf5d63afc6ea4bee52287a5c967d611be89726"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/eps_grav.rs"]
+routine_map_partial = ["eval_eps_grav_composition"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `do_std_eps_grav` and `do_lnS_eps_grav` present; blend weight differs (C1-20); composition term via partials rather than EOS re-evaluation at `xa_start`"
 [files.routine_map]
 "eval_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
+"eval1_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_cell"
+"do_std_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_std_cell+eval_eps_grav_std_cell_with_ctx"
+"do_lnS_eps_grav" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_lns_cell"
+"eval_eps_grav_composition" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav_composition_term+fill_d_eps_grav_dx_cell" # partial: s% eps_grav_composition_term(k) is not stored (eps_grav.f90:374, read by profile_getval.f90:1106); a bad value errors where upstream returns with ierr = 0 (:386-397, #638)
 "zero_eps_grav_and_partials" = "crates/flexmesa-star/src/eps_grav.rs::eval_eps_grav"
 
 [[files]]
@@ -7948,7 +8479,7 @@ upstream_lines = 3449
 upstream_sha256 = "9e812742db79a735453226882aa07ca92a9fabc8200885d5c86f565e316e37fe"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/report_utils.rs"]
-routine_map_partial = ["do_binary_col", "do_col", "do_col_pass2", "do_col_pass3", "do_color_col", "do_extra_col", "do_get_data_for_history_columns", "do_history_info", "do_int_val", "do_name", "do_val", "get1_hist_value", "get_history_specs", "history_getval", "set_burn_types", "write_history_info", "write_integer", "write_string", "write_val"]
+routine_map_partial = ["do_binary_col", "do_col", "do_col_pass2", "do_col_pass3", "do_color_col", "do_extra_col", "do_get_data_for_history_columns", "do_history_info", "do_history_info::do_extra_binary_col", "do_int_val", "do_name", "do_val", "get1_hist_value", "get_history_specs", "get_history_values", "get_iso_val", "history_getval", "set_burn_types", "write_history_info", "write_integer", "write_string", "write_val"]
 notes = "updated for #163: selectable history_columns.list writer (partial; microphysics columns under #161)"
 [files.routine_map]
 "category_L" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row_with_ctx"
@@ -7966,12 +8497,15 @@ notes = "updated for #163: selectable history_columns.list writer (partial; micr
 "do_extra_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
 "do_get_data_for_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row+evaluate_star_history_row_with_ctx"
 "do_history_info" = "crates/flexmesa-star/src/mesa_history.rs::write_step_with_ctx_and_extras+format_star_history_file_header_with_extras+format_star_history_data_line_with_extra"
+"do_history_info::do_extra_binary_col" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras+format_star_history_data_line_with_extra" # partial: appended via combined extra_cols slice in binary_history rather than separate extra_binary_col pass
 "do_int_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
 "do_name" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_file_header_with_extras"
 "do_val" = "crates/flexmesa-star/src/mesa_history.rs::format_star_history_data_line_with_extra"
 "find_weakest_mixing_region" = "crates/flexmesa-star/src/report_utils.rs::eval_history_mixing_regions"
 "get1_hist_value" = "crates/flexmesa-star/src/mesa_history.rs::star_get_history_output"
 "get_history_specs" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns"
+"get_history_values" = "crates/flexmesa-star/src/mesa_history.rs::evaluate_star_history_row+evaluate_star_history_row_with_ctx" # partial: evaluates parsed HistoryColumnSpec slice into typed Int/Float cells returning Err on first failure instead of per-slot failed_to_find_value flags; supported column subset
+"get_iso_val" = "crates/flexmesa-star/src/mesa_history.rs::parse_iso_prefix_query+evaluate_star_history_row_with_ctx+star_get_history_output" # partial: matches all 8 prefix+iso formulas via parse_iso_prefix_query and evaluate_star_history_row_with_ctx with case-insensitive whitespace splitting rather than standalone single-space get_iso_val
 "history_getval" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column+evaluate_star_history_row_with_ctx"
 "if_rot" = "crates/flexmesa-star/src/mesa_history.rs::eval_scalar_column"
 "interpolate_burn_bdy_q" = "crates/flexmesa-star/src/report_utils.rs::eval_history_burning_regions"
@@ -7995,12 +8529,13 @@ upstream_lines = 783
 upstream_sha256 = "152bbcf21a18ced4e34e000ae76e19144e63bede8719dffc953538ddb8142515"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_history.rs"]
-routine_map_partial = ["add_history_columns", "do1", "do1_history_spec", "set_history_columns"]
+routine_map_partial = ["add_history_columns", "do1", "do1_history_spec", "do1_history_spec::do1_color", "set_history_columns"]
 notes = "updated for #163: recursive history_columns.list parser (partial; #161)"
 [files.routine_map]
 "add_history_columns" = "crates/flexmesa-star/src/mesa_history.rs::parse_star_history_columns+parse_history_columns_inner"
 "do1" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
 "do1_history_spec" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
+"do1_history_spec::do1_color" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner" # partial: rejects 2-token legacy color directives with InvalidInput (matching upstream get_bc_id_by_name == -1 error) without upstream token/name_token parser and stdout message
 "do1_nuclide" = "crates/flexmesa-star/src/mesa_history.rs::parse_iso_prefix_query+insert_nuclide_spec"
 "do1_rates_category" = "crates/flexmesa-star/src/mesa_history.rs::parse_history_columns_inner"
 "do_abundances" = "crates/flexmesa-star/src/mesa_history.rs::insert_all_active_abundances"
@@ -8086,11 +8621,22 @@ upstream_sha256 = "a76112b95571180b51fec2a3fecd7a942e4c9f87115fb126c1dfbfb5b1d46
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_momentum.rs"]
 notes = "seeded from coverage-map.md (ported): quick. 6/15 names incl. `do1_momentum_eqn`, `do1_radius_eqn`"
+routine_map_partial = ["expected_non_HSE_term"]
 [files.routine_map]
+"do_surf_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::eval_surf_momentum_bc_pressure_ad+do1_momentum_eqn"
 "do1_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"get1_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"get1_momentum_eqn::init" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+eval_face_dm_bar"
+"get1_momentum_eqn::setup_HSE" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+expected_hse_grav_and_area"
+"get1_momentum_eqn::setup_non_HSE" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+expected_non_hse_term"
+"get1_momentum_eqn::setup_dPtot" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+calc_ptot_ad_tw"
+"get1_momentum_eqn::setup_d_mlt_Pturb" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+wrap_d_00+wrap_d_m1"
+"get1_momentum_eqn::setup_RTI_terms" = "crates/flexmesa-star/src/hydro_momentum.rs::setup_rti_momentum_terms"
+"get1_momentum_eqn::unpack_res18" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn"
+"expected_HSE_grav_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_hse_grav_and_area+expected_hse_grav_term"
+"expected_non_HSE_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_non_hse_term"
+"get_dPtot_face_info" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_momentum_eqn+calc_ptot_ad_tw"
 "do1_radius_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::do1_radius_eqn"
-"do_surf_momentum_eqn" = "crates/flexmesa-star/src/hydro_momentum.rs::eval_surf_momentum_bc_pressure_ad"
-"expected_HSE_grav_term" = "crates/flexmesa-star/src/hydro_momentum.rs::expected_hse_grav_term"
 
 [[files]]
 upstream_path = "star/private/hydro_riemann.f90"
@@ -8241,15 +8787,18 @@ upstream_lines = 1163
 upstream_sha256 = "8ff7fb41bb28819f649e6842fb97d98678876de7298fa3a24cd57463f70b9bb9"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/struct_burn_mix.rs"]
-routine_map_partial = ["get_surf_PT", "set_Teff_info_for_eqns", "set_final_vars", "set_grads", "set_hydro_vars", "set_vars", "set_vars_if_needed", "unpack_xh", "update_vars"]
+routine_map_partial = ["get_surf_PT", "set_Teff", "set_Teff_info_for_eqns", "set_basic_vars", "set_final_vars", "set_grads", "set_hydro_vars", "set_some_vars", "set_vars", "set_vars_if_needed", "unpack_xh", "update_vars"]
 notes = "seeded from coverage-map.md (partial): deep. `set_hydro_vars` order of micro/MLT/brunt/surf present; `set_vars_if_needed`/`update_vars` skip logic, `set_Teff` variants, `set_cgrav`/`other_cgrav` flow simplified"
 [files.routine_map]
 "compute_smoothed_brunt_B" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
 "get_surf_PT" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::get_surf_pt"
+"set_basic_vars" = "crates/flexmesa-star/src/micro.rs::set_basic_vars" # partial: sets m/dm/grav, rho/T, xa clamp+renorm, and composition moments; omits L_phot, d_vc_dv, lazy *_start latching, set_rv_info, RSP_w, set_rmid, and adds non-finite primary-state check at micro.rs:709-716 that upstream lacks (#688)
 "set_cgrav" = "crates/flexmesa-star/src/hydro_vars.rs::set_cgrav"
 "set_final_vars" = "crates/flexmesa-star/src/struct_burn_mix.rs::do_struct_burn_mix"
 "set_grads" = "crates/flexmesa-star/src/mixing_state.rs::set_grads"
 "set_hydro_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars+set_hydro_vars_with_skips"
+"set_some_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_hydro_vars_with_skips" # partial: coarse SetHydroVarsSkips + skip_net/skip_net_jacobian rather than upstream's 10 individual skip flags (#634)
+"set_Teff" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc" # partial: evaluates photosphere Teff, get_surf_pt with do_starspots tweak/restore, and diagnostic AD; omits use_other_surface_PT hook and second set_phot_info call (#634)
 "set_Teff_info_for_eqns" = "crates/flexmesa-star/src/hydro_brunt_surf.rs::eval_surf_bc"
 "set_vars" = "crates/flexmesa-star/src/hydro_vars.rs::set_vars"
 "set_vars_if_needed" = "crates/flexmesa-star/src/evolve_support.rs::set_vars_for_new_step+set_vars_for_new_try"
@@ -8263,7 +8812,20 @@ upstream_lines = 1232
 upstream_sha256 = "02eefaece9c8c88115a7d2eb5c5cf3c8312b22eaaf2a8ce932478b095313a3f6"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["alloc_star_data", "create_RSP_model", "create_initial_model", "create_pre_ms_model", "load_restart_photo", "load_saved_model", "load_zams_model", "model_builder", "set_starting_star_data"]
 notes = "seeded from coverage-map.md (stub): deep (C1-1). Case-name branching and sub-grid ZAMS rescaling removed (#148); remaining `do_star_init`, `do_load1_star`, `do_relax_to_radiative_core`, and envelope initialization parity tracked under #154"
+[files.routine_map]
+"alloc_star_data" = "crates/flexmesa-star/src/model.rs::StarModel::new" # partial: allocates StarModel arrays and defaults; omits Fortran star_handles table and callback pointers
+"create_initial_model" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches build_initial_model and initial_model_relax_num_steps inside init_or_update_model_impl; omits standalone wrapper
+"create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches build_pre_ms_model_with_configs and relax_after_create_pre_ms_model inside init_or_update_model_impl; omits standalone wrapper
+"create_RSP_model" = "crates/flexmesa-star/src/rsp_driver.rs::init_rsp_model_from_bundle" # partial: dispatches RSP model build/load inside init_rsp_model_from_bundle; omits standalone wrapper
+"load_restart_photo" = "crates/flexmesa-star/src/photo_io.rs::read_photo_bytes" # partial: reads FlexMESA binary photo format rather than MESA Fortran unformatted photo; omits model_builder restart dispatch
+"load_saved_model" = "crates/flexmesa-star/src/star_job_init.rs::load_saved_mod" # partial: reads .mod file via read_mod_str_with_dir; finish_load_model runs in caller init_or_update_model_impl
+"load_zams_model" = "crates/flexmesa-star/src/zams.rs::load_zams_model" # partial: loads built-in ZAMS catalog model; finish_load_model and star_job startup run in star_job_init.rs
+"model_builder" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: dispatches saved/pre-MS/initial/ZAMS/RSP builders, initial_y default, and post-build relaxes; omits create_RSP2_model, restart photo branch, and pgstar
+"model_builder::done_relax_after_create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::relax_after_create_pre_ms_model"
+"model_builder::setup_for_relax_after_create_pre_ms_model" = "crates/flexmesa-star/src/star_job_init.rs::relax_after_create_pre_ms_model"
+"set_starting_star_data" = "crates/flexmesa-star/src/model.rs::StarModel::new" # partial: initializes model defaults and counters in StarModel::new; omits Fortran star_info pointer nullification and unused scalar resets
 
 [[files]]
 upstream_path = "star/private/init_model.f90"
@@ -8272,8 +8834,12 @@ upstream_lines = 468
 upstream_sha256 = "dfb40f3a8a1df21ce569215343c79e70bcb00438bd94736e26de7de8bd5bda65"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/zams.rs"]
+routine_map_partial = ["get1_mass", "get1_zams_model", "get1_zams_model::read_zams_header"]
 notes = "seeded from coverage-map.md (ported): deep-ish. `get_zams_model` log-mass interpolation present; bypassed for many runs by C1-1"
 [files.routine_map]
+"get1_mass" = "crates/flexmesa-star/src/zams.rs::load_zams_model_from_catalog"
+"get1_zams_model" = "crates/flexmesa-star/src/zams.rs::ZamsCatalog::parse_ascii+load_zams_model_from_catalog"
+"get1_zams_model::read_zams_header" = "crates/flexmesa-star/src/zams.rs::ZamsCatalog::parse_ascii"
 "get_zams_model" = "crates/flexmesa-star/src/zams.rs::load_zams_model"
 
 [[files]]
@@ -8380,10 +8946,15 @@ upstream_lines = 327
 upstream_sha256 = "1706bf4c9f83697c27636e236de2b5d03467657c6dc2d6866617e9d3549e3256"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_functions.rs"]
+routine_map_partial = ["do_mass_function", "get_net_iso", "set_mesh_function_data::do1_xa_function", "set_mesh_function_data::do_conv_bdy"]
 notes = "updated for #153: all 21 MESA 26.4.1 mesh function families (default he4 weight 30, log_tau, log_kap, conv_bdy #241 loud guard)"
 [files.routine_map]
+"do_mass_function" = "crates/flexmesa-star/src/mesh_functions.rs::do_mass_function" # partial: omits unused intent(out) j parameter and delegates to get_net_iso_0based
+"get_net_iso" = "crates/flexmesa-star/src/mesh_functions.rs::get_net_iso_0based" # partial: returns 0-based Option<usize>, trims both leading and trailing whitespace, omits unknown-species stdout warning, and falls back to linear chem_id scan
 "num_mesh_functions" = "crates/flexmesa-star/src/mesh_functions.rs::num_mesh_functions"
 "set_mesh_function_data" = "crates/flexmesa-star/src/mesh_functions.rs::set_mesh_function_data"
+"set_mesh_function_data::do1_xa_function" = "crates/flexmesa-star/src/mesh_functions.rs::set_mesh_function_data_with_controls_and_xa" # partial: inlined in set_mesh_function_data_with_controls_and_xa; trims both ends of xa_function_species and delegates to get_net_iso_0based
+"set_mesh_function_data::do_conv_bdy" = "crates/flexmesa-star/src/mesh_functions.rs::eval_conv_bdy_column" # partial: recomputes boundaries via locate_fortran_conv_boundaries instead of reading s% conv_bdy_loc/top_conv_bdy, and errors on i > max(10, num_conv) for upstream #241 OOB read
 
 [[files]]
 upstream_path = "star/private/mesh_plan.f90"
@@ -8394,7 +8965,16 @@ status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/mesh_plan.rs"]
 notes = "updated for #153: do_mesh_plan, pick_new_points, pick_next_dq, split1, smooth_new_points, and round_off_xq"
 [files.routine_map]
-"do_mesh_plan" = "crates/flexmesa-star/src/mesh_plan.rs::do_mesh_plan"
+"do_mesh_plan" = "crates/flexmesa-star/src/mesh_plan.rs::do_mesh_plan+do_mesh_plan_with_xa"
+"do_mesh_plan::split1" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::split1"
+"do_mesh_plan::okay_to_split1" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::okay_to_split1"
+"do_mesh_plan::smooth_new_points" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::smooth_new_points"
+"do_mesh_plan::pick_new_points" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick_new_points"
+"do_mesh_plan::is_convective_boundary" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::is_convective_boundary"
+"do_mesh_plan::is_crystal_boundary" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::is_crystal_boundary"
+"pick_next_dq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick_next_dq"
+"pick1_dq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::pick1_dq"
+"round_off_xq" = "crates/flexmesa-star/src/mesh_plan.rs::PlanCtx::round_off_xq"
 
 [[files]]
 upstream_path = "star/private/micro.f90"
@@ -8871,11 +9451,18 @@ upstream_lines = 400
 upstream_sha256 = "ff4bde78184c84ee56e995f93b90f1ce97b1576332a0a9175abbfbb384d295f1"
 status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/phase_separation.rs"]
+routine_map_partial = ["update_model_"]
 evidence_artifacts = ["benchmarks/fortran_mesa/diffusion_oracles/mesa_26_4_1_diffusion_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/diffusion_phase_sep_156_test.rs"]
 notes = "updated for #156: blouin_delta_xo/xne tested at rtol=1e-14 (atol=1e-16) on 5 X_in points; 8-zone WD do_phase_separation_step (blouin_co, blouin_one, blouin_co_brunt via set_mlt_vars_range) tested against MESA 26.4.1 hex oracles: crystal/mixing masses and lnd/lnPgas/X_* rtol=1e-12, eps_phase_sep rtol=1e-8, grada_face rtol=1e-7, phase_init rtol=1e-5, gradr rtol=1e-11 after factoring out hydro_vars::do1_mlt_2 Prad_face discrepancy (#291); #271 OOB guards (Medin-Cumming 3-component tables absent from 26.4.1)"
 [files.routine_map]
+"blouin_delta_xne" = "crates/flexmesa-star/src/phase_separation.rs::blouin_delta_xne"
+"blouin_delta_xo" = "crates/flexmesa-star/src/phase_separation.rs::blouin_delta_xo"
+"do_2component_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_2component_phase_separation"
 "do_phase_separation" = "crates/flexmesa-star/src/phase_separation.rs::do_phase_separation_step"
+"mix_outward" = "crates/flexmesa-star/src/phase_separation.rs::mix_outward"
+"move_one_zone" = "crates/flexmesa-star/src/phase_separation.rs::move_one_zone"
+"update_model_" = "crates/flexmesa-star/src/phase_separation.rs::update_model_range"
 
 [[files]]
 upstream_path = "star/private/photo_in.f90"
@@ -8908,9 +9495,14 @@ upstream_lines = 738
 upstream_sha256 = "3c307e67d7a63f86fb0b3011588f0136b82133f23363b3d09ab89bb511a9c930"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/pre_ms.rs"]
+routine_map_partial = ["pre_ms_f"]
 notes = "seeded from coverage-map.md (ported): deep-ish. Integration scheme and tolerances match; defaults and composition differ (C1-14, Matches)"
 [files.routine_map]
+"build1_pre_ms_model" = "crates/flexmesa-star/src/pre_ms.rs::build1_pre_ms_model"
+"build1_pre_ms_model::unpack_eos_results" = "crates/flexmesa-star/src/pre_ms.rs::EosUnpacked::from_eos"
 "build_pre_ms_model" = "crates/flexmesa-star/src/pre_ms.rs::build_pre_ms_model"
+"eval_gradT" = "crates/flexmesa-star/src/pre_ms.rs::eval_grad_t"
+"pre_ms_f" = "crates/flexmesa-star/src/pre_ms.rs::build_pre_ms_model_with_configs"
 
 [[files]]
 upstream_path = "star/private/predictive_mix.f90"
@@ -8922,6 +9514,11 @@ flexmesa_files = ["crates/flexmesa-star/src/predictive_mix.rs", "crates/flexmesa
 notes = "Ported under #155: verbatim add_predictive_mixing and do_predictive_mixing with trial-mixed Schwarzschild EOS/kap/MLT re-evaluation, Ledoux extension, avoid_reversal, Spruit (2015) limit_ingestion, superad_thresh, cz_bdy_dq via find0, and #266 mix_mask reproduction."
 [files.routine_map]
 "add_predictive_mixing" = "crates/flexmesa-star/src/predictive_mix.rs::add_predictive_mixing"
+"do_predictive_mixing" = "crates/flexmesa-star/src/predictive_mix.rs::do_predictive_mixing+apply_predicted_face+eval_superad_min"
+"eval_abundances" = "crates/flexmesa-star/src/predictive_mix.rs::eval_abundances"
+"eval_mixing_coeffs" = "crates/flexmesa-star/src/predictive_mix.rs::eval_mixing_coeffs"
+"eval_eos" = "crates/flexmesa-star/src/mixing_micro.rs::eval_uniform_xa_eos_kap_range"
+"eval_ingest_limit" = "crates/flexmesa-star/src/predictive_mix.rs::eval_ingest_limit"
 
 [[files]]
 upstream_path = "star/private/profile.f90"
@@ -8958,7 +9555,7 @@ upstream_lines = 2466
 upstream_sha256 = "36d8b7f9b3a98ff636be758419269eb992279439e1f99c0dcdfe4662bcea3d1c"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/mesa_profile.rs"]
-routine_map_partial = ["do1_nuclide", "do1_profile_spec", "get_profile_id", "get_profile_val", "getval_for_profile"]
+routine_map_partial = ["do1_nuclide", "do1_profile_spec", "get_profile_id", "get_profile_val", "getval_for_profile", "getval_for_profile::if_rot", "getval_for_profile::if_rot_ad"]
 notes = "updated for #163: profile column evaluator (partial; #161)"
 [files.routine_map]
 "do1_nuclide" = "crates/flexmesa-star/src/mesa_profile.rs::parse_profile_columns_inner"
@@ -8966,6 +9563,8 @@ notes = "updated for #163: profile column evaluator (partial; #161)"
 "get_profile_id" = "crates/flexmesa-star/src/mesa_profile.rs::resolve_single_map_token+match_profile_scalar"
 "get_profile_val" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar"
 "getval_for_profile" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar+build"
+"getval_for_profile::if_rot" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar" # partial: inlined for supported rotation columns in eval_profile_scalar; log_j_rot uses abs(j_rot) and omits unsupported rotation/dynamo columns
+"getval_for_profile::if_rot_ad" = "crates/flexmesa-star/src/mesa_profile.rs::eval_profile_scalar" # partial: inlined for i_rot (alt=0) and fp_rot/ft_rot (alt=1) over plain f64 aux fields in eval_profile_scalar
 
 [[files]]
 upstream_path = "star/private/pulse.f90"
@@ -9124,7 +9723,83 @@ upstream_lines = 4340
 upstream_sha256 = "6e7a58a2c8beaf3f3fd7ac144b195f537e48360fded25e00cd1bfec0e105dc98"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/relax.rs", "crates/flexmesa-star/src/relax_comp.rs"]
+routine_map_partial = ["angular_momentum_relax_other_torque", "do1_relax_L_center", "do1_relax_R_center", "do_internal_evolve", "do_internal_evolve::restore_stuff", "do_internal_evolve::save_stuff", "do_relax_angular_momentum", "do_relax_tau_factor", "do_relax_uniform_omega", "relax_angular_momentum_check_model", "relax_angular_momentum_check_model::adjust_angular_momentum", "relax_entropy_check_model::adjust_entropy"]
 notes = "seeded from coverage-map.md (stub): deep (C1-2, C1-3, C1-4). 11/126 routine names; no `do_internal_evolve`-driven relaxations"
+[files.routine_map]
+"angular_momentum_relax_other_torque" = "crates/flexmesa-star/src/relax_mass_comp.rs::eval_relax_extra_jdot" # partial: omits j_rot_flag branch using j_rot_start(k); uses model.j_rot[k] only
+"before_evolve_relax_angular_momentum" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxAngularMomentum::before_evolve"
+"before_evolve_relax_composition" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::before_evolve"
+"before_evolve_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxCore::before_evolve"
+"before_evolve_relax_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropy::before_evolve"
+"before_evolve_relax_irradiation" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxIrradiation::before_evolve"
+"before_evolve_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMCenter::before_evolve"
+"before_evolve_relax_mass" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMass::before_evolve"
+"before_evolve_relax_mass_scale" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMassScale::before_evolve"
+"before_evolve_relax_num_steps" = "crates/flexmesa-star/src/relax_driver.rs::RelaxNumSteps::before_evolve"
+"before_evolve_relax_omega" = "crates/flexmesa-star/src/relax_driver.rs::RelaxOmega::before_evolve"
+"before_evolve_relax_tau_factor" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxTauFactor::before_evolve"
+"before_evolve_relax_to_radiative_core" = "crates/flexmesa-star/src/relax_driver.rs::RelaxToRadiativeCore::before_evolve"
+"before_evolve_relax_Y" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxY::before_evolve"
+"before_evolve_relax_Z" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxZ::before_evolve"
+"do1_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_core"
+"do1_relax_L_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_l_center" # partial: updates model.lum directly rather than xh(i_lum, k); relies on caller sync_mesh_and_pack
+"do1_relax_R_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do1_relax_r_center" # partial: updates model.ln_r/r directly rather than store_lnR_in_xh; relies on caller sync_mesh_and_pack
+"do_internal_evolve" = "crates/flexmesa-star/src/relax_driver.rs::do_internal_evolve+override_controls_for_relax" # partial: omits pgstar updates, finish_relax_step/finished_relax callbacks, and warning_limit_for_max_residual/recent_log_header
+"do_internal_evolve::restore_stuff" = "crates/flexmesa-star/src/relax_driver.rs::SavedStuff::restore" # partial: omits terminal-only warning_limit_for_max_residual and recent_log_header
+"do_internal_evolve::save_stuff" = "crates/flexmesa-star/src/relax_driver.rs::SavedStuff::save" # partial: omits terminal-only warning_limit_for_max_residual and recent_log_header
+"do_relax_angular_momentum" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_angular_momentum" # partial: adds input validation and resets star_age/time_old_sec in SavedScalarRelaxState
+"do_relax_angular_momentum::store_rpar" = "crates/flexmesa-star/src/relax_comp.rs::RelaxScalarInterpolant::from_slices"
+"do_relax_composition" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_composition"
+"do_relax_composition::store_rpar" = "crates/flexmesa-star/src/relax_comp.rs::RelaxCompositionInterpolants::from_profile"
+"do_relax_core" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_core"
+"do_relax_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::do_relax_entropy"
+"do_relax_entropy::store_rpar" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::new"
+"do_relax_irradiation" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_irradiation"
+"do_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_m_center"
+"do_relax_mass" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_mass"
+"do_relax_mass_scale" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_mass_scale"
+"do_relax_num_steps" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_num_steps"
+"do_relax_tau_factor" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_tau_factor" # partial: omits setting force_tau_factor at exit (photo restart field)
+"do_relax_to_radiative_core" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_to_radiative_core"
+"do_relax_uniform_omega" = "crates/flexmesa-star/src/relax_driver.rs::do_relax_uniform_omega" # partial: omits zeroing s% D_omega(1:nz) at exit
+"do_relax_Y" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_y"
+"do_relax_Z" = "crates/flexmesa-star/src/relax_mass_comp.rs::do_relax_z"
+"entropy_relax_other_energy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::apply_other_energy"
+"null_finish_model" = "crates/flexmesa-star/src/relax_driver.rs::finish_model"
+"relax_angular_momentum_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_angular_momentum_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxAngularMomentum::check_model" # partial: errors on non-finite interpolated target rather than only checking interp_values ierr; omits terminal avg_err print
+"relax_angular_momentum_check_model::adjust_angular_momentum" = "crates/flexmesa-star/src/relax_comp.rs::RelaxScalarInterpolant::interpolate_to_model" # partial: interpolates target angular momentum onto cell centers; omits terminal-only avg_err calculation
+"relax_composition_adjust_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::adjust_model"
+"relax_composition_adjust_model::adjust_xa" = "crates/flexmesa-star/src/relax_comp.rs::RelaxCompositionInterpolants::apply_step+RelaxCompositionInterpolants::interpolate_target_to_model"
+"relax_composition_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxComposition::check_model"
+"relax_core_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_core_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxCore::check_model"
+"relax_entropy_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_entropy_check_model" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropy::check_model"
+"relax_entropy_check_model::adjust_entropy" = "crates/flexmesa-star/src/relax_entropy.rs::RelaxEntropyTarget::at_cell_centers" # partial: interpolates target entropy onto cell centers for error check; omits terminal-only avg_err calculation
+"relax_irradiation_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_irradiation_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxIrradiation::check_model"
+"relax_M_center_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_M_center_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMCenter::check_model"
+"relax_mass_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_mass_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMass::check_model"
+"relax_mass_scale_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_mass_scale_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxMassScale::check_model"
+"relax_num_steps_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_num_steps_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxNumSteps::check_model"
+"relax_omega_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_omega_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxOmega::check_model"
+"relax_tau_factor_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_tau_factor_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxTauFactor::check_model"
+"relax_to_radiative_core_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_to_radiative_core_check_model" = "crates/flexmesa-star/src/relax_driver.rs::RelaxToRadiativeCore::check_model"
+"relax_Y_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_Y_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxY::check_model"
+"relax_Z_adjust_model" = "crates/flexmesa-star/src/relax_driver.rs::adjust_model"
+"relax_Z_check_model" = "crates/flexmesa-star/src/relax_mass_comp.rs::RelaxZ::check_model"
+"set_new_mass_for_relax_M_center" = "crates/flexmesa-star/src/relax_mass_comp.rs::set_new_mass_for_relax_m_center"
+"setup_before_relax" = "crates/flexmesa-star/src/relax_driver.rs::setup_before_relax"
+"turn_off_winds" = "crates/flexmesa-star/src/relax_driver.rs::turn_off_winds"
 
 [[files]]
 upstream_path = "star/private/remove_shells.f90"
@@ -9192,14 +9867,26 @@ upstream_lines = 1030
 upstream_sha256 = "481a1207fc939f2cf293cb3e71aacaeebdb906a69fec793ef6790545622e518e"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_build.rs", "crates/flexmesa-star/src/rsp_driver.rs", "crates/flexmesa-star/src/rsp_stats.rs"]
+routine_map_partial = ["begin_calculation", "calculate_work_integrals", "check_cycle_completed", "do1_step", "gather_pulse_statistics", "get_LINA_info", "read_map_specs", "rsp_one_step::add_to_map"]
 notes = "seeded from coverage-map.md (ported): quick. 14/19 names"
 [files.routine_map]
+"begin_calculation" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model" # partial: sets num_periods = 0 before set_star_vars_rsp and omits post-set_star_vars EKDEL reset
 "build_rsp_model" = "crates/flexmesa-star/src/rsp_build.rs::do_rsp_build_model"
+"calculate_work_integrals" = "crates/flexmesa-star/src/rsp_stats.rs::calculate_work_integrals" # partial: adds dm_ext.max(1e-99), work_period > 0 guard, and non-finite grpdv -> 0.0 guard
+"check_cycle_completed" = "crates/flexmesa-star/src/rsp_stats.rs::check_cycle_completed" # partial: omits is_bad(rsp_period) error and per-cycle step/iter/retry counter updates
 "do1_rsp_build" = "crates/flexmesa-star/src/rsp_build.rs::build_rsp_envelope_model"
+"do1_step" = "crates/flexmesa-star/src/rsp_driver.rs::do1_step" # partial: clamps rsp_target_steps_per_cycle.max(1); omits stop_for_bad_nums abort and pre-max_dt is_bad(dt) check
+"do1_step::dt_for_radiative_diffusion" = "crates/flexmesa-star/src/rsp_driver.rs::do1_step"
+"gather_pulse_statistics" = "crates/flexmesa-star/src/rsp_stats.rs::gather_pulse_statistics" # partial: guards lmax > 0.0 && lmin > 0.0 before log10(lmax/lmin)
+"get_GRPDV" = "crates/flexmesa-star/src/rsp_stats.rs::get_grpdv"
+"get_LINA_info" = "crates/flexmesa-star/src/rsp_driver.rs::get_lina_info" # partial: stores only first 3 modes, clamps nmodes.max(1), and uses .get(mode_idx).unwrap_or
+"read_map_specs" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_after_step_map" # partial: delegates to mesa_profile::parse_rsp_map_columns without max_map_cols cap
 "rsp_one_step" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_one_step"
+"rsp_one_step::add_to_map" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_after_step_map" # partial: checks ip < npch2 vs IP+1 <= NPCH2, guards period == 0.0, and omits star_history_name switch
 "rsp_setup_part1" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model"
 "rsp_setup_part2" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_setup_model"
 "rsp_total_energy_integrals" = "crates/flexmesa-star/src/rsp_driver.rs::rsp_total_energy_integrals"
+"set_random_velocities" = "crates/flexmesa-star/src/rsp_driver.rs::set_random_velocities"
 
 [[files]]
 upstream_path = "star/private/rsp_build.f90"
@@ -9208,9 +9895,26 @@ upstream_lines = 986
 upstream_sha256 = "4337e53418e6dea0d053beb8f5a89ccbbceda393579567fb3f70268ee6044f12"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_build.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/rsp_stah.rs"]
+routine_map_partial = ["CFLUX", "STAH", "STAH::eval_T_residual", "STAH::failed", "STAH::get_T", "STAH::get_T_estimate", "STAH::get_V"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
+"CFLUX" = "crates/flexmesa-star/src/rsp_stah.rs::StahStepVars::cflux" # partial: clamps w_0 with .max(0.0) before .sqrt()
 "do_rsp_build" = "crates/flexmesa-star/src/rsp_build.rs::do_rsp_build_model"
+"STAH" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: clamps r^3 - 3*V*dm/P4 with .max(0.0) and sets r_center = s.r_1 without recomputing from r(1)
+"STAH::change_NZN" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::eval_T_residual" = "crates/flexmesa-star/src/rsp_stah.rs::StahStepVars::eval_t_residual" # partial: guards dlnt4 == 0.0 -> 0.0
+"STAH::failed" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: omits adjusting_dmN/dmN_cnt > 1/IG > 54 stop guard
+"STAH::get_T" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t" # partial: runs Prad < P_0 reduction loop unconditionally in fallback instead of only under RSP_testing
+"STAH::get_T_estimate" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t" # partial: guards lnt_max > lnt_min and caps brent_safe_zero at 200 iterations
+"STAH::get_T_residual" = "crates/flexmesa-star/src/rsp_stah.rs::solve_stah_zone_t"
+"STAH::get_V" = "crates/flexmesa-star/src/rsp_stah.rs::stah" # partial: omits if (Lc_0 >= L) stop
+"STAH::next_dmN" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::next_H" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::prepare_for_new_H" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::setup_next_zone" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::setup_outer_zone" = "crates/flexmesa-star/src/rsp_stah.rs::stah"
+"STAH::store_N" = "crates/flexmesa-star/src/rsp_stah.rs::store_stah_zone"
+"ZNVAR" = "crates/flexmesa-star/src/rsp_stah.rs::znvar"
 
 [[files]]
 upstream_path = "star/private/rsp_def.f90"
@@ -9303,13 +10007,18 @@ upstream_lines = 3834
 upstream_sha256 = "f0fc12b02bbe0c7eb3673648fcf582c89cb69a7c6afc6d548956b3ba05e4e6ba"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/rsp_eqns.rs", "crates/flexmesa-star/src/rsp_eqns_cell.rs", "crates/flexmesa-star/src/rsp_hyd.rs", "crates/flexmesa-star/src/rsp_hyd_flux.rs", "crates/flexmesa-star/src/rsp_hyd_turb.rs", "crates/flexmesa-star/src/rsp_hyd_vars.rs", "crates/flexmesa-star/src/rsp_hyd_work.rs"]
+routine_map_partial = ["HYD::doing_retry", "HYD::set_min_k_for_turbulent_flux", "apply_corrections", "check_omega", "rsp_calc_XP", "solve_for_corrections"]
 notes = "seeded from coverage-map.md (ported): quick. 36/53 names; Rust ~3.2k lines vs 3.8k"
 [files.routine_map]
-"HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd"
-"T_form_of_calc_Fr" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::t_form_of_calc_fr"
 "acceleration_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::acceleration_eqn"
+"apply_corrections" = "crates/flexmesa-star/src/rsp_hyd.rs::apply_corrections" # partial: omits s% Lr(k) update and DXXE/DXXL tracking
+"calc_cell_equations" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn+turbulent_energy_eqn+t_form_of_erad_eqn"
+"calc_cell_equations::get_Lt" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
+"calc_cell_equations::inner_boundary_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_Chi" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_chi"
 "calc_Eq" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_eq"
+"calc_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
+"calc_face_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_Fr" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
 "calc_Hp_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_hp_face"
 "calc_Lc" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::calc_lc"
@@ -9318,20 +10027,34 @@ notes = "seeded from coverage-map.md (ported): quick. 36/53 names; Rust ~3.2k li
 "calc_Prad" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_prad"
 "calc_Pturb" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_pturb"
 "calc_Pvsc" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_pvsc"
-"calc_Y_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_y_face"
-"calc_cell_equations" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn+turbulent_energy_eqn+t_form_of_erad_eqn"
-"calc_equations" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "calc_source_sink" = "crates/flexmesa-star/src/rsp_hyd_turb.rs::calc_source_sink"
+"calc_Y_face" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::calc_y_face"
 "calculate_energies" = "crates/flexmesa-star/src/rsp_hyd.rs::calculate_energies"
+"check_omega" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::check_omega" # partial: clamps ibot = dc.ibotom.max(1)
 "do1_eos_and_kap" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::do1_eos_and_kap"
 "do1_specific_volume" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::do1_specific_volume"
+"erad_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::t_form_of_erad_eqn"
 "eval_eqns" = "crates/flexmesa-star/src/rsp_eqns.rs::eval_eqns"
 "eval_vars" = "crates/flexmesa-star/src/rsp_hyd_vars.rs::eval_vars"
+"Fr_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
 "get_Psurf" = "crates/flexmesa-star/src/rsp_hyd.rs::get_psurf"
+"HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd"
+"HYD::doing_retry" = "crates/flexmesa-star/src/rsp_hyd.rs::hyd" # partial: omits max_number_retries check and model.num_retries increment inside hyd
+"HYD::set_min_k_for_turbulent_flux" = "crates/flexmesa-star/src/rsp_hyd.rs::set_min_k_for_turbulent_flux" # partial: returns 0 early when dc.alfat <= 0.0
 "init_HYD" = "crates/flexmesa-star/src/rsp_hyd.rs::init_hyd"
+"restore_start_vars" = "crates/flexmesa-star/src/rsp_hyd.rs::restore_start_vars"
+"rsp_calc_XP" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::rsp_calc_xp" # partial: omits d_XP_dVol_00 and call_is_bad check
 "rsp_set_Teff" = "crates/flexmesa-star/src/rsp_hyd.rs::rsp_set_teff"
 "save_start_vars" = "crates/flexmesa-star/src/rsp_hyd.rs::save_start_vars"
+"set_1st_iter_R_using_v_start" = "crates/flexmesa-star/src/rsp_hyd.rs::set_1st_iter_r_using_v_start"
 "set_f_Edd" = "crates/flexmesa-star/src/rsp_hyd.rs::set_f_edd"
+"solve_for_corrections" = "crates/flexmesa-star/src/rsp_eqns.rs::solve_for_corrections" # partial: omits call_is_bad check on DX
+"T_form_of_calc_Fr" = "crates/flexmesa-star/src/rsp_hyd_flux.rs::t_form_of_calc_fr"
+"T_form_of_erad_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::t_form_of_erad_eqn"
+"T_form_of_Fr_eqn" = "crates/flexmesa-star/src/rsp_eqns.rs::fr_eqn"
+"total_energy_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::total_energy_eqn"
+"turbulent_energy_eqn" = "crates/flexmesa-star/src/rsp_eqns_cell.rs::turbulent_energy_eqn"
+"zero_boundaries" = "crates/flexmesa-star/src/rsp_hyd_work.rs::zero_boundaries"
 
 [[files]]
 upstream_path = "star/private/set_flags.f90"
@@ -9340,7 +10063,19 @@ upstream_lines = 806
 upstream_sha256 = "8d819fdbcc6b5510d84d75c1c638a5f9e1dc09704a5e3fc8ba7267bc7d175e31"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
+routine_map_partial = ["set_D_omega_flag", "set_RSP2_flag", "set_RSP_flag", "set_RTI_flag", "set_am_nu_rot_flag", "set_rotation_flag", "set_u_flag", "set_v_flag"]
 notes = "seeded from coverage-map.md (stub): quick. 1/16 names; no remap of state when a flag changes (e.g. `set_v_flag` initialisation, `set_RSP2_flag` conversion beyond rsp2_remesh.rs)"
+[files.routine_map]
+"set_am_nu_rot_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and aux.am_nu_rot zeroing only; omits mid-run star_set_am_nu_rot_flag
+"set_D_omega_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and aux.rotmix.d_omega zeroing only; omits mid-run star_set_D_omega_flag
+"set_rotation_flag" = "crates/flexmesa-star/src/job_rotation.rs::set_rotation_flag_on" # partial: enables rotation and zeroes j_rot/omega/am_nu_*/fp_rot/ft_rot only; omits turning rotation off and D_ST/D_DSI/D_SH/D_SSI/D_ES/D_GSF/prev_mesh_* zeroing
+"set_RSP2_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup toggle, VarLayout rebuild, w seeding, and hp_face init only; omits mid-run xh column insert/remove and teardown
+"set_RSP_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup rsp_flag toggle only; omits RSP_w/RSP_Et xh column insert/remove and RSP2_flag teardown
+"set_RTI_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and VarLayout/alpha_rti resize only; omits mid-run xh column shift and alloc_rti_arrays
+"set_u_flag" = "crates/flexmesa-star/src/star_job_init.rs::init_or_update_model_impl" # partial: startup flag toggle and VarLayout/u resize only; omits mid-run xh/u_face_ad/P_face_ad column shift and v_flag teardown
+"set_v_flag" = "crates/flexmesa-star/src/model.rs::StarModel::set_v_flag" # partial: omits set_var_info name strings and zeroing of xh_older/v_older
+"set_v_flag::del" = "crates/flexmesa-star/src/model.rs::shift_del_hydro_col"
+"set_v_flag::insert" = "crates/flexmesa-star/src/model.rs::shift_insert_hydro_col"
 
 [[files]]
 upstream_path = "star/private/solve_omega_mix.f90"
@@ -9351,9 +10086,13 @@ status = "kernel_reference_vectors"
 flexmesa_files = ["crates/flexmesa-star/src/omega_mix.rs"]
 evidence_artifacts = ["benchmarks/fortran_mesa/omega_mix_oracles/mesa_26_4_1_omega_mix_oracles.tsv"]
 evidence_tests = ["crates/flexmesa-star/tests/omega_mix_158_test.rs"]
+routine_map_partial = ["do_solve_omega_mix::solve_tridiag"]
 notes = "updated for #158: Quad (binary128) port of do_solve_omega_mix, solve_tridiag, min_mixing_timescale, create_matrix_and_rhs (am_sig_j/d2irot), adaptive substepping (4..20), other_torque/other_torque_implicit hooks, and angular_momentum_error_retry/warn verified at 0 ULP (bit-exact) across 12 MESA 26.4.1 hex oracle regimes (diffusive shear, pure-j, mixed omega+j, 1e13 stiffness, explicit extra_jdot/extra_omegadot, 3-point nonlinear implicit torque with all 6 derivatives, adaptive substepping, max_iters retry, conservation retry triggered/passed, and simple_i_rot_flag); recalc_mixing_info_each_substep and binary_other_torque/binary_other_torque_implicit are ported in omega_mix.rs but disabled in the current oracle generator (gen_omega_mix_oracles.f90:503,514-515)"
 [files.routine_map]
 "do_solve_omega_mix" = "crates/flexmesa-star/src/omega_mix.rs::do_solve_omega_mix_with_extras"
+"do_solve_omega_mix::create_matrix_and_rhs" = "crates/flexmesa-star/src/omega_mix.rs::create_matrix_and_rhs"
+"do_solve_omega_mix::min_mixing_timescale" = "crates/flexmesa-star/src/omega_mix.rs::min_mixing_timescale"
+"do_solve_omega_mix::solve_tridiag" = "crates/flexmesa-star/src/omega_mix.rs::solve_tridiag" # partial: adds n==0, zero/non-finite pivot bp, and non-finite solution x error returns absent in upstream solve_tridiag
 
 [[files]]
 upstream_path = "star/private/solver_support.f90"
@@ -9362,12 +10101,18 @@ upstream_lines = 1547
 upstream_sha256 = "f0e4afc3f21cda8eef650aa9a33cf2c1e535bd8bf297929f3c486561f164ecc1"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs"]
+routine_map_partial = ["check1_chem", "set_vars_for_solver", "set_vars_for_solver::set1"]
 notes = "updated for #152: set_xscale_info, sizequ (#177), sizeB (#251), Bdomain, set_vars_for_solver (edit_lnR, min_xa_hard_limit, sum_xa_hard_limit, #252), and check_after_converge"
 [files.routine_map]
 "Bdomain" = "crates/flexmesa-star/src/solver_support.rs::apply_bdomain"
+"Bdomain::clip_so_non_negative" = "crates/flexmesa-star/src/solver_support.rs::clip_so_non_negative"
+"check1_chem" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"edit_lnR" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
 "eval_equations" = "crates/flexmesa-star/src/hydro_eqns.rs::eval_henyey_equations_into"
 "force_another_iteration" = "crates/flexmesa-star/src/solver_support.rs::force_another_iteration"
 "inspectB" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"set_vars_for_solver" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
+"set_vars_for_solver::set1" = "crates/flexmesa-star/src/solver_support.rs::set_vars_for_solver"
 "set_xscale_info" = "crates/flexmesa-star/src/hydro_eqns.rs::compute_x_scale_into"
 "sizeB" = "crates/flexmesa-star/src/solver_norms.rs::compute_model_correction_norms_in_solver"
 "sizequ" = "crates/flexmesa-star/src/solver_norms.rs::compute_residual_norms_with_argmax"
@@ -9379,11 +10124,18 @@ upstream_lines = 981
 upstream_sha256 = "34d97fd656c01c95f0a5de29c9cd722670c65d5571b8758ae2abe0698031b4cd"
 status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-mtx/src/bcyclic.rs"]
+routine_map_partial = ["bcyclic_factor", "bcyclic_solve", "cycle_onestep", "cycle_rhs", "cycle_solve", "dense_factor", "dense_solve", "dense_solve1"]
 notes = "seeded from coverage-map.md (ported): quick"
 [files.routine_map]
-"bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
-"bcyclic_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
+"bcyclic_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_factor+solve_block_tridiag_bcyclic" # partial: omits use_DGESVX_in_bcyclic
+"bcyclic_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::bcyclic_solve+solve_block_tridiag_bcyclic" # partial: omits use_DGESVX_in_bcyclic
 "clear_storage" = "crates/flexmesa-mtx/src/bcyclic.rs::solve_block_tridiag_bcyclic"
+"cycle_onestep" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix+update_even_matrix+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic, bcyclic_odd_storage reuse, and factored(k) guard; zeroes u_j when !has_right
+"cycle_rhs" = "crates/flexmesa-mtx/src/bcyclic.rs::update_even_rhs+bcyclic_solve+normalize_odd_row+update_even_row" # partial: omits use_DGESVX_in_bcyclic
+"cycle_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::back_substitute_bcyclic" # partial: back_substitute_bcyclic ports mtx/private/bcyclic.f90:541-582 (in-place lblk1/ublk1); star_bcyclic.f90:544-589 reads separate factored lblkF1/ublkF1 (lmat only for ns > 1)
+"dense_factor" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrf directly; omits DGESVX and n4/n5 dispatch
+"dense_solve" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_matrix" # partial: calls dgetrs_multi directly; omits DGESVX
+"dense_solve1" = "crates/flexmesa-mtx/src/bcyclic.rs::normalize_odd_row+bcyclic_solve" # partial: calls dgetrs directly; omits DGESVX
 
 [[files]]
 upstream_path = "star/private/star_history_def.f90"
@@ -9454,7 +10206,7 @@ upstream_lines = 4149
 upstream_sha256 = "66d1c0f237d3e885d44cd820b994058e699677f21e9205fbcde639b905db8d12"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-astero/src/scaling.rs", "crates/flexmesa-star/src/adjust_net.rs", "crates/flexmesa-star/src/cell_energy.rs", "crates/flexmesa-star/src/core_boundaries.rs", "crates/flexmesa-star/src/eps_mdot.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/hydro_brunt_surf.rs", "crates/flexmesa-star/src/hydro_energy.rs", "crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/hydro_momentum.rs", "crates/flexmesa-star/src/hydro_rotation.rs", "crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/hydro_vars.rs", "crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/job_rotation.rs", "crates/flexmesa-star/src/mesa_history.rs", "crates/flexmesa-star/src/mesh.rs", "crates/flexmesa-star/src/mesh_remap.rs", "crates/flexmesa-star/src/micro.rs", "crates/flexmesa-star/src/mixing_state.rs", "crates/flexmesa-star/src/pulse_gyre_data.rs", "crates/flexmesa-star/src/relax_comp.rs", "crates/flexmesa-star/src/report_utils.rs", "crates/flexmesa-star/src/rotation_mix_info.rs", "crates/flexmesa-star/src/rsp2_ad.rs", "crates/flexmesa-star/src/rsp2_eqns.rs", "crates/flexmesa-star/src/rsp_grid.rs", "crates/flexmesa-star/src/solver_support.rs", "crates/flexmesa-star/src/star_utils.rs", "crates/flexmesa-star/src/termination.rs", "crates/flexmesa-star/src/zams.rs"]
-routine_map_partial = ["calc_Ptot_ad_tw", "calc_Ptrb_ad_tw", "cell_start_specific_PE_qp", "e00", "em1", "ep1", "get_Lrad_div_Ledd", "get_Pvsc_ad", "get_area_info_opt_time_center", "get_delta_Pg_bildsten2012", "get_delta_Pg_traditional", "get_dke_dt_dpe_dt", "get_grada_face", "get_gradr_face", "get_rho_face", "get_scale_height_face", "get_scale_height_face_val", "get_string_for_model_number", "get_tau", "min_dr_div_cs", "save_eqn_residual_info", "set_abs_du_div_cs", "set_m_and_dm", "set_m_grav_and_grav", "set_phot_info", "set_rmid", "set_scale_height", "set_xqs", "store_partials", "unpack_residual_partials"]
+routine_map_partial = ["calc_Ptot_ad_tw", "calc_Ptrb_ad_tw", "cell_start_specific_KE", "cell_start_specific_PE", "cell_start_specific_PE_qp", "e00", "em1", "ep1", "get_Lrad_div_Ledd", "get_Pvsc_ad", "get_area_info_opt_time_center", "get_delta_Pg_bildsten2012", "get_delta_Pg_traditional", "get_dke_dt_dpe_dt", "get_grada_face", "get_gradr_face", "get_rho_face", "get_scale_height_face", "get_scale_height_face_val", "get_string_for_model_number", "get_tau", "min_dr_div_cs", "save_eqn_residual_info", "set_abs_du_div_cs", "set_m_and_dm", "set_m_grav_and_grav", "set_phot_info", "set_rmid", "set_scale_height", "set_xqs", "store_partials", "unpack_residual_partials"]
 notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 [files.routine_map]
 "after_C_burn" = "crates/flexmesa-star/src/job_rotation.rs::after_c_burn"
@@ -9467,7 +10219,9 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "cell_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_pe_qp"
 "cell_specific_rotational_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_rotational_energy"
 "cell_specific_total_energy" = "crates/flexmesa-star/src/cell_energy.rs::cell_specific_total_energy"
+"cell_start_specific_KE" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_ke_qp" # partial: inlined inside get_dke_dt_dpe_dt via specific_ke_qp(...).ke.to_f64(); no standalone f64 wrapper
 "cell_start_specific_KE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_ke_qp"
+"cell_start_specific_PE" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_pe_qp" # partial: inlined inside get_dke_dt_dpe_dt; uses current m_grav/mass_correction rather than _start
 "cell_start_specific_PE_qp" = "crates/flexmesa-star/src/cell_energy.rs::get_dke_dt_dpe_dt+specific_pe_qp"
 "center_avg_x" = "crates/flexmesa-star/src/report_utils.rs::center_avg_x_slot+center_avg_x_by_name"
 "center_value" = "crates/flexmesa-star/src/report_utils.rs::center_value+center_value_by"
@@ -9511,6 +10265,7 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "get_Lrad_div_Ledd" = "crates/flexmesa-star/src/mix_info.rs::eval_lrad_div_ledd"
 "get_name_for_restart_file" = "crates/flexmesa-star/src/inlist_runner.rs::photo_restart_filename"
 "get_Peos_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_Peos_face_val" = "crates/flexmesa-star/src/mesh.rs::StarModel::face_value_alfa_beta"
 "get_phot_info" = "crates/flexmesa-star/src/report_utils.rs::eval_photosphere_info"
 "get_Prad_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
 "get_Pvsc_ad" = "crates/flexmesa-star/src/hydro_energy.rs::eval_pvsc_cell_ad"
@@ -9520,6 +10275,7 @@ notes = "seeded from coverage-map.md (partial): quick. 31/158 routine names"
 "get_remnant_mass" = "crates/flexmesa-star/src/termination.rs::get_remnant_mass"
 "get_rho_and_lnd_from_xh" = "crates/flexmesa-star/src/mesh.rs::unpack_xh"
 "get_rho_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
+"get_rho_face_val" = "crates/flexmesa-star/src/mesh.rs::StarModel::face_value_alfa_beta"
 "get_rho_start_face" = "crates/flexmesa-star/src/hydro_vars.rs::face_dv_and_energy"
 "get_scale_height_face" = "crates/flexmesa-star/src/hydro_vars.rs::do1_mlt_2"
 "get_scale_height_face_val" = "crates/flexmesa-star/src/rsp2_eqns.rs::get_scale_height_face_val"
@@ -9756,11 +10512,22 @@ module = "star"
 upstream_lines = 706
 upstream_sha256 = "1d768f3e5185e8cec478b8917b858e274b9fec9b148100d6b80895a538acacde"
 status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs"]
+flexmesa_files = ["crates/flexmesa-star/src/winds.rs", "crates/flexmesa-star/src/winds_driver.rs", "crates/flexmesa-star/src/evolve.rs"]
+routine_map_partial = ["set_mdot"]
 notes = "updated for #159: all wind schemes + 'other', eval_super_eddington_wind (0.5*vesc2, prev_Ledd), eval_rlo_wind, T_center taper, envelope/He-layer limits, dt ramp, and surface-averaged v_div_v_crit boost shared with flexmesa-binary"
 [files.routine_map]
-"set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::set_mdot"
-"do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot"
+"set_mdot" = "crates/flexmesa-star/src/evolve.rs::set_step_mdot" # partial: restores explicit_step_mdot and rotational_mdot_boost_old when other_adjust_mdot declines without changing mstar_dot; winds.f90:35-51 has no restore (#758)
+"do_set_mdot" = "crates/flexmesa-star/src/winds_driver.rs::do_set_mdot_with_extras+do_set_mdot+net_h1_he4_surface_center"
+"do_set_mdot::eval_wind_for_scheme" = "crates/flexmesa-star/src/winds_driver.rs::eval_wind_for_scheme+scheme_eta"
+"do_set_mdot::rotation_enhancement" = "crates/flexmesa-star/src/winds_driver.rs::apply_rotation_enhancement"
+"do_set_mdot::eval_Bjorklund_wind" = "crates/flexmesa-star/src/winds.rs::eval_bjorklund_wind"
+"do_set_mdot::eval_Vink_wind" = "crates/flexmesa-star/src/winds.rs::eval_vink_wind"
+"do_set_mdot::eval_blocker_wind" = "crates/flexmesa-star/src/winds.rs::eval_blocker_wind"
+"do_set_mdot::eval_highT_Dutch" = "crates/flexmesa-star/src/winds.rs::eval_nugis_lamers_wind+eval_dutch_wind"
+"do_set_mdot::eval_lowT_Dutch" = "crates/flexmesa-star/src/winds.rs::eval_dutch_wind"
+"do_set_mdot::eval_de_Jager_wind" = "crates/flexmesa-star/src/winds.rs::eval_de_jager_wind"
+"do_set_mdot::eval_van_Loon_wind" = "crates/flexmesa-star/src/winds.rs::eval_van_loon_wind"
+"do_set_mdot::eval_Nieuwenhuijzen_wind" = "crates/flexmesa-star/src/winds.rs::eval_nieuwenhuijzen_wind"
 "eval_super_eddington_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_super_eddington_wind"
 "eval_rlo_wind" = "crates/flexmesa-star/src/winds_driver.rs::eval_rlo_wind"
 

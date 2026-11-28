@@ -1327,9 +1327,9 @@
         "mislabel_reason": "#563: W4 audit found no real-MESA 26.4.1 oracle comparison; rename away from restricted vocabulary under W4 (#563)"
       }
     ],
-    "mapped_routines_total": 1623,
+    "mapped_routines_total": 2290,
     "listed_oracle_routines_total": 64,
-    "listed_oracle_routines_pct": 3.9,
+    "listed_oracle_routines_pct": 2.8,
     "listed_oracle_routine_ids": [
       "const/public/const_def.f90::do_const_init",
       "const/public/const_lib.f90::const_init",
@@ -1405,9 +1405,9 @@
         "total_files": 124,
         "total_tests": 754,
         "mislabeled_files": 2,
-        "mapped_routines": 924,
+        "mapped_routines": 1197,
         "listed_oracle_routines": 20,
-        "listed_oracle_routines_pct": 2.2
+        "listed_oracle_routines_pct": 1.7
       },
       {
         "module": "binary",
@@ -1453,7 +1453,7 @@
         "total_files": 7,
         "total_tests": 34,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 91,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1465,7 +1465,7 @@
         "total_files": 12,
         "total_tests": 44,
         "mislabeled_files": 0,
-        "mapped_routines": 12,
+        "mapped_routines": 119,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },
@@ -1477,7 +1477,7 @@
         "total_files": 6,
         "total_tests": 27,
         "mislabeled_files": 0,
-        "mapped_routines": 0,
+        "mapped_routines": 196,
         "listed_oracle_routines": 0,
         "listed_oracle_routines_pct": 0.0
       },

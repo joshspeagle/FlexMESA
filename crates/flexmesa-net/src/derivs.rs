@@ -447,7 +447,8 @@ pub fn get_derivs(
 /// output count the dispatch does not allow (`:1364-1477`), and
 /// `weak_id > num_wk_reactions` (`:1489-1496`). A two- or three-input
 /// reaction with `itab(in1)` or `itab(in2)` zero would read `n% y(0)`,
-/// outside the array, which has no defined value (DECISIONS #43).
+/// outside the array, which has no defined value (DECISIONS #43,
+/// deferred #675).
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn get1_derivs(
     g: &NetGeneralInfo,
@@ -564,8 +565,8 @@ fn get1_derivs(
         let i1 = i_in[0];
         let i2 = i_in[1];
         if i1 == 0 || i2 == 0 {
-            // Upstream reads `n% y(0)` here (DECISIONS #43, #661).
-            return fail("itab(in1) or itab(in2) = 0 reads n% y(0)");
+            // Upstream reads `n% y(0)` here (DECISIONS #43, deferred #675).
+            return fail("itab(in1) or itab(in2) = 0 reads n% y(0) (#675)");
         }
         let y1 = w.y[i1 - 1];
         let y2 = w.y[i2 - 1];

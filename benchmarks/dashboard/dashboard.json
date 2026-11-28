@@ -2041,8 +2041,18 @@
     ],
     "open_pull_requests": [
       {
-        "number": 746,
-        "title": "ci: manual runs default to T0; the canary gate job stops on cancel",
+        "number": 747,
+        "title": "audit: routine maps for core star, kap, net and rates (P0 package)",
+        "draft": false
+      },
+      {
+        "number": 749,
+        "title": "windows: W2 window-inlist constructor and tests (#684)",
+        "draft": false
+      },
+      {
+        "number": 751,
+        "title": "dashboard: read the deferred register from the children of #727",
         "draft": false
       }
     ],
@@ -2837,6 +2847,14 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 750,
+        "title": "[Deferred bug] astero: adipls_irotkr is overwritten by the ADIPLS parameter-file value (res_adipar reset)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -4505,6 +4523,19 @@
       "closed_140": "32",
       "total_140": "56",
       "deferred_169": "99"
+    },
+    {
+      "date_utc": "2026-11-28",
+      "commit": "7901ff6f",
+      "event": "main merge",
+      "engine_ported_pct": "31.1",
+      "all_verified_pct": "1.1",
+      "cases_passing": "63",
+      "rust_cov_pct": "77.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "32",
+      "total_140": "56",
+      "deferred_169": "100"
     }
   ]
 }

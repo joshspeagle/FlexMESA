@@ -7245,7 +7245,7 @@ notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
 "reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: no forward_only argument: the reverse sum is always formed (#744)
 "compute_some_lambdas" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms"
-"compute_some_inverse_lambdas" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: terms with rflag w or e, or inv_part(1) == 0, contribute no reverse rate; upstream has no such test (#744)
+"compute_some_inverse_lambdas" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: terms with rflag w or e contribute no reverse rate, equivalent to the -huge inverse coefficient upstream's loader stores for them; a term with inv_part(1) == 0 is also skipped, which upstream does not do; the arithmetic otherwise matches (#744)
 "do_reaclib_lookup" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: handle-to-terms map built at load instead of the integer dict and index ranges
 "do_reaclib_indices_for_reaction" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: terms are stored per handle, so no lo/hi search
 "do_reaclib_reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: thin wrapper around reaction_rates

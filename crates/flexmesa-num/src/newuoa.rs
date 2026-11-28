@@ -26,10 +26,11 @@
 //!
 //! - `W` shorter than the elements a routine touches (upstream writes past the
 //!   end of `W`). MESA's astero driver allocates the `BOBYQA` length, which is
-//!   too short for `BIGDEN` (`astero_run_support.f90:671`); see
-//!   [`newuoa_with_workspace`].
+//!   too short for `BIGDEN` (`astero_run_support.f90:671`, Deferred bug
+//!   #754); see [`newuoa_with_workspace`].
 //! - `MAXFUN < NPT`: upstream returns from the initialization loop and reads
-//!   `XOPT` before it is set (`mod_newuoa.f:432-436` then `:689-692`).
+//!   `XOPT` before it is set (`mod_newuoa.f:432-436` then `:689-692`,
+//!   Deferred bug #755).
 //!
 //! Deferred issues for both are pending (package G2 report).
 
@@ -221,11 +222,11 @@ struct Layout {
 /// (0-based exclusive bound), which has no defined result (`DECISIONS #43`).
 fn need_w(w: &[f64], end: usize) -> Result<(), NumError> {
     if end > w.len() {
-        // DECISIONS #43: upstream writes past the end of W here; deferred
-        // issue pending (package G2 report).
+        // DECISIONS #43: upstream writes past the end of W here (Deferred
+        // bug #754 for astero's W length).
         return Err(NumError::InvalidParameter(
             "NEWUOA workspace W is too short: upstream writes past its end \
-             here (DECISIONS #43)",
+             here (Deferred bug #754, DECISIONS #43)",
         ));
     }
     Ok(())
@@ -1009,11 +1010,11 @@ where
                     if !xopt_set {
                         // DECISIONS #43: MAXFUN < NPT returns from the
                         // initialization loop and reads XOPT before
-                        // mod_newuoa.f:250 sets it; deferred issue pending
-                        // (package G2 report).
+                        // mod_newuoa.f:250 sets it (Deferred bug #755).
                         return Err(NumError::InvalidParameter(
                             "NEWUOA returned before XOPT was set (MAXFUN < \
-                             NPT reads an unset XOPT, DECISIONS #43)",
+                             NPT reads an unset XOPT, Deferred bug #755, \
+                             DECISIONS #43)",
                         ));
                     }
                     for i in 1..=n {

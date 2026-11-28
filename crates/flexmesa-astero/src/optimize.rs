@@ -585,7 +585,8 @@ where
     let r_end = rhoend;
     // `w((npt+5)*(npt+nvar)+3*nvar*(nvar+5)/2)` as allocated upstream
     // (`astero_run_support.f90:670-671`). This is the BOBYQA length, which is
-    // too short for NEWUOA's BIGDEN: that path errors (`DECISIONS #43`).
+    // too short for NEWUOA's BIGDEN: that path errors (Deferred bug #754,
+    // `DECISIONS #43`).
     let mut w =
         vec![0.0_f64; (npt + 5) * (npt + n_eff) + 3 * n_eff * (n_eff + 5) / 2];
     let mut best_x: Vec<f64> = (0..n)

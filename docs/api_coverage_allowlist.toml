@@ -6,8 +6,8 @@
 
 [counts]
 python = 0
-rust_pyi = 277
-total = 277
+rust_pyi = 269
+total = 269
 
 [[allow]]
 page = "docs/api/astero.md"
@@ -574,62 +574,6 @@ page = "docs/api/eos.md"
 source = "rust_pyi"
 group = "eos_solver_py"
 name = "eos_eval_pt_get_t"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "trace_py"
-name = "mesa_read_log_file"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "trace_py"
-name = "trace_astero_case"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "trace_py"
-name = "trace_binary_case"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "trace_py"
-name = "trace_star_case"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "wave5_bench_py"
-name = "w5_eval_astero_seism"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "wave5_bench_py"
-name = "w5_eval_binary_rlof_batch"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "wave5_bench_py"
-name = "w5_eval_diff_rot_batch"
-reason = "undocumented as of 2026-11-28 (P1.4)"
-
-[[allow]]
-page = "docs/api/io-plotting-bench.md"
-source = "rust_pyi"
-group = "wave5_bench_py"
-name = "w5_eval_riemann_rsp2_batch"
 reason = "undocumented as of 2026-11-28 (P1.4)"
 
 [[allow]]

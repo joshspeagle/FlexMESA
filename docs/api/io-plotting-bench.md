@@ -179,3 +179,23 @@ print(
 `flexmesa.testing.artifact_compare` judges a case that takes zero steps and writes a result file (`star/rsp_check_2nd_crossing`): it parses the file and compares every field with the committed MESA `26.4.1` copy at the precision of the upstream format statement (`DECISIONS #76`, `#606`).
 
 ::: flexmesa.testing.artifact_compare
+
+---
+
+## Compiled Rust Extension Bridge (`flexmesa._rust`)
+
+Low-level Safe Rust PyO3 bindings exposed via `flexmesa._rust` for tracing, log reading, and benchmark kernels (`_ArrF64` denotes a `float64` NumPy `ndarray`).
+
+### `trace_py`
+
+- **`mesa_read_log_file`** (`(path: str) -> dict[str, Any]`): Reads a 6-line-header MESA ASCII table (`history.data`, `profileN.data`, or `binary_history.data`) into a dictionary of headers and 1D `float64` arrays.
+- **`trace_astero_case`** (`(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]`): Runs an upstream `astero/test_suite/<case>` directory while streaming incremental MESA-format `LOGS/history.data` and asteroseismic tables.
+- **`trace_binary_case`** (`(case_dir: str, out_target: str, max_steps: int | None = None, respect_intervals: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]`): Runs an upstream `binary/test_suite/<case>` directory while streaming incremental MESA-format `binary_history.data` and component `LOGS1/`/`LOGS2/`.
+- **`trace_star_case`** (`(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False, extras: Any = None) -> dict[str, Any]`): Runs an upstream `star/test_suite/<case>` directory while streaming incremental MESA-format `LOGS/history.data` (and optional profiles).
+
+### `wave5_bench_py`
+
+- **`w5_eval_astero_seism`** (`(nz: int) -> float`): Evaluates the `w5_astero_seism` benchmark scalar digest for `nz` zones.
+- **`w5_eval_binary_rlof_batch`** (`(nz: int, parallel: bool = False) -> _ArrF64`): Evaluates the `w5_binary_rlof` benchmark profile across `nz` binary configurations (shape `(nz,)`), dispatching across the persistent 4-thread worker team when `parallel` is `True`.
+- **`w5_eval_diff_rot_batch`** (`(nz: int, parallel: bool = False) -> _ArrF64`): Evaluates the `w5_diff_rot` benchmark profile across `nz` zones (shape `(nz,)`), dispatching across the persistent 4-thread worker team when `parallel` is `True`.
+- **`w5_eval_riemann_rsp2_batch`** (`(nz: int, parallel: bool = False) -> _ArrF64`): Evaluates the `w5_riemann_rsp2` benchmark profile across `nz` zones (shape `(nz,)`), dispatching across the persistent 4-thread worker team when `parallel` is `True`.

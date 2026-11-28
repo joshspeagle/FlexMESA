@@ -582,6 +582,40 @@ pub struct StarControls {
     pub rti_d: f64,
     /// Saturation cap on $\alpha_{\mathrm{RTI}}$ (`RTI_max_alpha`).
     pub rti_max_alpha: f64,
+    /// Mass window (Msun) of the `dPdr`/`drhodr` smoothing (`RTI_smooth_mass`,
+    /// `controls.defaults:3100`).
+    pub rti_smooth_mass: f64,
+    /// Passes of the mass-window smoothing (`RTI_smooth_iterations`,
+    /// `controls.defaults:3101`).
+    pub rti_smooth_iterations: i64,
+    /// Weight of the centre cell in the three-point smoothing when
+    /// `RTI_smooth_mass` smoothing is off (`RTI_smooth_fraction`,
+    /// `controls.defaults:3102`).
+    pub rti_smooth_fraction: f64,
+    /// Mass behind the shock (Msun) below which `RTI_C` is tapered
+    /// (`RTI_min_dm_behind_shock_for_full_on`, `controls.defaults:8593`).
+    pub rti_min_dm_behind_shock_for_full_on: f64,
+    /// Mass (Msun) below which the `RTI_C` boost is zero (`RTI_m_no_boost`,
+    /// `controls.defaults:8603`).
+    pub rti_m_no_boost: f64,
+    /// Mass (Msun) below which the `RTI_C` boost is full
+    /// (`RTI_m_full_boost`, `controls.defaults:8602`).
+    pub rti_m_full_boost: f64,
+    /// $\log_{10}$ of the full `RTI_C` boost (`RTI_log_max_boost`,
+    /// `controls.defaults:8601`).
+    pub rti_log_max_boost: f64,
+    /// Mass above the centre (Msun) within which `eta_RTI` may not decrease
+    /// (`RTI_dm_for_center_eta_nondecreasing`, `controls.defaults:8594`).
+    pub rti_dm_for_center_eta_nondecreasing: f64,
+    /// Floor on the RTI contribution to `D_mix` (`RTI_D_mix_floor`,
+    /// `controls.defaults:8596`).
+    pub rti_d_mix_floor: f64,
+    /// Hydrogen-dependent `RTI_C` factor (`RTI_C_X_factor`,
+    /// `controls.defaults:8588`).
+    pub rti_c_x_factor: f64,
+    /// Fraction of surface $X$ above which `RTI_C` is raised
+    /// (`RTI_C_X0_frac`, `controls.defaults:8587`).
+    pub rti_c_x0_frac: f64,
     /// Include velocity drag heating in the energy equation (`use_drag_energy`).
     pub use_drag_energy: bool,
     /// Velocity drag coefficient (`drag_coefficient`).

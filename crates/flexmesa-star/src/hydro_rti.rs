@@ -15,17 +15,9 @@ use flexmesa_const::{FOUR_PI, M_SUN};
 
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
-use crate::report_utils::{csound_face_at, eval_shock_info};
-
-/// Upstream MESA `26.4.1` default `RTI_log_max_boost` (`controls.defaults:8601`).
-const RTI_LOG_MAX_BOOST: f64 = 3.0;
-/// Upstream MESA `26.4.1` default `RTI_m_full_boost` in solar masses (`controls.defaults:8602`).
-const RTI_M_FULL_BOOST_MSUN: f64 = 4.0;
-/// Upstream MESA `26.4.1` default `RTI_m_no_boost` in solar masses (`controls.defaults:8603`).
-const RTI_M_NO_BOOST_MSUN: f64 = 5.0;
-/// Upstream MESA `26.4.1` default `RTI_dm_for_center_eta_nondecreasing` in solar masses
-/// (`controls.defaults:8594`).
-const RTI_DM_FOR_CENTER_ETA_NONDECREASING_MSUN: f64 = 0.02;
+use crate::report_utils::{
+    csound_face_at, eval_shock_info, surface_avg_x_by_name,
+};
 
 /// Evaluates the start-of-step Rayleigh-Taylor baroclinic instability indicator
 /// $(\partial P / \partial r)(\partial \rho / \partial r) \le 0$ across all
@@ -82,16 +74,89 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         drhodr[k] = (rho_face[k] - rho_face[k + 1]) / dr_k;
     }
 
-    // MESA `26.4.1` defaults leave `RTI_smooth_mass = 0`,
-    // `RTI_smooth_iterations = 0`, and `RTI_smooth_fraction = 1`
-    // (`star/defaults/controls.defaults:3100-3102`,
-    // `star/private/mix_info.f90:2185-2216`), so `dpdr` and `drhodr`
-    // remain unsmoothed.
+    // Smooth `dPdr` and `drhodr` (`mix_info.f90:2185-2216`).
+    let c = &model.controls;
+    if c.rti_smooth_mass > 0.0 && c.rti_smooth_iterations > 0 {
+        let (smooth_mass, iterations) =
+            (c.rti_smooth_mass, c.rti_smooth_iterations);
+        do_smoothing_by_mass(model, smooth_mass, iterations, &mut drhodr);
+        do_smoothing_by_mass(model, smooth_mass, iterations, &mut dpdr);
+    } else if c.rti_smooth_fraction < 1.0 {
+        let c = c.rti_smooth_fraction;
+        let d = 0.5 * (1.0 - c);
+        let mut am1 = 0.0_f64;
+        let mut a00 = dpdr[0];
+        let mut ap1 = dpdr[1];
+        for k in 1..nz - 1 {
+            am1 = a00;
+            a00 = ap1;
+            ap1 = dpdr[k + 1];
+            dpdr[k] = c * a00 + d * (am1 + ap1);
+        }
+        dpdr[nz - 1] = c * a00 + 2.0 * d * am1;
+        a00 = drhodr[0];
+        ap1 = drhodr[1];
+        for k in 1..nz - 1 {
+            am1 = a00;
+            a00 = ap1;
+            ap1 = drhodr[k + 1];
+            if am1 == 0.0 && a00 == 0.0 {
+                continue;
+            }
+            drhodr[k] = c * a00 + d * (am1 + ap1);
+        }
+        drhodr[nz - 1] = c * a00 + 2.0 * d * am1;
+    }
+
     for k in 0..nz {
         model.aux.dpdr_drhodr_info[k] = (dpdr[k] * drhodr[k]).min(0.0);
     }
 
     refresh_alpha_rti_diagnostic_sources(model);
+}
+
+/// Mass-window smoothing of `val` over `smooth_mass` solar masses, repeated
+/// `number_iterations` times (`do_smoothing_by_mass` in
+/// `star/private/mix_info.f90:2243-2299`).
+///
+/// Upstream's inner-edge search `do k=k_center, nz, -1` runs zero times
+/// because `k_center < nz`, so `k_inner = k_center` and the window's inner
+/// partial cell contributes nothing; this is transcribed as written.
+fn do_smoothing_by_mass(
+    model: &StarModel,
+    smooth_mass: f64,
+    number_iterations: i64,
+    val: &mut [f64],
+) {
+    let nz = model.nz;
+    let mut work = val.to_vec();
+    let smooth_m = smooth_mass * M_SUN;
+    let dm_half = 0.5 * smooth_m;
+    for _ in 0..number_iterations {
+        for k_center in (1..nz - 1).rev() {
+            let mmid = model.m[k_center] - 0.5 * model.dm[k_center];
+            let mhi = mmid + dm_half;
+            let k_inner = k_center;
+            let mut v = 0.0_f64;
+            let mut mtotal = 0.0_f64;
+            let mut k_outer = k_center;
+            for k in (0..=k_center).rev() {
+                if model.m[k] >= mhi {
+                    k_outer = k;
+                    let mass_from_cell = mhi - (model.m[k] - model.dm[k]);
+                    v += val[k] * mass_from_cell;
+                    mtotal += mass_from_cell;
+                    break;
+                }
+            }
+            for k in (k_outer + 1)..k_inner {
+                v += val[k] * model.dm[k];
+                mtotal += model.dm[k];
+            }
+            work[k_center] = if mtotal > 0.0 { v / mtotal } else { 0.0 };
+        }
+        val[1..nz - 1].copy_from_slice(&work[1..nz - 1]);
+    }
 }
 
 fn refresh_alpha_rti_diagnostic_sources(model: &mut StarModel) {
@@ -193,27 +258,52 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
     }
 
     let c_base = model.controls.rti_c;
-    let max_boost = flexmesa_math::exp10(RTI_LOG_MAX_BOOST);
-    let m_full_boost = RTI_M_FULL_BOOST_MSUN * M_SUN;
-    let m_no_boost = RTI_M_NO_BOOST_MSUN * M_SUN;
-    let dm_for_center_eta_nondecreasing =
-        RTI_DM_FOR_CENTER_ETA_NONDECREASING_MSUN * M_SUN;
+
+    // Mass of the first cell moving faster than sound, unless it is the
+    // surface cell (`mix_info.f90:1991-2002`).
+    let mut shock_mass_start = 1.0e99_f64;
+    for k in 0..nz {
+        let v = if model.controls.u_flag {
+            model.u[k]
+        } else {
+            model.v.get(k).copied().unwrap_or(0.0)
+        };
+        if v > model.csound[k] {
+            if k > 0 {
+                shock_mass_start = model.m[k];
+            }
+            break;
+        }
+    }
+
+    let min_dm = model.controls.rti_min_dm_behind_shock_for_full_on * M_SUN;
+    let log_max_boost = model.controls.rti_log_max_boost;
+    let max_boost = flexmesa_math::exp10(log_max_boost);
+    let m_full_boost = model.controls.rti_m_full_boost * M_SUN;
+    let m_no_boost = model.controls.rti_m_no_boost * M_SUN;
     let mut min_eta = -1.0_f64;
+    let dm_for_center_eta_nondecreasing =
+        M_SUN * model.controls.rti_dm_for_center_eta_nondecreasing;
+    let surface_h1 = surface_avg_x_by_name(model, "h1");
 
     // Outside-in pass sets `eta_rti` and `etamid_rti` using current `alpha_rti`
-    // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`),
-    // applying the `4-5 M_sun` core mass boost and inner `0.02 M_sun`
-    // nondecreasing floor (`controls.defaults:8594, 8601-8603`).
+    // and `csound_face_at` (`mix_info.f90:2008-2060`, `micro.f90:96-100`).
     for k in 0..nz {
-        let mut c = c_base;
+        let f = (model.xh_mass[k]
+            - model.controls.rti_c_x0_frac * surface_h1)
+            .max(0.0);
+        let mut c = c_base * (1.0 + f * f * model.controls.rti_c_x_factor);
         let m_k = model.m[k];
         if m_k < m_no_boost {
             if m_k <= m_full_boost {
                 c *= max_boost;
             } else {
                 let alfa = (m_no_boost - m_k) / (m_no_boost - m_full_boost);
-                c *= flexmesa_math::exp10(alfa * RTI_LOG_MAX_BOOST);
+                c *= flexmesa_math::exp10(alfa * log_max_boost);
             }
+        }
+        if shock_mass_start - m_k < min_dm {
+            c = c * (shock_mass_start - m_k) / min_dm;
         }
 
         let a_k = model.aux.alpha_rti.get(k).copied().unwrap_or(0.0);

@@ -521,6 +521,10 @@ impl InlistBundle {
             composition_rti_diffusion_factor, alpha_rti_src_min_v_div_cs,
             alpha_rti_src_min_q, alpha_rti_src_max_q,
             rti_a, rti_b, rti_c, rti_d, rti_max_alpha,
+            rti_smooth_mass, rti_smooth_fraction,
+            rti_min_dm_behind_shock_for_full_on, rti_m_no_boost, rti_m_full_boost,
+            rti_log_max_boost, rti_dm_for_center_eta_nondecreasing, rti_d_mix_floor,
+            rti_c_x_factor, rti_c_x0_frac,
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq,
             eps_grav_factor,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
@@ -529,6 +533,9 @@ impl InlistBundle {
             fixed_psurf, fixed_vsurf,
         ]);
         ctrl.try_usize_into("controls", &mut c.burn_steps_hard_limit, "burn_steps_hard_limit", 0)?;
+        if let Some(v) = ctrl.try_get_i64("controls", "rti_smooth_iterations")? {
+            c.rti_smooth_iterations = v;
+        }
         ctrl.try_f64_into(
             "controls",
             &mut c.threshold_grad_mu_for_double_point,

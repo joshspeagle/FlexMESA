@@ -274,20 +274,66 @@ pub fn remove_underbars(s: &str) -> String {
     s.trim_end().replace('_', " ")
 }
 
-/// Split `line` on runs of spaces into at most `num` tokens, matching upstream
-/// MESA `utils_lib::split_line`.
-#[must_use]
-pub fn split_line(line: &str, num: usize) -> Vec<String> {
-    line.split_whitespace()
-        .take(num)
-        .map(ToOwned::to_owned)
-        .collect()
+/// `split_line` (`utils/public/utils_lib.f90:1104-1138`) with
+/// `size(out) == num`: the `num` entries of `out`, each with its Fortran
+/// blank padding removed.
+///
+/// The loop is upstream's, on bytes: a run of blanks is skipped one at a
+/// time without moving the token start, so an entry can keep blanks from
+/// such a run (they read as padding and are removed here). A leading blank
+/// gives an empty first entry, and a final token with no blank after it
+/// loses its last character (`line(kstart:k-1)` at `k >= len(line)`).
+///
+/// # Errors
+///
+/// Upstream reads `line(k:k)` with `k > len(line)` when `line` holds fewer
+/// than `num` tokens (or is empty), outside the string, which has no defined
+/// value (DECISIONS #43, #665). That returns an error.
+pub fn split_line(line: &str, num: usize) -> Result<Vec<String>, String> {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let at = |k: usize| -> Result<u8, String> {
+        bytes.get(k - 1).copied().ok_or_else(|| {
+            format!(
+                "split_line reads line({k}:{k}) past len(line) = {len} \
+                 (utils/public/utils_lib.f90:1120-1128, #665)"
+            )
+        })
+    };
+    let mut out = Vec::with_capacity(num);
+    let mut k = 1_usize;
+    let mut kstart = 1_usize;
+    for _ in 0..num {
+        loop {
+            if k < len && at(k)? == b' ' && at(k + 1)? == b' ' {
+                k += 1;
+                continue;
+            }
+            if at(k)? == b' ' || k >= len {
+                let piece = &bytes[kstart - 1..k - 1];
+                let s = String::from_utf8_lossy(piece);
+                out.push(s.trim_end_matches(' ').to_owned());
+                k += 1;
+                kstart = k;
+                break;
+            }
+            k += 1;
+        }
+    }
+    Ok(out)
 }
+
+/// Stored key length, `maxlen_key_string` (`utils/public/utils_def.f90:33`).
+pub const MAXLEN_KEY_STRING: usize = 50;
 
 /// String-keyed integer dictionary matching upstream MESA `integer_dict`.
 ///
-/// Keys are trimmed of trailing whitespace on insertion and lookup to match
-/// Fortran `len_trim` semantics.
+/// `node% key = key` stores the key in `character(len=50)`, truncating a
+/// longer key, and `node% key == key` compares with blank padding
+/// (`utils/private/utils_dict.f90:101-141, 273-310`). So a key is stored as
+/// its first 50 bytes without trailing blanks, a lookup key matches when it
+/// equals that after removing trailing blanks (tabs are significant), and a
+/// lookup key longer than 50 bytes after that never matches (#665).
 ///
 /// # Examples
 /// ```
@@ -321,12 +367,12 @@ impl IntegerDict {
         key: &str,
         value: i64,
     ) -> bool {
-        let trimmed = key.trim_end();
-        if let Some(slot) = self.map.get_mut(trimmed) {
+        let stored = stored_key(key);
+        if let Some(slot) = self.map.get_mut(&stored) {
             *slot = value;
             return true;
         }
-        self.map.insert(trimmed.to_owned(), value);
+        self.map.insert(stored, value);
         false
     }
 
@@ -341,7 +387,11 @@ impl IntegerDict {
     /// Look up the integer value associated with `key`.
     #[must_use]
     pub fn lookup(&self, key: &str) -> Option<i64> {
-        self.map.get(key.trim_end()).copied()
+        let probe = key.trim_end_matches(' ');
+        if probe.len() > MAXLEN_KEY_STRING {
+            return None;
+        }
+        self.map.get(probe).copied()
     }
 
     /// Return the number of entries in the dictionary.
@@ -361,6 +411,16 @@ impl IntegerDict {
     pub fn entries(&self) -> Vec<(String, i64)> {
         self.map.iter().map(|(k, &v)| (k.clone(), v)).collect()
     }
+}
+
+/// `node% key = key` into `character(len=maxlen_key_string)`: the first 50
+/// bytes, without the blank padding.
+fn stored_key(key: &str) -> String {
+    let bytes = key.as_bytes();
+    let cut = &bytes[..bytes.len().min(MAXLEN_KEY_STRING)];
+    String::from_utf8_lossy(cut)
+        .trim_end_matches(' ')
+        .to_owned()
 }
 
 /// Ordered integer-pair `(k1, k2)` dictionary matching upstream MESA
@@ -441,25 +501,54 @@ pub enum Token {
     Eof,
 }
 
-/// Stateful stream tokenizer matching upstream MESA `utils_lib::token`.
+/// Line buffer and string length the `.net` reader passes to `token`
+/// (`character (len=256)`, `net/private/net_initialize.f90:276`).
+pub const TOKEN_BUFFER_LEN: usize = 256;
+
+/// Stateful stream tokenizer, `token` (`utils/public/utils_lib.f90:567-667`)
+/// transcribed on bytes (#665).
 ///
-/// The lexer processes input line by line over borrowed `&'a str` slices
-/// without per-line heap allocation, skipping spaces, tabs, and `'&'`
-/// continuation markers, discarding `'!'` line comments to end-of-line, and
-/// emitting [`Token`] items.
+/// Each line is read into a buffer of `buffer_len` bytes (a longer line is
+/// cut), and `n = len_trim(buffer)` drops trailing blanks only. At the start
+/// of a token, tabs, blanks and `&` are skipped and `!` ends the line;
+/// `(`, `)` and `,` are single tokens; a quote starts a string that runs to
+/// the matching quote or the end of the line, cut to `string_len`; anything
+/// else starts a name that ends only before a blank, `(`, `)` or `,` (a tab,
+/// `!`, `&` or quote inside a name stays in it), cut to `string_len`.
+/// Returned names and strings omit the Fortran blank padding.
 #[derive(Debug, Clone)]
 pub struct Tokenizer<'a> {
-    lines: std::str::Lines<'a>,
-    current: &'a str,
+    lines: std::str::SplitTerminator<'a, char>,
+    buffer: &'a [u8],
+    n: usize,
+    i: usize,
+    buffer_len: usize,
+    string_len: usize,
 }
 
 impl<'a> Tokenizer<'a> {
-    /// Create a new [`Tokenizer`] over `input`.
+    /// Create a [`Tokenizer`] over `input` with the `.net` reader's lengths
+    /// ([`TOKEN_BUFFER_LEN`] for both the line buffer and the string).
     #[must_use]
     pub fn new(input: &'a str) -> Self {
+        Self::with_lengths(input, TOKEN_BUFFER_LEN, TOKEN_BUFFER_LEN)
+    }
+
+    /// Create a [`Tokenizer`] with the caller's `len(buffer)` and
+    /// `len(string)`.
+    #[must_use]
+    pub fn with_lengths(
+        input: &'a str,
+        buffer_len: usize,
+        string_len: usize,
+    ) -> Self {
         Self {
-            lines: input.lines(),
-            current: "",
+            lines: input.split_terminator('\n'),
+            buffer: &[],
+            n: 0,
+            i: 0,
+            buffer_len,
+            string_len,
         }
     }
 
@@ -467,50 +556,66 @@ impl<'a> Tokenizer<'a> {
     /// [`Token::Eof`] once the input is exhausted.
     pub fn next_token(&mut self) -> Token {
         loop {
-            self.current = self.current.trim_start_matches([' ', '\t', '&']);
-            if self.current.is_empty() || self.current.starts_with('!') {
-                let Some(next_line) = self.lines.next() else {
+            // `do while (i >= n)`: read lines until one has text (`:579-588`).
+            while self.i >= self.n {
+                let Some(line) = self.lines.next() else {
                     return Token::Eof;
                 };
-                self.current = next_line.trim_end();
-                continue;
+                let bytes = line.as_bytes();
+                self.buffer = &bytes[..bytes.len().min(self.buffer_len)];
+                self.n = self
+                    .buffer
+                    .iter()
+                    .rposition(|&c| c != b' ')
+                    .map_or(0, |p| p + 1);
+                self.i = 0;
             }
-
-            let Some(ch) = self.current.chars().next() else {
-                continue;
-            };
-            let after_ch = &self.current[ch.len_utf8()..];
-            match ch {
-                '(' => {
-                    self.current = after_ch;
-                    return Token::LeftParen;
-                }
-                ')' => {
-                    self.current = after_ch;
-                    return Token::RightParen;
-                }
-                ',' => {
-                    self.current = after_ch;
-                    return Token::Comma;
-                }
-                '"' | '\'' => {
-                    if let Some(end) = after_ch.find(ch) {
-                        let content = after_ch[..end].to_owned();
-                        self.current = &after_ch[end + ch.len_utf8()..];
-                        return Token::String(content);
+            // `token_loop` (`:589-665`), with `i` the 1-based last read byte.
+            while self.i < self.n {
+                self.i += 1;
+                let c = self.buffer[self.i - 1];
+                match c {
+                    b'\t' | b' ' | b'&' => {}
+                    b'!' => {
+                        self.i = self.n;
                     }
-                    let content = after_ch.to_owned();
-                    self.current = "";
-                    return Token::String(content);
-                }
-                _ => {
-                    let end = self
-                        .current
-                        .find([' ', '\t', '(', ')', ',', '!', '&', '\'', '"'])
-                        .unwrap_or(self.current.len());
-                    let name = self.current[..end].to_owned();
-                    self.current = &self.current[end..];
-                    return Token::Name(name);
+                    b'(' => return Token::LeftParen,
+                    b')' => return Token::RightParen,
+                    b',' => return Token::Comma,
+                    b'"' | b'\'' => {
+                        let mut out = Vec::new();
+                        loop {
+                            self.i += 1;
+                            if self.i > self.n
+                                || self.buffer[self.i - 1] == c
+                                || out.len() >= self.string_len
+                            {
+                                break;
+                            }
+                            out.push(self.buffer[self.i - 1]);
+                        }
+                        let text = String::from_utf8_lossy(&out);
+                        return Token::String(
+                            text.trim_end_matches(' ').to_owned(),
+                        );
+                    }
+                    _ => {
+                        let j1 = self.i;
+                        let mut j2 = self.i;
+                        while self.i < self.n {
+                            let next = self.buffer[self.i];
+                            if matches!(next, b' ' | b'(' | b')' | b',') {
+                                break;
+                            }
+                            self.i += 1;
+                            j2 = self.i;
+                        }
+                        let l = (j2 - j1 + 1).min(self.string_len);
+                        let name = &self.buffer[j1 - 1..j1 - 1 + l];
+                        return Token::Name(
+                            String::from_utf8_lossy(name).into_owned(),
+                        );
+                    }
                 }
             }
         }

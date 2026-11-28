@@ -107,11 +107,17 @@ def split_line(line: str, num: int) -> list[str]:
     return _rust.split_line(line, int(num))
 
 
+# ``maxlen_key_string`` (``utils/public/utils_def.f90:33``).
+_MAXLEN_KEY_STRING = 50
+
+
 class IntegerDict:
     """String-keyed integer dictionary matching upstream MESA ``integer_dict``.
 
-    Keys are stripped of trailing whitespace on insertion and lookup to match
-    Fortran ``len_trim`` semantics.
+    Upstream stores keys in ``character(len=50)`` and compares them with
+    blank padding (``utils/private/utils_dict.f90``): a key is stored as its
+    first 50 characters without trailing blanks, a lookup key matches after
+    removing trailing blanks only, and a longer lookup key never matches.
     """
 
     def __init__(self) -> None:
@@ -122,13 +128,13 @@ class IntegerDict:
         """Define ``key -> value`` and return ``True`` if ``key`` existed.
 
         Args:
-            key: String key (trailing whitespace is stripped).
+            key: String key (cut to 50 characters, trailing blanks dropped).
             value: Integer value to associate with ``key``.
 
         Returns:
             ``True`` if ``key`` already existed prior to this definition.
         """
-        normalized = key.rstrip()
+        normalized = key[:_MAXLEN_KEY_STRING].rstrip(" ")
         duplicate = normalized in self._map
         self._map[normalized] = int(value)
         return duplicate
@@ -137,7 +143,7 @@ class IntegerDict:
         """Define ``key -> value``, overwriting any existing entry.
 
         Args:
-            key: String key (trailing whitespace is stripped).
+            key: String key (cut to 50 characters, trailing blanks dropped).
             value: Integer value to associate with ``key``.
         """
         self.define_and_report_duplicates(key, value)
@@ -154,7 +160,10 @@ class IntegerDict:
         Returns:
             Associated integer value, or ``None`` if ``key`` is not present.
         """
-        return self._map.get(key.rstrip())
+        probe = key.rstrip(" ")
+        if len(probe) > _MAXLEN_KEY_STRING:
+            return None
+        return self._map.get(probe)
 
     def is_empty(self) -> bool:
         """Return ``True`` if the dictionary contains no entries."""

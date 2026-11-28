@@ -6045,10 +6045,10 @@ upstream_lines = 3374
 upstream_sha256 = "e643adb6b5fd60887d797c96ff3d7d6b2b126ed20babccf18063be1a7f5016de"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
-routine_map_partial = ["approx21_weak_rates", "approx21_special_reactions", "approx21_eps_info", "approx21_eps_info::set_eps_nuc", "approx21_dfdy", "set_approx21", "set_approx21_isos", "set_approx21_isos::do1", "set_approx21_reactions", "set_approx21_reactions::do1"]
+routine_map_partial = ["approx21_weak_rates", "approx21_pa_pg_fractions", "approx21_special_reactions", "approx21_eps_info", "approx21_eps_info::set_eps_nuc", "approx21_dfdy", "set_approx21", "set_approx21_isos", "set_approx21_isos::do1", "set_approx21_reactions", "set_approx21_reactions::do1"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
-"approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
+"approx21_pa_pg_fractions" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions" # partial: in the tot <= 1d-30 branch upstream gives -0.0 for dratrawdt(ifg) and dratrawdd(ifg) (net_approx21.f90:235-237), Rust writes +0.0 (#735)
 "approx21_pa_pg_fractions::set1" = "crates/flexmesa-net/src/approx21.rs::approx21_pa_pg_fractions"
 "approx21_weak_rates" = "crates/flexmesa-net/src/approx21.rs::approx21_weak_rates" # partial: the ni56/co56 rates go through eval_single_weak_blended (eval_weak_reaction_info) with abar = zbar = z2bar = 1; no ierr is returned
 "approx21_eval_PPII_fraction" = "crates/flexmesa-net/src/approx21_eps.rs::approx21_eval_ppii_fraction"
@@ -6127,12 +6127,12 @@ upstream_lines = 641
 upstream_sha256 = "897e9ea4504765ecb5f33f6d4264a19576c86953b3f69c7f1c56c6859d5b4af2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-net/src/lib.rs"]
-routine_map_partial = ["netint"]
+routine_map_partial = ["netint", "simpr"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
 [files.routine_map]
 "netint" = "crates/flexmesa-net/src/burn_stepper.rs::netint" # partial: does not call burner_finish_substep at the start of each substep or at the end; step counts come back as a return tuple
 "stifbs" = "crates/flexmesa-net/src/burn_stepper.rs::stifbs"
-"simpr" = "crates/flexmesa-net/src/burn_stepper.rs::simpr"
+"simpr" = "crates/flexmesa-net/src/burn_stepper.rs::simpr" # partial: statements match, but the solve uses dgetrf/dgetrs (my_lapack95 port: sfmin pivot division, NaN/Inf rejected) where upstream calls my_getf2/my_getrs1 from mtx_solve_routines.inc (always 1/pivot, no finiteness test) (#740)
 "net_pzextr" = "crates/flexmesa-net/src/burn_stepper.rs::net_pzextr"
 
 [[files]]

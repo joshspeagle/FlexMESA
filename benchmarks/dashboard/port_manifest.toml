@@ -7181,7 +7181,13 @@ upstream_lines = 553
 upstream_sha256 = "1a2cad2ad9a8f4028bcfdebdadbd9b649ed5a98dc66ba9956b8d31e99d5c4096"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["interpolate_suzuki_table", "interpolate_suzuki_table::setup_for_linear_interp", "interpolate_suzuki_table::do_linear_interp"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"interpolate_suzuki_table" = "crates/flexmesa-rates/src/weak.rs::eval_suzuki_one" # partial: the grid-bounds test (ierr = -1 upstream) is done by the caller eval_weak_reaction_pair, which then falls back to weaklib; arithmetic matches
+"interpolate_suzuki_table::find_location" = "crates/flexmesa-rates/src/weak.rs::find_location"
+"interpolate_suzuki_table::setup_for_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no x_alfa/y_alfa range checks (#741)
+"interpolate_suzuki_table::do_linear_interp" = "crates/flexmesa-rates/src/weak.rs::bilinear_interp_2d" # partial: no non-finite fval error (#741)
 
 [[files]]
 upstream_path = "rates/private/weak_support.f90"

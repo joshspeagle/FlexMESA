@@ -7367,7 +7367,39 @@ upstream_lines = 974
 upstream_sha256 = "b79b9ef58c4ffdf1055df4015f150659612f54faa0c07fdb07daa2d52fbf0c27"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-rates/src/lib.rs"]
+routine_map_partial = ["read_rate_from_file", "read_rates_from_files", "add_reaction_from_reaclib", "add_reaction_for_handle", "make_rate_tables", "get_raw_rate", "get_raw_rates", "rates_reaction_id", "is_weak_reaction", "get_weak_rate_id", "get_weak_info_list_id", "get_ecapture_rate_id", "get_ecapture_info_list_id", "reaclib_lookup", "reaclib_indices_for_reaction", "reaclib_reaction_rates", "screen_init_AZ_info", "screening_option", "eval_weak_reaction_info", "eval_ecapture_reaction_info", "eval_using_rate_tables", "screen_set_context", "screen_pair", "coulomb_set_context", "get_mui_value", "get_vs_value"]
 notes = "seeded from coverage-map.md section 7: partial / uncompared"
+[files.routine_map]
+"read_rate_from_file" = "crates/flexmesa-rates/src/raw_rates.rs::RateTable1D::from_file" # partial: file load only; no global raw_rates_records update
+"read_rates_from_files" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::from_name_or_dir_with_rate_overrides" # partial: tables are passed as (name, RateTable1D) overrides when the net is built
+"add_reaction_from_reaclib" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: synthesize_reaction_info builds the entry; no global reaction arrays
+"add_reaction_for_handle" = "crates/flexmesa-net/src/parser.rs::add_reaction_by_name" # partial: synthesize_reaction_info builds the entry; no global reaction arrays
+"make_rate_tables" = "crates/flexmesa-net/src/initialize.rs::build_rate_tables_with_overrides" # partial: see rates_support do_make_rate_tables
+"eval_tfactors" = "crates/flexmesa-rates/src/tfactors.rs::TFactors::from_log_t"
+"get_raw_rate" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rate" # partial: see raw_rates set_raw_rate (#744)
+"get_raw_rates" = "crates/flexmesa-rates/src/raw_rates.rs::set_raw_rates" # partial: see raw_rates set_raw_rates (#744)
+"rates_reaction_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaction_id_by_name" # partial: 316-entry catalog only; reactions added at net build get their ids in the net parser
+"is_weak_reaction" = "crates/flexmesa-net/src/initialize.rs::classify_reaclib_kinds" # partial: Rust tests weak_isos[0] > 0 only; upstream also requires weak_reaction_info(2) > 0 or std_reaction_neuQs > 0 (#745)
+"get_weak_rate_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::weak_by_pair" # partial: returns the table by name pair rather than an integer id
+"get_weak_info_list_id" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::weak_by_pair" # partial: returns the table by name pair rather than an integer id
+"get_ecapture_rate_id" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::pair_data" # partial: returns the pair data rather than an integer id
+"get_ecapture_info_list_id" = "crates/flexmesa-rates/src/loader.rs::EcaptureTables::pair_data" # partial: returns the pair data rather than an integer id
+"reaclib_lookup" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: handle-to-terms map instead of the integer dict
+"reaclib_indices_for_reaction" = "crates/flexmesa-rates/src/loader.rs::RatesCatalog::reaclib_terms" # partial: terms are stored per handle, so no lo/hi
+"reaclib_reaction_rates" = "crates/flexmesa-rates/src/tfactors.rs::eval_reaclib_terms" # partial: see reaclib_eval reaction_rates (#744)
+"screen_init_AZ_info" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined in screen_extended
+"screening_option" = "crates/flexmesa-rates/src/types.rs::ScreeningMode::from_name" # partial: accepts integer codes and aliases and rejects an empty name, where upstream maps an empty name to no_screening (#745)
+"eval_salpeter_screening" = "crates/flexmesa-rates/src/screen.rs::screen_salpeter"
+"eval_weak_reaction_info" = "crates/flexmesa-net/src/derivs_support.rs::eval_single_weak_blended" # partial: one reaction per call; weaklib blend and ecapture dispatch in one function
+"eval_ecapture_reaction_info" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapture_pair_with_derivs" # partial: see eval_ecapture do_eval_ecapture_reaction_info (#737)
+"eval_using_rate_tables" = "crates/flexmesa-net/src/initialize.rs::NetGeneralInfo::eval_raw_rates_from_tables" # partial: see rates_support do_get_raw_rates (#744)
+"screen_set_context" = "crates/flexmesa-rates/src/screen.rs::screen_extended" # partial: inlined per call; see screen.f90 do_screen_set_context
+"screen_pair" = "crates/flexmesa-rates/src/screen.rs::screen_pair" # partial: no low_logT_lim argument (scor = 0 below it): the net caller applies g.log_tcut_lo in net screen.rs; other_screening hook absent
+"eval_ecapnuc_rate" = "crates/flexmesa-rates/src/ecapture.rs::eval_ecapnuc_rate"
+"eval_FL_epsnuc_3alf" = "crates/flexmesa-rates/src/raw_rates.rs::eval_fl_epsnuc_3alf_with_derivs"
+"coulomb_set_context" = "crates/flexmesa-rates/src/ecapture.rs::coulomb_plasma_params_ad" # partial: see coulomb do_coulomb_set_context
+"get_mui_value" = "crates/flexmesa-rates/src/types.rs::CoulombMuiOption::from_name" # partial: case-insensitive and accepts integer codes and extra aliases; upstream matches exact names and calls mesa_error otherwise (#745)
+"get_vs_value" = "crates/flexmesa-rates/src/types.rs::CoulombVsOption::from_name" # partial: case-insensitive and accepts integer codes and extra aliases; upstream matches exact names and calls mesa_error otherwise (#745)
 
 [[files]]
 upstream_path = "star/job/gyre_in_mesa_extras_finish_step.inc"

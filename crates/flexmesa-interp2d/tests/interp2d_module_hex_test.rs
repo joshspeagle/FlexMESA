@@ -6,14 +6,14 @@
 //!
 //! # Upstream `fvbicub_db` Implicit-`REAL` Quirk
 //!
-//! In MESA `26.4.1` `interp_2d/private/bicub_db.f:1420-1575`, local basis
-//! scalars (`xp`, `xpi`, `cx`, `cxi`, `yp`, `ypi`, `cy`, `cyi`, `z36th`,
-//! `hx2`, `hy2`, `cxd`, `cxdi`, `cyd`, `cydi`) omit `real*8` declarations and
-//! fall under Fortran implicit `REAL` (`f32`), while accumulators remain
-//! `f64`. Production [`interp_evbicub_db`] stays strictly pure `f64` for
-//! downstream precision (`<= 3e-8` abs, `<= 2.5e8` ULP vs MESA's 18
-//! `fvbicub_db` output rows `[4..34]`), while the test-local helper
-//! `eval_fvbicub_db_implicit_f32` verifies `0 ULP` on all 18 rows.
+//! In MESA `26.4.1` `interp_2d/private/bicub_db.f:24,1371-1698` (deferred
+//! upstream bug `#680`), local basis scalars (`xp`, `xpi`, `cx`, `cxi`, `yp`,
+//! `ypi`, `cy`, `cyi`, `z36th`, `hx2`, `hy2`, `cxd`, `cxdi`, `cyd`, `cydi`)
+//! omit `real*8` declarations and fall under Fortran implicit `REAL` (`f32`),
+//! while accumulators remain `f64`. Production [`interp_evbicub_db`] reproduces
+//! this implicit-`f32` basis evaluation at `0 ULP` across all 18 `fvbicub_db`
+//! output rows `[4..34]` in `NumericsMode::Strict`, while preserving pure `f64`
+//! precision (`<= 3e-8` abs, `<= 2.5e8` ULP vs MESA) in `NumericsMode::Fast`.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -170,145 +170,6 @@ fn build_mesa_2d_test_grid() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     (xpts, ypts, z)
 }
 
-fn eval_fvbicub_db_implicit_f32(
-    xget: f64,
-    yget: f64,
-    x: &[f64],
-    y: &[f64],
-    f: &[[f64; 4]],
-) -> (f64, f64, f64) {
-    let nx = x.len();
-    let ny = y.len();
-    // Uniform grid cell lookup matching MESA evbicub_db (ilinx=1, iliny=1)
-    let mut i = ((((xget - x[0]) * ((nx - 1) as f64)) / (x[nx - 1] - x[0]))
-        as usize)
-        .min(nx - 2);
-    if xget < x[i] {
-        while i > 0 && xget < x[i] {
-            i -= 1;
-        }
-    } else {
-        while i + 2 < nx && xget >= x[i + 1] {
-            i += 1;
-        }
-    }
-    let mut j = ((((yget - y[0]) * ((ny - 1) as f64)) / (y[ny - 1] - y[0]))
-        as usize)
-        .min(ny - 2);
-    if yget < y[j] {
-        while j > 0 && yget < y[j] {
-            j -= 1;
-        }
-    } else {
-        while j + 2 < ny && yget >= y[j + 1] {
-            j += 1;
-        }
-    }
-
-    let hx = x[i + 1] - x[i];
-    let hxi = 1.0_f64 / hx;
-    let hy = y[j + 1] - y[j];
-    let hyi = 1.0_f64 / hy;
-    let xparam = (xget - x[i]) * hxi;
-    let yparam = (yget - y[j]) * hyi;
-
-    let fin = |k: usize, ix: usize, iy: usize| -> f64 { f[ix * ny + iy][k] };
-
-    // Match MESA `fvbicub_db` (bicub_db.f:1420-1575) implicit REAL (`f32`)
-    // local variables while keeping accumulators (`sum`) and `sixth` in `f64`.
-    let sixth = 1.0_f64 / 6.0_f64;
-    let z36th = (sixth * sixth) as f32;
-
-    let xp = xparam as f32;
-    let xpi = (1.0_f64 - f64::from(xp)) as f32;
-    let xp2 = xp * xp;
-    let xpi2 = xpi * xpi;
-    let cx = (f64::from(xp) * (f64::from(xp2) - 1.0_f64)) as f32;
-    let cxi = (f64::from(xpi) * (f64::from(xpi2) - 1.0_f64)) as f32;
-    let hx2 = (hx * hx) as f32;
-
-    let yp = yparam as f32;
-    let ypi = (1.0_f64 - f64::from(yp)) as f32;
-    let yp2 = yp * yp;
-    let ypi2 = ypi * ypi;
-    let cy = (f64::from(yp) * (f64::from(yp2) - 1.0_f64)) as f32;
-    let cyi = (f64::from(ypi) * (f64::from(ypi2) - 1.0_f64)) as f32;
-    let hy2 = (hy * hy) as f32;
-
-    let cxd = (3.0_f64 * f64::from(xp2) - 1.0_f64) as f32;
-    let cxdi = (-3.0_f64 * f64::from(xpi2) + 1.0_f64) as f32;
-    let cyd = (3.0_f64 * f64::from(yp2) - 1.0_f64) as f32;
-    let cydi = (-3.0_f64 * f64::from(ypi2) + 1.0_f64) as f32;
-
-    let z36th_hx2_hy2_d = f64::from((z36th * hx2) * hy2);
-    let z36th_hx2_d = f64::from(z36th * hx2);
-    let (z36th_d, hx2_d, hy2_d) =
-        (f64::from(z36th), f64::from(hx2), f64::from(hy2));
-    let (xp_d, xpi_d, cx_d, cxi_d) =
-        (f64::from(xp), f64::from(xpi), f64::from(cx), f64::from(cxi));
-    let (yp_d, ypi_d, cy_d, cyi_d) =
-        (f64::from(yp), f64::from(ypi), f64::from(cy), f64::from(cyi));
-    let (cxd_d, cxdi_d, cyd_d, cydi_d) = (
-        f64::from(cxd),
-        f64::from(cxdi),
-        f64::from(cyd),
-        f64::from(cydi),
-    );
-
-    let mut sum_f = xpi_d * (ypi_d * fin(0, i, j) + yp_d * fin(0, i, j + 1))
-        + xp_d * (ypi_d * fin(0, i + 1, j) + yp_d * fin(0, i + 1, j + 1));
-    sum_f += sixth
-        * hx2_d
-        * (cxi_d * (ypi_d * fin(1, i, j) + yp_d * fin(1, i, j + 1))
-            + cx_d * (ypi_d * fin(1, i + 1, j) + yp_d * fin(1, i + 1, j + 1)));
-    sum_f += sixth
-        * hy2_d
-        * (xpi_d * (cyi_d * fin(2, i, j) + cy_d * fin(2, i, j + 1))
-            + xp_d * (cyi_d * fin(2, i + 1, j) + cy_d * fin(2, i + 1, j + 1)));
-    sum_f += z36th_hx2_hy2_d
-        * (cxi_d * (cyi_d * fin(3, i, j) + cy_d * fin(3, i, j + 1))
-            + cx_d * (cyi_d * fin(3, i + 1, j) + cy_d * fin(3, i + 1, j + 1)));
-
-    let mut sum_fx = hxi
-        * (-(ypi_d * fin(0, i, j) + yp_d * fin(0, i, j + 1))
-            + (ypi_d * fin(0, i + 1, j) + yp_d * fin(0, i + 1, j + 1)));
-    sum_fx += sixth
-        * hx
-        * (cxdi_d * (ypi_d * fin(1, i, j) + yp_d * fin(1, i, j + 1))
-            + cxd_d * (ypi_d * fin(1, i + 1, j) + yp_d * fin(1, i + 1, j + 1)));
-    sum_fx += sixth
-        * hxi
-        * hy2_d
-        * (-(cyi_d * fin(2, i, j) + cy_d * fin(2, i, j + 1))
-            + (cyi_d * fin(2, i + 1, j) + cy_d * fin(2, i + 1, j + 1)));
-    sum_fx += z36th_d
-        * hx
-        * hy2_d
-        * (cxdi_d * (cyi_d * fin(3, i, j) + cy_d * fin(3, i, j + 1))
-            + cxd_d * (cyi_d * fin(3, i + 1, j) + cy_d * fin(3, i + 1, j + 1)));
-
-    let mut sum_fy = hyi
-        * (xpi_d * (-fin(0, i, j) + fin(0, i, j + 1))
-            + xp_d * (-fin(0, i + 1, j) + fin(0, i + 1, j + 1)));
-    sum_fy += sixth
-        * hx2_d
-        * hyi
-        * (cxi_d * (-fin(1, i, j) + fin(1, i, j + 1))
-            + cx_d * (-fin(1, i + 1, j) + fin(1, i + 1, j + 1)));
-    sum_fy += sixth
-        * hy
-        * (xpi_d * (cydi_d * fin(2, i, j) + cyd_d * fin(2, i, j + 1))
-            + xp_d
-                * (cydi_d * fin(2, i + 1, j) + cyd_d * fin(2, i + 1, j + 1)));
-    sum_fy += z36th_hx2_d
-        * hy
-        * (cxi_d * (cydi_d * fin(3, i, j) + cyd_d * fin(3, i, j + 1))
-            + cx_d
-                * (cydi_d * fin(3, i + 1, j) + cyd_d * fin(3, i + 1, j + 1)));
-
-    (sum_f, sum_fx, sum_fy)
-}
-
 #[test]
 fn test_interp2d_module_hex_zero_ulp() {
     let Some(path) = resolve_module_hex_tsv() else {
@@ -317,37 +178,38 @@ fn test_interp2d_module_hex_zero_ulp() {
     let rows = load_module_hex_rows(&path);
     assert_eq!(rows.len(), 104, "unexpected interp_2d TSV row count");
 
+    let (xpts, ypts, z) = build_mesa_2d_test_grid();
+
+    let bcxmin = vec![0.0; NUM_YPTS];
+    let bcxmax = vec![0.0; NUM_YPTS];
+    let bcymin = vec![0.0; NUM_XPTS];
+    let bcymax = vec![0.0; NUM_XPTS];
+    let (f_bicub, ilinx, iliny) = interp_mkbicub_db(
+        &xpts,
+        &ypts,
+        &z,
+        BicubicBc::NotAKnot,
+        &bcxmin,
+        BicubicBc::NotAKnot,
+        &bcxmax,
+        BicubicBc::NotAKnot,
+        &bcymin,
+        BicubicBc::NotAKnot,
+        &bcymax,
+    )
+    .unwrap();
+    let f_bipm = interp_mkbipm_db(&xpts, &ypts, &z).unwrap();
+
+    let x_points = 2usize;
+    let y_points = 3usize;
+    let x_max = 0.8_f64 * PI;
+    let x_min = 0.1_f64;
+    let y_max = 0.6_f64 * PI;
+    let y_min = 0.2_f64;
+    let dx = (x_max - x_min) / ((x_points - 1) as f64);
+    let dy = (y_max - y_min) / ((y_points - 1) as f64);
+
     with_numerics_mode(NumericsMode::Strict, || {
-        let (xpts, ypts, z) = build_mesa_2d_test_grid();
-
-        let bcxmin = vec![0.0; NUM_YPTS];
-        let bcxmax = vec![0.0; NUM_YPTS];
-        let bcymin = vec![0.0; NUM_XPTS];
-        let bcymax = vec![0.0; NUM_XPTS];
-        let (f_bicub, ilinx, iliny) = interp_mkbicub_db(
-            &xpts,
-            &ypts,
-            &z,
-            BicubicBc::NotAKnot,
-            &bcxmin,
-            BicubicBc::NotAKnot,
-            &bcxmax,
-            BicubicBc::NotAKnot,
-            &bcymin,
-            BicubicBc::NotAKnot,
-            &bcymax,
-        )
-        .unwrap();
-
-        let x_points = 2usize;
-        let y_points = 3usize;
-        let x_max = 0.8_f64 * PI;
-        let x_min = 0.1_f64;
-        let y_max = 0.6_f64 * PI;
-        let y_min = 0.2_f64;
-        let dx = (x_max - x_min) / ((x_points - 1) as f64);
-        let dy = (y_max - y_min) / ((y_points - 1) as f64);
-
         let mut db_vals: Vec<(&'static str, f64)> = Vec::with_capacity(56);
         let mid_bicub = f_bicub[14 * NUM_YPTS + 16];
         for (k, &v) in mid_bicub.iter().enumerate() {
@@ -361,7 +223,6 @@ fn test_interp2d_module_hex_zero_ulp() {
                 v,
             ));
         }
-        let mut f32_basis_zero = 0usize;
         for j in 0..y_points {
             let y = y_min + (j as f64) * dy;
             for i in 0..x_points {
@@ -370,27 +231,6 @@ fn test_interp2d_module_hex_zero_ulp() {
                     x, y, &xpts, &ypts, ilinx, iliny, &f_bicub,
                 )
                 .unwrap();
-                let (sf, sfx, sfy) =
-                    eval_fvbicub_db_implicit_f32(x, y, &xpts, &ypts, &f_bicub);
-                let base_idx = 4 + (j * x_points + i) * 5;
-                for (off, val_s) in [(2, sf), (3, sfx), (4, sfy)] {
-                    let row = &rows[base_idx + off];
-                    let u = ulp_distance(val_s, row.raw_bits);
-                    assert_eq!(
-                        u,
-                        0,
-                        "fvbicub_db implicit-f32 mismatch row {} ({} `{}`): \
-                         got={val_s:.17e} (0x{:016x}) exp={:.17e} (0x{:016x}) \
-                         ulps={u}",
-                        base_idx + off,
-                        row.src_loc,
-                        row.label,
-                        val_s.to_bits(),
-                        f64::from_bits(row.raw_bits),
-                        row.raw_bits
-                    );
-                    f32_basis_zero += 1;
-                }
                 db_vals.push(("evbicub_x", x));
                 db_vals.push(("evbicub_y", y));
                 db_vals.push(("evbicub_z", ev.f));
@@ -399,7 +239,6 @@ fn test_interp2d_module_hex_zero_ulp() {
             }
         }
 
-        let f_bipm = interp_mkbipm_db(&xpts, &ypts, &z).unwrap();
         let mid_bipm = f_bipm[14 * NUM_YPTS + 16];
         for &v in &mid_bipm {
             db_vals.push(("bipm_mid", v));
@@ -417,55 +256,71 @@ fn test_interp2d_module_hex_zero_ulp() {
         }
 
         assert_eq!(db_vals.len(), 56);
-        assert_eq!(
-            f32_basis_zero, 18,
-            "all 18 fvbicub_db outputs must match implicit-f32 MESA basis at 0 ULP"
-        );
-
-        // Assert pure-f64 0 ULP on 38 rows (mkbicub mid, evbicub coords,
-        // mkbipm, evbipm) and tight pure-f64 agreement on the 18 fvbicub_db
-        // implicit-REAL output rows `[4..34]`.
-        let mut pure_f64_zero = 0usize;
         for (idx, ((name, actual), row)) in
             db_vals.iter().zip(rows[..56].iter()).enumerate()
         {
             let ulps = ulp_distance(*actual, row.raw_bits);
-            if !(4..34).contains(&idx) || (idx - 4) % 5 < 2 {
-                assert_eq!(
-                    ulps,
-                    0,
-                    "row {idx} ({name}, {} `{}`): got={actual:.17e} \
-                     (0x{:016x}) exp={:.17e} (0x{:016x}) ulps={ulps}",
-                    row.src_loc,
-                    row.label,
-                    actual.to_bits(),
-                    f64::from_bits(row.raw_bits),
-                    row.raw_bits
-                );
-                pure_f64_zero += 1;
-            } else {
-                let exp_val = f64::from_bits(row.raw_bits);
-                let abs_err = (*actual - exp_val).abs();
-                assert!(
-                    abs_err <= 3.0e-8 && ulps <= 250_000_000,
-                    "fvbicub pure-f64 bound exceeded at row {idx} ({name}): \
-                     got={actual:.17e} exp={exp_val:.17e} abs_err={abs_err:.3e} \
-                     ulps={ulps}"
-                );
-            }
-        }
-        assert_eq!(pure_f64_zero, 38);
-
-        // Account for rows 56..104: unported f32 (`_sg`) single-precision block
-        assert_eq!(rows[56..].len(), 48);
-        for (offset, row) in rows[56..].iter().enumerate() {
-            assert_eq!(row.kind, "f32", "expected f32 at row {}", 56 + offset);
-            assert!(
-                row.src_loc.starts_with("test_interp_2d.f90:"),
-                "unexpected src_loc {} at row {}",
+            assert_eq!(
+                ulps,
+                0,
+                "row {idx} ({name}, {} `{}`): got={actual:.17e} \
+                 (0x{:016x}) exp={:.17e} (0x{:016x}) ulps={ulps}",
                 row.src_loc,
-                56 + offset
+                row.label,
+                actual.to_bits(),
+                f64::from_bits(row.raw_bits),
+                row.raw_bits
             );
         }
     });
+
+    // Verify NumericsMode::Fast retains pure-f64 basis precision (bounded
+    // against MESA's implicit-f32 outputs while differing from Strict).
+    with_numerics_mode(NumericsMode::Fast, || {
+        let mut fast_differs = 0usize;
+        for j in 0..y_points {
+            let y = y_min + (j as f64) * dy;
+            for i in 0..x_points {
+                let x = x_min + (i as f64) * dx;
+                let ev = interp_evbicub_db(
+                    x, y, &xpts, &ypts, ilinx, iliny, &f_bicub,
+                )
+                .unwrap();
+                let base_idx = 4 + (j * x_points + i) * 5;
+                for (off, actual) in [(2, ev.f), (3, ev.df_dx), (4, ev.df_dy)] {
+                    let row = &rows[base_idx + off];
+                    let ulps = ulp_distance(actual, row.raw_bits);
+                    let exp_val = f64::from_bits(row.raw_bits);
+                    let abs_err = (actual - exp_val).abs();
+                    assert!(
+                        abs_err <= 3.0e-8 && ulps <= 250_000_000,
+                        "fvbicub fast-mode pure-f64 bound exceeded at row {} \
+                         ({}): got={actual:.17e} exp={exp_val:.17e} \
+                         abs_err={abs_err:.3e} ulps={ulps}",
+                        base_idx + off,
+                        row.label
+                    );
+                    if ulps > 0 {
+                        fast_differs += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            fast_differs > 0,
+            "NumericsMode::Fast must evaluate pure-f64 basis rather than Strict f32 rounding"
+        );
+    });
+
+    // Account for rows 56..104: unported f32 (`_sg`) single-precision block
+    assert_eq!(rows[56..].len(), 48);
+    for (offset, row) in rows[56..].iter().enumerate() {
+        assert_eq!(row.kind, "f32", "expected f32 at row {}", 56 + offset);
+        assert!(
+            row.src_loc.starts_with("test_interp_2d.f90:"),
+            "unexpected src_loc {} at row {}",
+            row.src_loc,
+            56 + offset
+        );
+    }
 }
